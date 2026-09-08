@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
-import { nanoid } from "nanoid";
 import {
   COMPANY_SETTING_DEFAULTS,
   DEFAULT_EMAIL_NOTIFICATIONS,
@@ -35,17 +34,6 @@ import { AppError } from "@/lib/errors";
 import { readdir, stat } from "fs/promises";
 import path from "path";
 
-type SettingRow = {
-  id: string;
-  companyId: string;
-  userId: string;
-  scope: string;
-  category: string;
-  key: string;
-  value: string;
-  updatedBy: string | null;
-};
-
 function parseJson<T>(raw: string, fallback: T): T {
   try {
     return JSON.parse(raw) as T;
@@ -54,77 +42,28 @@ function parseJson<T>(raw: string, fallback: T): T {
   }
 }
 
-let schemaReady: Promise<void> | null = null;
-
-/** Ensure AppSetting + MFA columns/tables exist (safe if already applied). */
+/**
+ * Schema is owned by Prisma migrations (`AppSetting`, `twoFactor`, `User.twoFactorEnabled`).
+ * Kept as a no-op for callers that previously bootstrapped SQLite via raw DDL.
+ */
 export async function ensureSettingsSchema() {
-  if (!schemaReady) {
-    schemaReady = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS AppSetting (
-          id TEXT PRIMARY KEY NOT NULL,
-          companyId TEXT NOT NULL DEFAULT '',
-          userId TEXT NOT NULL DEFAULT '',
-          scope TEXT NOT NULL,
-          category TEXT NOT NULL,
-          key TEXT NOT NULL,
-          value TEXT NOT NULL,
-          updatedBy TEXT,
-          createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE UNIQUE INDEX IF NOT EXISTS AppSetting_companyId_userId_key_key ON AppSetting(companyId, userId, key)`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS AppSetting_scope_category_idx ON AppSetting(scope, category)`
-      );
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS AppSetting_companyId_category_idx ON AppSetting(companyId, category)`
-      );
-
-      const cols = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
-        `PRAGMA table_info(User)`
-      );
-      if (!cols.some((c) => c.name === "twoFactorEnabled")) {
-        await prisma.$executeRawUnsafe(
-          `ALTER TABLE User ADD COLUMN twoFactorEnabled BOOLEAN NOT NULL DEFAULT 0`
-        );
-      }
-
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS twoFactor (
-          id TEXT PRIMARY KEY NOT NULL,
-          secret TEXT NOT NULL,
-          backupCodes TEXT NOT NULL,
-          userId TEXT NOT NULL,
-          verified BOOLEAN NOT NULL DEFAULT 0,
-          failedVerificationCount INTEGER NOT NULL DEFAULT 0,
-          lockedUntil DATETIME,
-          FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE
-        )
-      `);
-      await prisma.$executeRawUnsafe(
-        `CREATE INDEX IF NOT EXISTS twoFactor_userId_idx ON twoFactor(userId)`
-      );
-    })().catch((err) => {
-      schemaReady = null;
-      throw err;
-    });
-  }
-  await schemaReady;
+  return;
 }
 
 async function readSettingRow(companyId: string, key: string) {
-  await ensureSettingsSchema();
-  const rows = await prisma.$queryRawUnsafe<SettingRow[]>(
-    `SELECT id, companyId, userId, scope, category, key, value, updatedBy
-     FROM AppSetting WHERE companyId = ? AND userId = '' AND key = ? LIMIT 1`,
-    companyId,
-    key
-  );
-  return rows[0] ?? null;
+  return prisma.appSetting.findFirst({
+    where: { companyId, userId: "", key },
+    select: {
+      id: true,
+      companyId: true,
+      userId: true,
+      scope: true,
+      category: true,
+      key: true,
+      value: true,
+      updatedBy: true,
+    },
+  });
 }
 
 export async function getCompanySettingValue<T>(
@@ -138,27 +77,27 @@ export async function getCompanySettingValue<T>(
 }
 
 export async function ensureCompanySettings(companyId: string) {
-  await ensureSettingsSchema();
-  const existing = await prisma.$queryRawUnsafe<Array<{ key: string }>>(
-    `SELECT key FROM AppSetting WHERE companyId = ? AND userId = ''`,
-    companyId
-  );
+  const existing = await prisma.appSetting.findMany({
+    where: { companyId, userId: "" },
+    select: { key: true },
+  });
   const have = new Set(existing.map((r) => r.key));
-  const now = new Date().toISOString();
-  for (const [key, def] of Object.entries(COMPANY_SETTING_DEFAULTS)) {
-    if (have.has(key)) continue;
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO AppSetting (id, companyId, userId, scope, category, key, value, createdAt, updatedAt)
-       VALUES (?, ?, '', 'COMPANY', ?, ?, ?, ?, ?)`,
-      nanoid(),
+  const missing = Object.entries(COMPANY_SETTING_DEFAULTS).filter(
+    ([key]) => !have.has(key)
+  );
+  if (!missing.length) return;
+
+  await prisma.appSetting.createMany({
+    data: missing.map(([key, def]) => ({
       companyId,
-      def.category,
+      userId: "",
+      scope: "COMPANY",
+      category: def.category,
       key,
-      JSON.stringify(def.value),
-      now,
-      now
-    );
-  }
+      value: JSON.stringify(def.value),
+    })),
+    skipDuplicates: true,
+  });
 }
 
 async function estimateLocalStorageUsage(): Promise<number | null> {
@@ -189,11 +128,19 @@ export async function getCompanySettings(
   await ensureCompanySettings(companyId);
 
   const [rows, usage] = await Promise.all([
-    prisma.$queryRawUnsafe<SettingRow[]>(
-      `SELECT id, companyId, userId, scope, category, key, value, updatedBy
-       FROM AppSetting WHERE companyId = ? AND userId = ''`,
-      companyId
-    ),
+    prisma.appSetting.findMany({
+      where: { companyId, userId: "" },
+      select: {
+        id: true,
+        companyId: true,
+        userId: true,
+        scope: true,
+        category: true,
+        key: true,
+        value: true,
+        updatedBy: true,
+      },
+    }),
     estimateLocalStorageUsage(),
   ]);
   const byKey = new Map(rows.map((r) => [r.key, r]));
@@ -295,12 +242,11 @@ export async function getFileStorageSettings(
 }
 
 export async function getUserTwoFactorEnabled(userId: string): Promise<boolean> {
-  await ensureSettingsSchema();
-  const rows = await prisma.$queryRawUnsafe<Array<{ twoFactorEnabled: number | boolean }>>(
-    `SELECT twoFactorEnabled FROM User WHERE id = ? LIMIT 1`,
-    userId
-  );
-  return Boolean(rows[0]?.twoFactorEnabled);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { twoFactorEnabled: true },
+  });
+  return Boolean(user?.twoFactorEnabled);
 }
 
 type SetSettingInput = {
@@ -315,7 +261,6 @@ type SetSettingInput = {
 
 /** Whitelisted persist — never spreads arbitrary request bodies. */
 export async function setCompanySetting(input: SetSettingInput) {
-  await ensureSettingsSchema();
   const scope = input.scope ?? "COMPANY";
   if (scope !== "COMPANY") {
     throw new AppError("Invalid setting scope for company update");
@@ -324,34 +269,29 @@ export async function setCompanySetting(input: SetSettingInput) {
   const serialized = JSON.stringify(input.value);
   const existing = await readSettingRow(input.companyId, input.key);
   const oldValue = existing ? parseJson(existing.value, null) : null;
-  const now = new Date().toISOString();
 
   if (existing) {
-    await prisma.$executeRawUnsafe(
-      `UPDATE AppSetting SET value = ?, category = ?, scope = ?, updatedBy = ?, updatedAt = ?
-       WHERE companyId = ? AND userId = '' AND key = ?`,
-      serialized,
-      input.category,
-      scope,
-      input.actorUserId,
-      now,
-      input.companyId,
-      input.key
-    );
+    await prisma.appSetting.update({
+      where: { id: existing.id },
+      data: {
+        value: serialized,
+        category: input.category,
+        scope,
+        updatedBy: input.actorUserId,
+      },
+    });
   } else {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO AppSetting (id, companyId, userId, scope, category, key, value, updatedBy, createdAt, updatedAt)
-       VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
-      nanoid(),
-      input.companyId,
-      scope,
-      input.category,
-      input.key,
-      serialized,
-      input.actorUserId,
-      now,
-      now
-    );
+    await prisma.appSetting.create({
+      data: {
+        companyId: input.companyId,
+        userId: "",
+        scope,
+        category: input.category,
+        key: input.key,
+        value: serialized,
+        updatedBy: input.actorUserId,
+      },
+    });
   }
 
   await writeAudit({
