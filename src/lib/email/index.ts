@@ -1,0 +1,10 @@
+export { isSmtpConfigured, getSmtpConfig, SmtpConfigError } from "@/lib/email/config";
+export { sendEmail, trySendEmail } from "@/lib/email/send-email";
+export type { SendEmailInput, SendEmailResult } from "@/lib/email/send-email";
+export { verifySmtpConnection } from "@/lib/email/verify-smtp";
+export { passwordResetEmail } from "@/lib/email/templates/password-reset-email";
+export { accountCreatedEmail } from "@/lib/email/templates/account-created-email";
+export { renderBaseEmail } from "@/lib/email/templates/base-template";
+export { escapeHtml } from "@/lib/email/escape";
+export { createPasswordSetupLink } from "@/lib/email/password-setup-link";
+export { resetMailTransporter } from "@/lib/email/transporter";

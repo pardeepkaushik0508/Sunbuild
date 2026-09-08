@@ -1,0 +1,119 @@
+import Link from "next/link";
+import { ProposalStatus, Role } from "@prisma/client";
+import { createProposalAction } from "@/lib/actions";
+import { PageHeader, Card, EmptyState } from "@/components/ui/card";
+import { DataTable, Td } from "@/components/ui/table";
+import { StatusBadge, statusTone } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { requireRole } from "@/lib/session";
+import { prisma } from "@/lib/db";
+import { formatCurrency, formatDate, fullName } from "@/lib/utils";
+
+export default async function SalesProposalsPage() {
+  const session = await requireRole([Role.SALES_MANAGER, Role.OWNER]);
+  const companyId = session.membership.companyId;
+
+  const [proposals, leads] = await Promise.all([
+    prisma.proposal.findMany({
+      where: { companyId },
+      include: {
+        lead: { select: { id: true, firstName: true, lastName: true } },
+        createdBy: { select: { name: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    }),
+    prisma.lead.findMany({
+      where: {
+        companyId,
+        status: { notIn: ["WON", "LOST"] },
+      },
+      select: { id: true, firstName: true, lastName: true },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    }),
+  ]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Proposals"
+        description="Create and track sales proposals linked to leads"
+      />
+
+      <Card>
+        <h2 className="text-lg font-semibold text-sb-ink">Create proposal</h2>
+        <form action={createProposalAction} className="mt-4 grid gap-4 md:grid-cols-2">
+          <FormField label="Lead" required>
+            <Select name="leadId" required defaultValue={leads[0]?.id ?? ""}>
+              <option value="" disabled>
+                Select lead
+              </option>
+              {leads.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {fullName(l.firstName, l.lastName)}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Title" required>
+            <Input name="title" required placeholder="Proposal title" />
+          </FormField>
+          <FormField label="Amount">
+            <Input name="amount" type="number" min="0" step="0.01" placeholder="0.00" />
+          </FormField>
+          <FormField label="Status" required>
+            <Select name="status" defaultValue={ProposalStatus.DRAFT}>
+              {Object.values(ProposalStatus).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Notes" className="md:col-span-2">
+            <Textarea name="notes" rows={3} />
+          </FormField>
+          <div className="md:col-span-2">
+            <Button type="submit" disabled={leads.length === 0}>
+              Save proposal
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {proposals.length === 0 ? (
+        <EmptyState
+          title="No proposals yet"
+          description="Create a proposal for an open lead to track active proposals on the overview."
+        />
+      ) : (
+        <DataTable headers={["Proposal", "Lead", "Amount", "Status", "Updated", ""]}>
+          {proposals.map((p) => (
+            <tr key={p.id} className="hover:bg-[#f9fafb]">
+              <Td>
+                <p className="font-medium">{p.title}</p>
+                <p className="text-xs text-sb-muted">{p.createdBy.name}</p>
+              </Td>
+              <Td>{fullName(p.lead.firstName, p.lead.lastName)}</Td>
+              <Td>{formatCurrency(p.amount)}</Td>
+              <Td>
+                <StatusBadge tone={statusTone(p.status)}>{p.status}</StatusBadge>
+              </Td>
+              <Td>{formatDate(p.updatedAt)}</Td>
+              <Td>
+                <Link
+                  href={`/sales/leads/${p.lead.id}`}
+                  className="text-sm font-medium text-[#f97316]"
+                >
+                  Open lead
+                </Link>
+              </Td>
+            </tr>
+          ))}
+        </DataTable>
+      )}
+    </div>
+  );
+}
