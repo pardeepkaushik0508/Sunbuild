@@ -63,6 +63,8 @@ type ShellProps = {
   }>;
   activeMembershipId?: string;
   whatsappContacts?: WhatsAppContact[];
+  /** Show Invoices when Permissions Matrix grants Financial Report. */
+  showFinanceNav?: boolean;
 };
 
 type NavDef = {
@@ -86,7 +88,13 @@ function settingsHrefForRole(role: Role) {
   }
 }
 
-function navForRole(role: Role): NavDef[] {
+function navForRole(role: Role, showFinanceNav = false): NavDef[] {
+  const financeItem: NavDef = {
+    label: "Invoices",
+    href: "/bookkeeper/invoices",
+    icon: Receipt,
+  };
+
   switch (role) {
     case Role.OWNER:
       return [
@@ -106,6 +114,7 @@ function navForRole(role: Role): NavDef[] {
         { label: "Settings", href: "/owner/settings", icon: Settings },
         { label: "Contracts", href: "/pm/contracts", icon: FileText },
         { label: "Leads", href: "/sales/leads", icon: ClipboardList },
+        { label: "Invoices", href: "/bookkeeper/invoices", icon: Receipt },
         { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
       ];
     case Role.CEO:
@@ -115,16 +124,19 @@ function navForRole(role: Role): NavDef[] {
         { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
         { label: "Settings", href: "/settings", icon: Settings },
       ];
-    case Role.OPERATIONS_ADMIN:
-      return [
+    case Role.OPERATIONS_ADMIN: {
+      const items: NavDef[] = [
         { label: "Overview", href: "/admin", icon: LayoutDashboard },
         { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
         { label: "Manage Users", href: "/owner/users", icon: Users },
         { label: "Contracts", href: "/pm/contracts", icon: FileText },
         { label: "Settings", href: "/settings", icon: Settings },
       ];
-    case Role.SALES_MANAGER:
-      return [
+      if (showFinanceNav) items.splice(4, 0, financeItem);
+      return items;
+    }
+    case Role.SALES_MANAGER: {
+      const items: NavDef[] = [
         { label: "Overview", href: "/sales", icon: LayoutDashboard },
         { label: "Lead Management", href: "/sales/leads", icon: ClipboardList },
         { label: "Proposals", href: "/sales/proposals", icon: FileText },
@@ -134,8 +146,11 @@ function navForRole(role: Role): NavDef[] {
         { label: "Reports", href: "/sales/reports", icon: Briefcase },
         { label: "Settings", href: "/settings", icon: Settings },
       ];
-    case Role.PROJECT_MANAGER:
-      return [
+      if (showFinanceNav) items.splice(7, 0, financeItem);
+      return items;
+    }
+    case Role.PROJECT_MANAGER: {
+      const items: NavDef[] = [
         { label: "Overview", href: "/pm", icon: LayoutDashboard },
         { label: "Projects", href: "/pm/projects", icon: Briefcase },
         { label: "To-Dos", href: "/pm/tasks", icon: CheckSquare },
@@ -150,6 +165,9 @@ function navForRole(role: Role): NavDef[] {
         { label: "Warranty", href: "/pm/warranty", icon: Wrench },
         { label: "Settings", href: "/settings", icon: Settings },
       ];
+      if (showFinanceNav) items.splice(12, 0, financeItem);
+      return items;
+    }
     case Role.BOOKKEEPER:
       return [
         { label: "Overview", href: "/bookkeeper", icon: LayoutDashboard },
@@ -200,11 +218,15 @@ function AppShellInner({
   profiles = [],
   activeMembershipId,
   whatsappContacts = [],
+  showFinanceNav = false,
 }: ShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
-  const nav = useMemo(() => navForRole(role), [role]);
+  const nav = useMemo(
+    () => navForRole(role, showFinanceNav),
+    [role, showFinanceNav]
+  );
   const settingsHref = settingsHrefForRole(role);
 
   const autoExpanded = useMemo(() => {

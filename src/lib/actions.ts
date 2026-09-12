@@ -1157,70 +1157,82 @@ export async function updateMilestoneStatusAction(
   milestoneId: string,
   status: ScheduleStatus
 ) {
-  const session = await requireSession();
-  requireCapability(session, "manageSchedule");
-  await rateLimitAction(session.user.id, "milestone-status");
+  try {
+    const session = await requireSession();
+    requireCapability(session, "manageSchedule");
+    await rateLimitAction(session.user.id, "milestone-status");
 
-  if (!Object.values(ScheduleStatus).includes(status)) {
-    throw new AppError("Invalid status");
+    if (!Object.values(ScheduleStatus).includes(status)) {
+      throw new AppError("Invalid status");
+    }
+
+    const milestone = await prisma.milestone.findUnique({
+      where: { id: milestoneId },
+    });
+    if (!milestone) throw new AppError("Not found");
+    await assertProjectAccess(session, milestone.projectId);
+
+    await prisma.milestone.update({
+      where: { id: milestoneId },
+      data: { status },
+    });
+    await syncProjectProgress(milestone.projectId);
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      projectId: milestone.projectId,
+      action: "MILESTONE_STATUS_UPDATED",
+      entityType: "Milestone",
+      entityId: milestoneId,
+      metadata: { status },
+    });
+    revalidateScheduleSurfaces(milestone.projectId);
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    console.error("[milestone-status]", e);
+    throw new AppError("Could not update milestone status. Please try again.");
   }
-
-  const milestone = await prisma.milestone.findUnique({
-    where: { id: milestoneId },
-  });
-  if (!milestone) throw new AppError("Not found");
-  await assertProjectAccess(session, milestone.projectId);
-
-  await prisma.milestone.update({
-    where: { id: milestoneId },
-    data: { status },
-  });
-  await syncProjectProgress(milestone.projectId);
-  await writeAudit({
-    userId: session.user.id,
-    companyId: session.membership.companyId,
-    projectId: milestone.projectId,
-    action: "MILESTONE_STATUS_UPDATED",
-    entityType: "Milestone",
-    entityId: milestoneId,
-    metadata: { status },
-  });
-  revalidateScheduleSurfaces(milestone.projectId);
 }
 
 export async function updateScheduleItemStatusAction(
   scheduleItemId: string,
   status: ScheduleStatus
 ) {
-  const session = await requireSession();
-  requireCapability(session, "manageSchedule");
-  await rateLimitAction(session.user.id, "schedule-status");
+  try {
+    const session = await requireSession();
+    requireCapability(session, "manageSchedule");
+    await rateLimitAction(session.user.id, "schedule-status");
 
-  if (!Object.values(ScheduleStatus).includes(status)) {
-    throw new AppError("Invalid status");
+    if (!Object.values(ScheduleStatus).includes(status)) {
+      throw new AppError("Invalid status");
+    }
+
+    const item = await prisma.scheduleItem.findUnique({
+      where: { id: scheduleItemId },
+    });
+    if (!item) throw new AppError("Not found");
+    await assertProjectAccess(session, item.projectId);
+
+    await prisma.scheduleItem.update({
+      where: { id: scheduleItemId },
+      data: { status },
+    });
+    await syncProjectProgress(item.projectId);
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      projectId: item.projectId,
+      action: "SCHEDULE_STATUS_UPDATED",
+      entityType: "ScheduleItem",
+      entityId: scheduleItemId,
+      metadata: { status },
+    });
+    revalidateScheduleSurfaces(item.projectId);
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    console.error("[schedule-status]", e);
+    throw new AppError("Could not update schedule item status. Please try again.");
   }
-
-  const item = await prisma.scheduleItem.findUnique({
-    where: { id: scheduleItemId },
-  });
-  if (!item) throw new AppError("Not found");
-  await assertProjectAccess(session, item.projectId);
-
-  await prisma.scheduleItem.update({
-    where: { id: scheduleItemId },
-    data: { status },
-  });
-  await syncProjectProgress(item.projectId);
-  await writeAudit({
-    userId: session.user.id,
-    companyId: session.membership.companyId,
-    projectId: item.projectId,
-    action: "SCHEDULE_STATUS_UPDATED",
-    entityType: "ScheduleItem",
-    entityId: scheduleItemId,
-    metadata: { status },
-  });
-  revalidateScheduleSurfaces(item.projectId);
 }
 
 export async function createRfiAction(form: FormData) {
@@ -2237,10 +2249,27 @@ function revalidateUserSurfaces(projectIds: string[] = []) {
   }
 }
 
-function membershipFlagsForRole(role: Role) {
+function membershipFlagsForRole(
+  role: Role,
+  matrix?: import("@/lib/permission-matrix").PermissionMatrixState | null
+) {
+  const matrixFinance =
+    matrix &&
+    role !== Role.OWNER &&
+    role !== Role.CEO &&
+    role !== Role.CLIENT &&
+    role !== Role.SUBCONTRACTOR &&
+    role in matrix.financialReport
+      ? Boolean(
+          matrix.financialReport[
+            role as import("@/lib/permission-matrix").MatrixRole
+          ]
+        )
+      : false;
   return {
     canEditSettings: role === Role.OPERATIONS_ADMIN || role === Role.OWNER,
-    financeAccess: role === Role.BOOKKEEPER || role === Role.OWNER,
+    financeAccess:
+      role === Role.BOOKKEEPER || role === Role.OWNER || matrixFinance,
   };
 }
 
@@ -2365,7 +2394,10 @@ export async function inviteUserAction(form: FormData): Promise<
         });
       }
 
-      const flags = membershipFlagsForRole(role);
+      const flags = membershipFlagsForRole(
+        role,
+        session.membership.permissionMatrix
+      );
       await tx.membership.upsert({
         where: {
           userId_companyId_role: {
@@ -2471,7 +2503,9 @@ export async function inviteUserAction(form: FormData): Promise<
         });
         if (!mail.success) {
           console.error("[invite] account email failed:", mail.message);
-          emailMessage = mail.message;
+          // Keep invite UX user-facing — env/provider details stay in server logs.
+          emailMessage =
+            "User created, but the invite email could not be sent. Check email settings under Owner → Settings.";
           if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
             console.info(
               `[invite:dev] email failed — password setup URL for ${email}: ${setupPasswordUrl}`
@@ -2499,7 +2533,8 @@ export async function inviteUserAction(form: FormData): Promise<
       console.error("[invite] account email unexpected error", {
         message: error instanceof Error ? error.message : "unknown",
       });
-      emailMessage = "User created, but the invite email could not be sent.";
+      emailMessage =
+        "User created, but the invite email could not be sent. Check email settings under Owner → Settings.";
     }
 
     revalidateUserSurfaces(projectIds);
@@ -3008,6 +3043,23 @@ export async function savePermissionMatrixAction(
 
   await setCompanyPermissionMatrix(session.membership.companyId, cleaned);
 
+  // Keep membership.financeAccess in sync with Financial Report matrix toggles
+  // so invoice/budget UI matches what the Owner configured.
+  const { FINANCE_MATRIX_ROLES } = await import("@/lib/permissions");
+  for (const role of FINANCE_MATRIX_ROLES) {
+    if (!(MATRIX_ROLES as readonly Role[]).includes(role)) continue;
+    const grant = Boolean(
+      cleaned.financialReport[role as (typeof MATRIX_ROLES)[number]]
+    );
+    await prisma.membership.updateMany({
+      where: {
+        companyId: session.membership.companyId,
+        role,
+      },
+      data: { financeAccess: grant },
+    });
+  }
+
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
@@ -3018,6 +3070,10 @@ export async function savePermissionMatrixAction(
 
   revalidatePath("/owner/permissions");
   revalidatePath("/owner");
+  revalidatePath("/pm");
+  revalidatePath("/bookkeeper");
+  revalidatePath("/bookkeeper/invoices");
+  revalidatePath("/settings");
 }
 
 export async function configureProjectAction(form: FormData) {

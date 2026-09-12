@@ -4,6 +4,7 @@ import {
   getEmailProvider,
   getSmtpConfig,
   isEmailConfigured,
+  isSmtpConfigured,
   SmtpConfigError,
 } from "@/lib/email/config";
 import { verifyResendConnection } from "@/lib/email/send-resend";
@@ -70,7 +71,25 @@ export async function verifySmtpConnection(): Promise<{
 
   const provider = getEmailProvider();
   if (provider === "resend") {
-    return verifyResendConnection();
+    const resend = await verifyResendConnection();
+    if (resend.ok) return resend;
+
+    // Invalid Resend key should not hide a working SMTP fallback.
+    if (isSmtpConfigured()) {
+      try {
+        getSmtpConfig();
+        resetMailTransporter();
+        await getMailTransporter().verify();
+        return {
+          ok: true,
+          message:
+            "Resend API key was rejected, but SMTP is working and will be used as fallback.",
+        };
+      } catch {
+        // fall through with the Resend failure message
+      }
+    }
+    return resend;
   }
 
   try {

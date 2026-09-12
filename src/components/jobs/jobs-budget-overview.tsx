@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Role, DepositStatus, InvoiceStatus } from "@prisma/client";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { hasFinanceAccess } from "@/lib/permissions";
+import { sessionHasFinanceAccess } from "@/lib/authorization";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { formatCurrency } from "@/lib/utils";
 import { PageHeader, EmptyState, Card } from "@/components/ui/card";
@@ -22,16 +22,11 @@ export async function JobsBudgetOverview({
     Role.BOOKKEEPER,
   ]);
 
-  if (
-    !hasFinanceAccess(
-      session.membership.role,
-      session.membership.financeAccess
-    )
-  ) {
+  if (!sessionHasFinanceAccess(session)) {
     return (
       <EmptyState
         title="Budget access restricted"
-        description="Your role does not include finance visibility."
+        description="Your role does not include finance visibility. Ask the Owner to enable Financial Report in Permissions."
         action={
           <Link href={backHref}>
             <Button variant="outline">Back to Jobs</Button>

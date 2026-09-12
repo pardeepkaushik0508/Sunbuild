@@ -14,7 +14,7 @@ import {
   assertProjectAccess,
   getAccessibleProjectIds,
 } from "@/lib/session";
-import { hasFinanceAccess } from "@/lib/permissions";
+import { sessionHasFinanceAccess } from "@/lib/authorization";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 
 function normalizePath(filePath: string) {
@@ -98,7 +98,7 @@ export async function assertFileDownloadAccess(
       }
       return;
     }
-    if (!hasFinanceAccess(role, session.membership.financeAccess)) {
+    if (!sessionHasFinanceAccess(session)) {
       throw new ForbiddenError();
     }
     return;
@@ -219,7 +219,7 @@ export async function assertFileDownloadAccess(
     if (
       filePath.startsWith("invoices/") &&
       !isClient &&
-      !hasFinanceAccess(role, session.membership.financeAccess)
+      !sessionHasFinanceAccess(session)
     ) {
       throw new ForbiddenError();
     }

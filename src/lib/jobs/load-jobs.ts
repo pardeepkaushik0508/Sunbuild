@@ -26,7 +26,7 @@ import {
   depositOpenStatuses,
 } from "@/lib/insights";
 import { fullName } from "@/lib/utils";
-import { hasFinanceAccess } from "@/lib/permissions";
+import { sessionHasFinanceAccess } from "@/lib/authorization";
 import type { InsightCard } from "@/components/dashboard/ai-insights";
 
 export type JobsCompanyOption = {
@@ -604,10 +604,7 @@ export async function loadJobsDashboardData(input: {
     }
   }
 
-  const canViewBudget = hasFinanceAccess(
-    role,
-    session.membership.financeAccess
-  );
+  const canViewBudget = sessionHasFinanceAccess(session);
 
   // Budget overrun insights (rule-based)
   const insights = buildProjectInsights({

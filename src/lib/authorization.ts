@@ -39,6 +39,7 @@ export const CAPABILITIES = {
   ] as Role[],
   manageSchedule: [
     Role.OWNER,
+    Role.CEO,
     Role.OPERATIONS_ADMIN,
     Role.PROJECT_MANAGER,
   ] as Role[],
@@ -153,7 +154,9 @@ export function requireCapability(session: AppSession, capability: Capability) {
       session.membership.permissionMatrix
     )
   ) {
-    throw new ForbiddenError();
+    throw new ForbiddenError(
+      "You do not have permission to perform this action. Ask the Owner to update Permissions."
+    );
   }
 }
 
@@ -165,18 +168,19 @@ export function requireRoles(session: AppSession, roles: Role | Role[]) {
 }
 
 export function requireFinanceAccess(session: AppSession) {
-  const role = session.membership.role;
-  if (role === Role.OWNER) return;
-  // Role + membership finance flag is the privilege ceiling (CEO never).
-  if (!financeFlag(role, session.membership.financeAccess)) {
+  if (!sessionHasFinanceAccess(session)) {
     throw new ForbiddenError();
   }
-  // Company matrix may further restrict roles that otherwise qualify.
-  if (session.membership.permissionMatrix && isMatrixRole(role)) {
-    if (!session.membership.permissionMatrix.financialReport[role]) {
-      throw new ForbiddenError();
-    }
-  }
+}
+
+/** Finance UI / invoice access — membership flag OR Permissions Matrix grant. */
+export function sessionHasFinanceAccess(session: AppSession): boolean {
+  const role = session.membership.role;
+  const matrix = session.membership.permissionMatrix;
+  const matrixOn =
+    matrix && isMatrixRole(role) ? Boolean(matrix.financialReport[role]) : null;
+
+  return financeFlag(role, session.membership.financeAccess, matrixOn);
 }
 
 /** Roles that may set document/photo visibility to CLIENT_VISIBLE. */

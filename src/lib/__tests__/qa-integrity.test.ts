@@ -129,6 +129,12 @@ describe("finance access boundaries", () => {
     );
     const matrix = structuredClone(DEFAULT_PERMISSION_MATRIX);
     matrix.financialReport.PROJECT_MANAGER = true;
+    // Matrix grant alone is enough (no separate membership flag required)
+    assert.doesNotThrow(() =>
+      requireFinanceAccess(
+        fakeSession(Role.PROJECT_MANAGER, { financeAccess: false, matrix })
+      )
+    );
     assert.doesNotThrow(() =>
       requireFinanceAccess(
         fakeSession(Role.PROJECT_MANAGER, { financeAccess: true, matrix })

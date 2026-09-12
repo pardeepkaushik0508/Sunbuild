@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { InvoiceStatus, Role } from "@prisma/client";
+import { InvoiceStatus } from "@prisma/client";
 import {
   uploadInvoiceAction,
   updateInvoiceStatusAction,
@@ -12,12 +12,14 @@ import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { requireRole } from "@/lib/session";
+import { requireSession } from "@/lib/session";
+import { requireFinanceAccess } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 
 export default async function BookkeeperInvoicesPage() {
-  const session = await requireRole([Role.BOOKKEEPER, Role.OWNER]);
+  const session = await requireSession();
+  requireFinanceAccess(session);
   const companyId = session.membership.companyId;
 
   const [invoices, projects] = await Promise.all([

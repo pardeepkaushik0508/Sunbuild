@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { AuthResumeGuard } from "@/components/session/auth-resume-guard";
 import { SessionTimeoutGuard } from "@/components/session/session-timeout-guard";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
+import { sessionHasFinanceAccess } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import {
   getMfaPolicy,
@@ -14,11 +15,17 @@ import { redirect } from "next/navigation";
 export async function RoleShell({
   roles,
   children,
+  requireFinance = false,
 }: {
   roles: Role | Role[];
   children: React.ReactNode;
+  /** When true, also require Financial Report / finance access. */
+  requireFinance?: boolean;
 }) {
   const session = await requireRole(roles);
+  if (requireFinance && !sessionHasFinanceAccess(session)) {
+    redirect("/");
+  }
   const companyId = session.membership.companyId;
   const projectIds = await getAccessibleProjectIds(session);
 
@@ -50,6 +57,7 @@ export async function RoleShell({
       profiles={session.memberships}
       activeMembershipId={session.membership.id}
       whatsappContacts={[]}
+      showFinanceNav={sessionHasFinanceAccess(session)}
     >
       <AuthResumeGuard />
       <SessionTimeoutGuard timeoutMinutes={sessionTimeoutMinutes} />

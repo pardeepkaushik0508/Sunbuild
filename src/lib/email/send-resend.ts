@@ -10,6 +10,15 @@ type ResendSendInput = {
   replyTo?: string | null;
 };
 
+export class ResendAuthError extends Error {
+  constructor(
+    message = "Resend API key was rejected. Check RESEND_API_KEY in the host environment."
+  ) {
+    super(message);
+    this.name = "ResendAuthError";
+  }
+}
+
 /**
  * Send via Resend HTTPS API (port 443) — works on Render Free where SMTP is blocked.
  * https://resend.com/docs/api-reference/emails/send-email
@@ -51,9 +60,7 @@ export async function sendViaResend(
       message: String(detail).slice(0, 200),
     });
     if (res.status === 401 || res.status === 403) {
-      throw new Error(
-        "Resend API key was rejected. Check RESEND_API_KEY in the host environment."
-      );
+      throw new ResendAuthError();
     }
     throw new Error(`Unable to send email via Resend (${detail}).`);
   }

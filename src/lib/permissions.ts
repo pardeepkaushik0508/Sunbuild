@@ -22,13 +22,35 @@ export const ROLE_HOME: Record<Role, string> = {
   CLIENT: "/client",
 };
 
-export function hasFinanceAccess(role: Role, financeFlag?: boolean) {
+export function hasFinanceAccess(
+  role: Role,
+  financeFlag?: boolean,
+  matrixFinancialReport?: boolean | null
+) {
   if (role === Role.CLIENT || role === Role.SUBCONTRACTOR) return false;
   if (role === Role.OWNER) return true;
-  if (role === Role.BOOKKEEPER) return true;
   if (role === Role.CEO) return false;
+
+  // Company matrix may deny finance even for Bookkeeper.
+  if (matrixFinancialReport === false) return false;
+
+  if (role === Role.BOOKKEEPER) return true;
+
+  // Owner Permissions Matrix "Financial Report" grants invoice/finance UI
+  // for staff roles (PM / Ops / Sales) without a separate membership flag.
+  if (matrixFinancialReport === true) return true;
+
   return Boolean(financeFlag);
 }
+
+/** Roles that may receive Financial Report via the Owner permissions matrix. */
+export const FINANCE_MATRIX_ROLES: Role[] = [
+  Role.OPERATIONS_ADMIN,
+  Role.PROJECT_MANAGER,
+  Role.SALES_MANAGER,
+  Role.BOOKKEEPER,
+];
+
 
 export function canManageUsers(role: Role) {
   return role === Role.OWNER || role === Role.OPERATIONS_ADMIN;

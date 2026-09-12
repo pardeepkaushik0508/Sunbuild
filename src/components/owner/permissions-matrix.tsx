@@ -56,7 +56,9 @@ export function PermissionsMatrixClient({ initialMatrix, insights }: Props) {
       try {
         await savePermissionMatrixAction(matrix);
         setSaved(true);
-        setMessage("Permissions saved. Changes apply to role checks for this company.");
+        setMessage(
+          "Permissions saved. Financial Report grants invoice access; Schedule Management controls status edits."
+        );
         toast?.success("Permissions saved");
       } catch (e) {
         const msg =

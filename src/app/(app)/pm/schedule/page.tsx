@@ -24,6 +24,7 @@ import {
 } from "@/lib/insights";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
+import { roleHasCapability } from "@/lib/authorization";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
 import { PmProjectPicker } from "@/components/pm/project-picker";
@@ -235,12 +236,11 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
     pendingDocCount: Math.min(pendingDocs, 12),
   });
 
-  const manageRoles: Role[] = [
-    Role.PROJECT_MANAGER,
-    Role.OWNER,
-    Role.OPERATIONS_ADMIN,
-  ];
-  const canManage = manageRoles.includes(session.membership.role);
+  const canManage = roleHasCapability(
+    session.membership.role,
+    "manageSchedule",
+    session.membership.permissionMatrix
+  );
 
   return (
     <div className="space-y-6">

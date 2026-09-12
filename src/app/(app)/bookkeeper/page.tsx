@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { InvoiceStatus, Role } from "@prisma/client";
+import { InvoiceStatus } from "@prisma/client";
 import { PageHeader, MetricCard, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
@@ -7,13 +7,15 @@ import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { MetricBarChart, StatusDonutChart } from "@/components/dashboard/charts-lazy";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
-import { requireRole } from "@/lib/session";
+import { requireSession } from "@/lib/session";
+import { requireFinanceAccess } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { buildProjectInsights } from "@/lib/insights";
 
 export default async function BookkeeperOverviewPage() {
-  const session = await requireRole([Role.BOOKKEEPER, Role.OWNER]);
+  const session = await requireSession();
+  requireFinanceAccess(session);
   const companyId = session.membership.companyId;
 
   const [statusGroups, amountByStatus, invoices, deposits] = await Promise.all([

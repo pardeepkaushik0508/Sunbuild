@@ -687,6 +687,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
               setError(null);
               toast?.success(successMsg);
               if (!result.emailSent && result.emailMessage) {
+                // Soft warning — user was still created; email is separate.
                 toast?.info(result.emailMessage);
               }
               setDialog(null);

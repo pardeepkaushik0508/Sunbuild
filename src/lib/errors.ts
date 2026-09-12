@@ -47,14 +47,18 @@ export class RateLimitError extends AppError {
 export function toSafeErrorMessage(error: unknown): string {
   if (error instanceof AppError) return error.message;
   if (error instanceof Error) {
-    const msg = error.message;
+    const msg = error.message?.trim() || "";
     // Preserve intentional Forbidden/Not found throws from legacy code
     if (/Body exceeded .+ limit/i.test(msg)) {
       return "File is too large to upload. Please use a smaller PDF (max 20 MB).";
     }
+    if (/too many requests/i.test(msg)) {
+      return "Too many requests. Please try again later.";
+    }
     if (
       msg === "Forbidden" ||
       msg.startsWith("Forbidden:") ||
+      msg.startsWith("You do not have permission") ||
       msg === "Not found" ||
       msg === "Lead not found" ||
       msg === "Contract not found" ||
@@ -63,12 +67,22 @@ export function toSafeErrorMessage(error: unknown): string {
       msg === "Note required" ||
       msg === "Section locked" ||
       msg === "Warranty not active for this project" ||
+      msg === "Title is required" ||
+      msg === "Invalid status" ||
       msg.startsWith("File too large") ||
       msg.startsWith("File is too large") ||
       msg.startsWith("Invalid ") ||
+      msg.startsWith("Valid ") ||
+      msg.startsWith("End date") ||
+      msg.startsWith("Could not update") ||
       /already exists/i.test(msg) ||
       /already in use/i.test(msg) ||
-      error.name === "AppError"
+      /could not be sent/i.test(msg) ||
+      /permission/i.test(msg) ||
+      error.name === "AppError" ||
+      error.name === "ForbiddenError" ||
+      error.name === "RateLimitError" ||
+      error.name === "NotFoundError"
     ) {
       return msg.startsWith("Forbidden:") ? "Forbidden" : msg;
     }

@@ -3,9 +3,10 @@ import "server-only";
 import {
   getEmailProvider,
   getSmtpConfig,
+  isSmtpConfigured,
   SmtpConfigError,
 } from "@/lib/email/config";
-import { sendViaResend } from "@/lib/email/send-resend";
+import { ResendAuthError, sendViaResend } from "@/lib/email/send-resend";
 import { getMailTransporter } from "@/lib/email/transporter";
 
 export type SendEmailInput = {
@@ -44,60 +45,11 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
 }
 
-/**
- * Application-level mail send. All transactional email should go through here.
- * Never logs SMTP_PASSWORD / API keys or message bodies that may contain reset tokens.
- * Uses Resend (HTTPS) when RESEND_API_KEY is set; otherwise Google SMTP.
- */
-export async function sendEmail(
-  input: SendEmailInput
+async function sendViaSmtp(
+  input: SendEmailInput,
+  recipients: string[],
+  subject: string
 ): Promise<SendEmailResult> {
-  const recipients = normalizeRecipients(input.to);
-  if (recipients.length === 0) {
-    throw new SmtpConfigError("Email recipient is required");
-  }
-  for (const r of recipients) {
-    if (!isValidEmail(r)) {
-      throw new SmtpConfigError("Invalid recipient email address");
-    }
-  }
-
-  const subject = input.subject.trim();
-  if (!subject || subject.length > MAX_SUBJECT) {
-    throw new SmtpConfigError("Invalid email subject");
-  }
-  if (!input.html?.trim() || input.html.length > MAX_HTML) {
-    throw new SmtpConfigError("Invalid email HTML body");
-  }
-  if (input.text && input.text.length > MAX_TEXT) {
-    throw new SmtpConfigError("Invalid email text body");
-  }
-
-  const provider = getEmailProvider();
-  if (!provider) {
-    throw new SmtpConfigError(
-      "Email is not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_* values."
-    );
-  }
-
-  if (provider === "resend") {
-    const { messageId } = await sendViaResend({
-      to: recipients,
-      subject,
-      html: input.html,
-      text: input.text,
-      replyTo: input.replyTo,
-    });
-    console.info("[email] sent", {
-      provider: "resend",
-      toCount: recipients.length,
-      subject,
-      messageId,
-      ...(input.tags ?? {}),
-    });
-    return { success: true, messageId };
-  }
-
   const config = getSmtpConfig();
   const transporter = getMailTransporter();
 
@@ -164,6 +116,73 @@ export async function sendEmail(
     }
     throw new Error("Unable to send email. Please try again.");
   }
+}
+
+/**
+ * Application-level mail send. All transactional email should go through here.
+ * Never logs SMTP_PASSWORD / API keys or message bodies that may contain reset tokens.
+ * Uses Resend (HTTPS) when RESEND_API_KEY is set; falls back to SMTP if Resend auth fails.
+ */
+export async function sendEmail(
+  input: SendEmailInput
+): Promise<SendEmailResult> {
+  const recipients = normalizeRecipients(input.to);
+  if (recipients.length === 0) {
+    throw new SmtpConfigError("Email recipient is required");
+  }
+  for (const r of recipients) {
+    if (!isValidEmail(r)) {
+      throw new SmtpConfigError("Invalid recipient email address");
+    }
+  }
+
+  const subject = input.subject.trim();
+  if (!subject || subject.length > MAX_SUBJECT) {
+    throw new SmtpConfigError("Invalid email subject");
+  }
+  if (!input.html?.trim() || input.html.length > MAX_HTML) {
+    throw new SmtpConfigError("Invalid email HTML body");
+  }
+  if (input.text && input.text.length > MAX_TEXT) {
+    throw new SmtpConfigError("Invalid email text body");
+  }
+
+  const provider = getEmailProvider();
+  if (!provider) {
+    throw new SmtpConfigError(
+      "Email is not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_* values."
+    );
+  }
+
+  if (provider === "resend") {
+    try {
+      const { messageId } = await sendViaResend({
+        to: recipients,
+        subject,
+        html: input.html,
+        text: input.text,
+        replyTo: input.replyTo,
+      });
+      console.info("[email] sent", {
+        provider: "resend",
+        toCount: recipients.length,
+        subject,
+        messageId,
+        ...(input.tags ?? {}),
+      });
+      return { success: true, messageId };
+    } catch (error) {
+      if (error instanceof ResendAuthError && isSmtpConfigured()) {
+        console.warn(
+          "[email] Resend API key rejected — falling back to SMTP"
+        );
+        return sendViaSmtp(input, recipients, subject);
+      }
+      throw error;
+    }
+  }
+
+  return sendViaSmtp(input, recipients, subject);
 }
 
 /** Safe wrapper that returns a result object instead of throwing. */
