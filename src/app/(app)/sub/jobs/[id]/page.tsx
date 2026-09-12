@@ -12,6 +12,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -116,18 +118,23 @@ export default async function SubJobDetailPage({ params }: PageProps) {
                     </StatusBadge>
                   </div>
                   {task.status !== TaskStatus.DONE ? (
-                    <form
+                    <ActionForm
                       action={updateTaskStatusAction.bind(
                         null,
                         task.id,
                         TaskStatus.DONE
                       )}
+                      successMessage="Task marked done"
                       className="mt-2"
                     >
-                      <Button type="submit" size="sm" variant="outline">
+                      <SubmitButton
+                        size="sm"
+                        variant="outline"
+                        pendingLabel="Saving…"
+                      >
                         Mark done
-                      </Button>
-                    </form>
+                      </SubmitButton>
+                    </ActionForm>
                   ) : null}
                 </li>
               ))}
@@ -150,17 +157,18 @@ export default async function SubJobDetailPage({ params }: PageProps) {
                 >
                   <p className="font-medium text-sm">{rfi.title}</p>
                   <p className="mt-1 text-sm text-sb-muted">{rfi.question}</p>
-                  <form
+                  <ActionForm
                     action={answerRfiAction.bind(null, rfi.id)}
+                    successMessage="RFI answered"
                     className="mt-3 space-y-2"
                   >
                     <FormField label="Response">
                       <Textarea name="response" required />
                     </FormField>
-                    <Button type="submit" size="sm">
+                    <SubmitButton size="sm" pendingLabel="Submitting…">
                       Submit answer
-                    </Button>
-                  </form>
+                    </SubmitButton>
+                  </ActionForm>
                 </div>
               ))}
             </div>
@@ -171,32 +179,34 @@ export default async function SubJobDetailPage({ params }: PageProps) {
           <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
             Daily log
           </h2>
-          <form action={createDailyLogAction} className="mt-4 space-y-3">
+          <ActionForm
+            action={createDailyLogAction}
+            successMessage="Daily log saved"
+            className="mt-4 space-y-3"
+          >
             <input type="hidden" name="projectId" value={project.id} />
             <FormField label="Log date">
               <Input name="logDate" type="date" defaultValue={today} required />
             </FormField>
             <FormField label="Work completed">
-              <Textarea name="workCompleted" />
+              <Textarea name="workCompleted" required placeholder="Describe tasks and work completed today..." />
             </FormField>
-            <FormField label="Site notes">
-              <Textarea name="siteNotes" />
+            <FormField label="Notes">
+              <Textarea name="siteNotes" placeholder="Site observations, access notes, or comments..." />
             </FormField>
-            <FormField label="Issues">
-              <Textarea name="issues" />
-            </FormField>
-            <Button type="submit" size="sm">
+            <SubmitButton size="sm" pendingLabel="Saving…">
               Save log
-            </Button>
-          </form>
+            </SubmitButton>
+          </ActionForm>
         </Card>
 
         <Card>
           <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
             Upload photo
           </h2>
-          <form
+          <ActionForm
             action={uploadPhotoAction}
+            successMessage="Photo uploaded"
             encType="multipart/form-data"
             className="mt-4 space-y-3"
           >
@@ -207,10 +217,10 @@ export default async function SubJobDetailPage({ params }: PageProps) {
             <FormField label="Photo">
               <Input name="file" type="file" accept="image/*" required />
             </FormField>
-            <Button type="submit" size="sm">
+            <SubmitButton size="sm" pendingLabel="Uploading…">
               Upload (internal only)
-            </Button>
-          </form>
+            </SubmitButton>
+          </ActionForm>
         </Card>
       </div>
 

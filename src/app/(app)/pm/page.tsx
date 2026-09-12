@@ -127,6 +127,9 @@ export default async function PMDashboardPage({ searchParams }: PageProps) {
           <CalendarWidget
             events={data.calendarEvents}
             subtitle="Project schedule overview"
+            googleConnected={data.googleCalendarConnected}
+            googleReconnectRequired={data.googleReconnectRequired}
+            connectReturnPath="/pm"
           />
         </div>
       </div>

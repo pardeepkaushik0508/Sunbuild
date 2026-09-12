@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/card";
 import { FormField, Input, Select } from "@/components/ui/form";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useOptionalToast } from "@/components/ui/toast";
 import { ROLE_LABELS } from "@/lib/permissions";
 import { toSafeErrorMessage } from "@/lib/errors";
 import { cn, formatDate } from "@/lib/utils";
@@ -104,6 +105,7 @@ function splitName(full: string) {
 
 export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
   const router = useRouter();
+  const toast = useOptionalToast();
   const [pending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [selectedUser, setSelectedUser] = useState<ManageUserRow | null>(null);
@@ -653,17 +655,22 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
             if (dialog === "add") {
               const result = await inviteUserAction(formData);
               if (result?.emailSent) {
-                setNotice(result.emailMessage || "Invite email sent.");
+                const msg = result.emailMessage || "Invite email sent.";
+                setNotice(msg);
                 setError(null);
+                toast?.success(msg);
               } else if (result?.emailMessage) {
                 setError(result.emailMessage);
                 setNotice(null);
+                toast?.error(result.emailMessage);
               } else {
                 setNotice("User created.");
+                toast?.success("User created");
               }
             } else {
               await updateUserAction(formData);
               setNotice("User updated.");
+              toast?.success("User updated");
             }
             setDialog(null);
             setSelectedUser(null);
@@ -690,6 +697,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
             await bulkUpdateUsersAction(formData);
             setDialog(null);
             setSelectedIds(new Set());
+            toast?.success("Users updated");
             router.refresh();
           }}
         />
@@ -757,6 +765,7 @@ function UserFormDialog({
   onSubmit: (form: FormData) => Promise<void>;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const toast = useOptionalToast();
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const names = splitName(user?.name ?? "");
@@ -772,7 +781,9 @@ function UserFormDialog({
       }
       await onSubmit(formData);
     } catch (e) {
-      setFormError(toSafeErrorMessage(e));
+      const message = toSafeErrorMessage(e);
+      setFormError(message);
+      toast?.error(message);
     } finally {
       setSaving(false);
     }
@@ -990,6 +1001,7 @@ function BulkEditDialog({
 }) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const toast = useOptionalToast();
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
@@ -997,7 +1009,9 @@ function BulkEditDialog({
     try {
       await onSubmit(formData);
     } catch (e) {
-      setFormError(toSafeErrorMessage(e));
+      const message = toSafeErrorMessage(e);
+      setFormError(message);
+      toast?.error(message);
     } finally {
       setSaving(false);
     }

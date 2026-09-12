@@ -112,10 +112,44 @@ export function JobCard({
           </div>
 
           <div className="min-w-0">
-            <p className="mb-2 text-[13px] font-semibold text-sb-ink">Deadline</p>
+            <p className="mb-2 text-[13px] font-semibold text-sb-ink">Dates</p>
             <p className="text-[14px] font-medium text-sb-ink">
-              {formatDeadline(job.deadline)}
+              Deadline: {formatDeadline(job.deadline)}
             </p>
+            {job.startDate ? (
+              <p className="mt-0.5 text-[12px] text-sb-muted">
+                Started: {formatDeadline(job.startDate)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 border-t border-sb-border-subtle pt-3 text-[13px] md:grid-cols-3">
+          <div className="min-w-0">
+            <span className="font-semibold text-sb-ink">Tasks: </span>
+            <span className="text-sb-body">
+              {job.totalTasks} total ·{" "}
+              <span className="text-sb-orange font-medium">{job.openTasks} open</span> ·{" "}
+              <span className="text-sb-green font-medium">{job.completedTasks} done</span>
+            </span>
+          </div>
+
+          <div className="min-w-0 truncate">
+            <span className="font-semibold text-sb-ink">Subcontractors: </span>
+            <span className="text-sb-muted">
+              {job.assignedSubcontractors && job.assignedSubcontractors.length > 0
+                ? job.assignedSubcontractors.map((s) => s.name).join(", ")
+                : "None assigned"}
+            </span>
+          </div>
+
+          <div className="min-w-0 truncate">
+            <span className="font-semibold text-sb-ink">Next Milestone: </span>
+            <span className="text-sb-muted">
+              {job.nextMilestone
+                ? `${job.nextMilestone.title} (${formatDeadline(job.nextMilestone.targetDate)})`
+                : "None scheduled"}
+            </span>
           </div>
         </div>
       </article>

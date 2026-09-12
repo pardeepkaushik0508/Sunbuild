@@ -17,6 +17,8 @@ import type { InsightCard } from "@/components/dashboard/ai-insights";
 import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
 import { buildGanttTree } from "@/lib/dashboard/gantt-tree";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
+import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
+import { getPublicConnection } from "@/lib/google/calendar";
 
 export type PmOverviewStat = {
   id: string;
@@ -199,7 +201,7 @@ export async function loadPmOverviewData(
     href: `/pm/tasks?projectId=${t.projectId}`,
   }));
 
-  const calendarEvents: CalendarEvent[] = [
+  const localCalendarEvents: CalendarEvent[] = [
     ...tasks
       .filter((t) => t.dueDate)
       .map((t) => ({
@@ -215,6 +217,7 @@ export async function loadPmOverviewData(
       title: s.title,
       type: "schedule" as const,
       meta: s.trade || undefined,
+      googleEventId: s.googleEventId ?? undefined,
     })),
     ...milestonesRows
       .filter((m) => m.dueDate)
@@ -225,6 +228,15 @@ export async function loadPmOverviewData(
         type: "milestone" as const,
       })),
   ];
+
+  const [mergedCalendar, googleConnection] = await Promise.all([
+    mergeExternalGoogleEvents({
+      session,
+      localEvents: localCalendarEvents,
+    }),
+    getPublicConnection(session.user.id, session.membership.companyId),
+  ]);
+  const calendarEvents = mergedCalendar.events;
 
   const ganttTasks = buildGanttTree(
     scheduleItems.map((s) => ({
@@ -360,6 +372,10 @@ export async function loadPmOverviewData(
     })),
     todos,
     calendarEvents,
+    googleCalendarConnected: googleConnection.connected,
+    googleReconnectRequired:
+      googleConnection.status === "RECONNECT_REQUIRED" ||
+      mergedCalendar.googleReconnectRequired,
     ganttTasks,
     progressPercent,
     clientItems,

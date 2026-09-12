@@ -6,6 +6,8 @@ import { PageHeader, Card } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -126,33 +128,38 @@ export default async function PMSelectionDetailPage({ params }: PageProps) {
 
             {section.status === SelectionSectionStatus.SUBMITTED ? (
               <div className="mt-4 flex flex-col gap-4 border-t border-sb-border pt-4 sm:flex-row">
-                <form
+                <ActionForm
                   action={reviewSelectionSectionAction.bind(
                     null,
                     section.id,
                     "APPROVE"
                   )}
+                  successMessage="Section approved"
                   className="flex-1"
                 >
-                  <Button type="submit" className="w-full sm:w-auto">
+                  <SubmitButton
+                    className="w-full sm:w-auto"
+                    pendingLabel="Approving…"
+                  >
                     Approve section
-                  </Button>
-                </form>
-                <form
+                  </SubmitButton>
+                </ActionForm>
+                <ActionForm
                   action={reviewSelectionSectionAction.bind(
                     null,
                     section.id,
                     "REQUEST_CHANGES"
                   )}
+                  successMessage="Changes requested"
                   className="flex-1 space-y-2"
                 >
                   <FormField label="Request changes comment">
                     <Textarea name="comment" placeholder="What needs to change?" />
                   </FormField>
-                  <Button type="submit" variant="outline">
+                  <SubmitButton variant="outline" pendingLabel="Sending…">
                     Request changes
-                  </Button>
-                </form>
+                  </SubmitButton>
+                </ActionForm>
               </div>
             ) : null}
           </Card>

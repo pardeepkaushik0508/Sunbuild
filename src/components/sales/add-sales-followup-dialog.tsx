@@ -7,6 +7,10 @@ import { X } from "lucide-react";
 import { createSalesFollowUpAction } from "@/lib/sales/follow-up-actions";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { useOptionalToast } from "@/components/ui/toast";
+import { toSafeErrorMessage } from "@/lib/errors";
+import { isNextNavigationError } from "@/lib/navigation-errors";
 
 export function AddSalesFollowUpDialog({
   open,
@@ -20,6 +24,7 @@ export function AddSalesFollowUpDialog({
   assignees: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
+  const toast = useOptionalToast();
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
 
@@ -31,8 +36,12 @@ export function AddSalesFollowUpDialog({
     try {
       await createSalesFollowUpAction(formData);
       formRef.current?.reset();
+      toast?.success("Follow-up saved");
       onClose();
       router.refresh();
+    } catch (err) {
+      if (isNextNavigationError(err)) throw err;
+      toast?.error(toSafeErrorMessage(err));
     } finally {
       pendingRef.current = false;
     }
@@ -123,11 +132,32 @@ export function AddSalesFollowUpDialog({
               ))}
             </Select>
           </FormField>
+          <FormField label="Location">
+            <Input name="location" placeholder="Optional location" />
+          </FormField>
+          <label className="flex items-center gap-2 text-[13px] text-sb-ink">
+            <input
+              type="checkbox"
+              name="syncToGoogle"
+              value="true"
+              className="rounded border-sb-border"
+            />
+            Sync to Google Calendar (if connected)
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-sb-ink">
+            <input
+              type="checkbox"
+              name="createMeet"
+              value="true"
+              className="rounded border-sb-border"
+            />
+            Add Google Meet link
+          </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">Save follow-up</Button>
+            <SubmitButton pendingLabel="Saving…">Save follow-up</SubmitButton>
           </div>
         </form>
       </div>

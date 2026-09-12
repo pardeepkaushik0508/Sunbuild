@@ -4,8 +4,9 @@ import {
   updateScheduleItemStatusAction,
 } from "@/lib/actions";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { resolveScheduleDisplayStatus } from "@/lib/schedule/display-status";
 import { formatDate } from "@/lib/utils";
 
@@ -58,30 +59,40 @@ export function MilestoneStatusList({
                 {canManage ? (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {m.status !== ScheduleStatus.COMPLETED ? (
-                      <form
+                      <ActionForm
                         action={updateMilestoneStatusAction.bind(
                           null,
                           m.id,
                           ScheduleStatus.COMPLETED
                         )}
+                        successMessage="Milestone completed"
                       >
-                        <Button type="submit" size="sm" variant="outline">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Saving…"
+                        >
                           Mark complete
-                        </Button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     ) : null}
                     {m.status !== ScheduleStatus.IN_PROGRESS ? (
-                      <form
+                      <ActionForm
                         action={updateMilestoneStatusAction.bind(
                           null,
                           m.id,
                           ScheduleStatus.IN_PROGRESS
                         )}
+                        successMessage="Milestone updated"
                       >
-                        <Button type="submit" size="sm" variant="outline">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Saving…"
+                        >
                           In progress
-                        </Button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     ) : null}
                   </div>
                 ) : null}
@@ -134,30 +145,40 @@ export function ScheduleItemStatusList({
                 {canManage ? (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {item.status !== ScheduleStatus.COMPLETED ? (
-                      <form
+                      <ActionForm
                         action={updateScheduleItemStatusAction.bind(
                           null,
                           item.id,
                           ScheduleStatus.COMPLETED
                         )}
+                        successMessage="Schedule item completed"
                       >
-                        <Button type="submit" size="sm" variant="outline">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Saving…"
+                        >
                           Mark complete
-                        </Button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     ) : null}
                     {item.status !== ScheduleStatus.IN_PROGRESS ? (
-                      <form
+                      <ActionForm
                         action={updateScheduleItemStatusAction.bind(
                           null,
                           item.id,
                           ScheduleStatus.IN_PROGRESS
                         )}
+                        successMessage="Schedule item updated"
                       >
-                        <Button type="submit" size="sm" variant="outline">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Saving…"
+                        >
                           In progress
-                        </Button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     ) : null}
                   </div>
                 ) : null}

@@ -49,8 +49,21 @@ describe("IDOR / privilege matrix (capability layer)", () => {
     expectCap(Role.SUBCONTRACTOR, "uploadPhotos", "allow");
     expectCap(Role.SUBCONTRACTOR, "manageRfis", "allow");
     expectCap(Role.SUBCONTRACTOR, "manageDailyLogs", "allow");
+    expectCap(Role.SUBCONTRACTOR, "createDailyLog", "allow");
     expectCap(Role.SUBCONTRACTOR, "updateOwnOrAssignedTasks", "allow");
     expectCap(Role.SUBCONTRACTOR, "createWarranty", "deny");
+  });
+
+  it("PM cannot upload contracts, upload documents, or create daily logs", () => {
+    expectCap(Role.PROJECT_MANAGER, "manageContracts", "deny");
+    expectCap(Role.PROJECT_MANAGER, "uploadDocuments", "deny");
+    expectCap(Role.PROJECT_MANAGER, "createDailyLog", "deny");
+    expectCap(Role.PROJECT_MANAGER, "manageDailyLogs", "allow");
+  });
+
+  it("Sales owns contracts and documents", () => {
+    expectCap(Role.SALES_MANAGER, "manageContracts", "allow");
+    expectCap(Role.SALES_MANAGER, "uploadDocuments", "allow");
   });
 
   it("finance boundary", () => {

@@ -43,11 +43,17 @@ export type JobsListItem = {
   pmName: string | null;
   pmId: string | null;
   clientName: string | null;
+  startDate: Date | null;
   deadline: Date | null;
   budgetUsed: number;
   budgetTotal: number;
   budgetPercent: number;
   hasBudget: boolean;
+  totalTasks: number;
+  openTasks: number;
+  completedTasks: number;
+  assignedSubcontractors: Array<{ id: string; name: string }>;
+  nextMilestone: { title: string; targetDate: Date | null } | null;
   updatedAt: Date;
   href: string;
 };
@@ -350,6 +356,8 @@ export async function loadJobsDashboardData(input: {
       status: true,
       progressPercent: true,
       purchasePrice: true,
+      contractDate: true,
+      createdAt: true,
       targetClosing: true,
       updatedAt: true,
       pmId: true,
@@ -369,9 +377,9 @@ export async function loadJobsDashboardData(input: {
   });
 
   const pageProjectIds = rawProjects.map((p) => p.id);
-  const [invoiceSums, depositSums] =
+  const [invoiceSums, depositSums, taskGroups, subAccess, nextMilestones] =
     pageProjectIds.length === 0
-      ? [[], []]
+      ? [[], [], [], [], []]
       : await Promise.all([
           prisma.invoice.groupBy({
             by: ["projectId"],
@@ -389,6 +397,26 @@ export async function loadJobsDashboardData(input: {
             },
             _sum: { amount: true },
           }),
+          prisma.task.groupBy({
+            by: ["projectId", "status"],
+            where: { projectId: { in: pageProjectIds } },
+            _count: { id: true },
+          }),
+          prisma.projectAccess.findMany({
+            where: {
+              projectId: { in: pageProjectIds },
+              role: Role.SUBCONTRACTOR,
+            },
+            include: { user: { select: { id: true, name: true } } },
+          }),
+          prisma.scheduleItem.findMany({
+            where: {
+              projectId: { in: pageProjectIds },
+              status: { notIn: [ScheduleStatus.COMPLETED] },
+            },
+            orderBy: { endDate: "asc" },
+            select: { projectId: true, title: true, endDate: true },
+          }),
         ]);
 
   const invoiceByProject = new Map(
@@ -397,6 +425,45 @@ export async function loadJobsDashboardData(input: {
   const depositByProject = new Map(
     depositSums.map((r) => [r.projectId, r._sum.amount ?? 0])
   );
+
+  const tasksByProject = new Map<
+    string,
+    { total: number; open: number; completed: number }
+  >();
+  for (const tg of taskGroups) {
+    const cur = tasksByProject.get(tg.projectId) ?? {
+      total: 0,
+      open: 0,
+      completed: 0,
+    };
+    cur.total += tg._count.id;
+    if (tg.status === TaskStatus.DONE) {
+      cur.completed += tg._count.id;
+    } else if (tg.status !== TaskStatus.CANCELLED) {
+      cur.open += tg._count.id;
+    }
+    tasksByProject.set(tg.projectId, cur);
+  }
+
+  const subsByProject = new Map<string, Array<{ id: string; name: string }>>();
+  for (const sa of subAccess) {
+    const list = subsByProject.get(sa.projectId) ?? [];
+    list.push({ id: sa.user.id, name: sa.user.name });
+    subsByProject.set(sa.projectId, list);
+  }
+
+  const nextMilestoneByProject = new Map<
+    string,
+    { title: string; targetDate: Date | null }
+  >();
+  for (const m of nextMilestones) {
+    if (!nextMilestoneByProject.has(m.projectId)) {
+      nextMilestoneByProject.set(m.projectId, {
+        title: m.title,
+        targetDate: m.endDate,
+      });
+    }
+  }
 
   let mapped: JobsListItem[] = rawProjects.map((p) => {
     const progressPercent = computeProjectProgress({
@@ -410,6 +477,11 @@ export async function loadJobsDashboardData(input: {
       deposits:
         received > 0 ? [{ amount: received, status: "RECEIVED" }] : [],
     });
+    const taskInfo = tasksByProject.get(p.id) ?? {
+      total: 0,
+      open: 0,
+      completed: 0,
+    };
     return {
       id: p.id,
       name: p.name,
@@ -421,11 +493,17 @@ export async function loadJobsDashboardData(input: {
       clientName: p.buyer
         ? fullName(p.buyer.firstName, p.buyer.lastName)
         : null,
+      startDate: p.contractDate ?? p.createdAt,
       deadline: p.targetClosing,
       budgetUsed: budget.used,
       budgetTotal: budget.total,
       budgetPercent: budget.percent,
       hasBudget: budget.hasBudget,
+      totalTasks: taskInfo.total,
+      openTasks: taskInfo.open,
+      completedTasks: taskInfo.completed,
+      assignedSubcontractors: subsByProject.get(p.id) ?? [],
+      nextMilestone: nextMilestoneByProject.get(p.id) ?? null,
       updatedAt: p.updatedAt,
       href: `/pm/projects/${p.id}`,
     };

@@ -12,6 +12,9 @@ import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 import type { TodoItem } from "@/components/dashboard/todo-widget";
 import type { InsightCard } from "@/components/dashboard/ai-insights";
 import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
+import type { AppSession } from "@/lib/session";
+import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
+import { getPublicConnection } from "@/lib/google/calendar";
 
 export type SalesKpi = {
   id: string;
@@ -59,6 +62,8 @@ export type SalesOverviewData = {
   activities: SalesActivityItem[];
   todos: TodoItem[];
   calendarEvents: CalendarEvent[];
+  googleCalendarConnected: boolean;
+  googleReconnectRequired: boolean;
   pipeline: PipelineStage[];
   actionLeads: ActionLead[];
   clientItems: ClientInfoItem[];
@@ -167,7 +172,7 @@ async function safeSection<T>(
 
 export async function loadSalesOverviewData(
   companyId: string,
-  opts?: { salesUserId?: string }
+  opts?: { salesUserId?: string; session?: AppSession }
 ): Promise<SalesOverviewData> {
   const sectionErrors: SalesOverviewData["sectionErrors"] = {};
   const now = new Date();
@@ -456,7 +461,7 @@ export async function loadSalesOverviewData(
     href: `/sales/leads/${a.lead.id}`,
   }));
 
-  const calendarEvents: CalendarEvent[] = [
+  const localCalendarEvents: CalendarEvent[] = [
     ...openFollowUps
       .filter((a) => a.dueAt)
       .map((a) => ({
@@ -465,6 +470,7 @@ export async function loadSalesOverviewData(
         title: a.title?.trim() || fullName(a.lead.firstName, a.lead.lastName),
         type: "task" as const,
         meta: a.type,
+        googleEventId: a.googleEventId ?? undefined,
       })),
     ...actionLeadsRaw
       .filter((l) => l.followUpAt)
@@ -476,6 +482,24 @@ export async function loadSalesOverviewData(
         meta: l.nextAction || "Follow-up",
       })),
   ];
+
+  let calendarEvents = localCalendarEvents;
+  let googleCalendarConnected = false;
+  let googleReconnectRequired = false;
+  if (opts?.session) {
+    const [merged, connection] = await Promise.all([
+      mergeExternalGoogleEvents({
+        session: opts.session,
+        localEvents: localCalendarEvents,
+      }),
+      getPublicConnection(opts.session.user.id, companyId),
+    ]);
+    calendarEvents = merged.events;
+    googleCalendarConnected = connection.connected;
+    googleReconnectRequired =
+      connection.status === "RECONNECT_REQUIRED" ||
+      merged.googleReconnectRequired;
+  }
 
   const pipeline: PipelineStage[] = PIPELINE_STAGES.map((stage) => {
     const count = stage.statuses.reduce(
@@ -658,6 +682,8 @@ export async function loadSalesOverviewData(
     activities,
     todos,
     calendarEvents,
+    googleCalendarConnected,
+    googleReconnectRequired,
     pipeline,
     actionLeads,
     clientItems,

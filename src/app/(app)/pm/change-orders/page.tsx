@@ -6,6 +6,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
@@ -66,8 +68,9 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
           Create change order
         </h2>
-        <form
+        <ActionForm
           action={createChangeOrderAction}
+          successMessage="Change order submitted"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
           <FormField label="Project">
@@ -92,23 +95,28 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
           <FormField label="Amount (CAD)">
             <Input name="amount" type="number" step="0.01" required />
           </FormField>
+          <FormField label="Schedule impact (days)">
+            <Input name="scheduleImpact" type="number" step="1" placeholder="e.g. 5" />
+          </FormField>
           <FormField label="Reason">
-            <Input name="reason" />
+            <Input name="reason" placeholder="e.g. Client requested material upgrade" />
           </FormField>
           <FormField label="Description" className="md:col-span-2">
-            <Textarea name="description" />
+            <Textarea name="description" placeholder="Provide full breakdown and justification..." />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Create change order</Button>
+            <SubmitButton pendingLabel="Submitting…">
+              Submit to client
+            </SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
 
       {changeOrders.length === 0 ? (
         <EmptyState title="No change orders" />
       ) : (
         <DataTable
-          headers={["Title", "Project", "Amount", "Status", "Created", "Client action"]}
+          headers={["Title", "Project", "Amount", "Schedule Impact", "Status", "Created", "Client action"]}
         >
           {changeOrders.map((co) => (
             <tr key={co.id}>
@@ -120,6 +128,7 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
               </Td>
               <Td>{co.project.name}</Td>
               <Td>{formatCurrency(co.amount)}</Td>
+              <Td>{co.scheduleImpact ? `+${co.scheduleImpact} days` : "—"}</Td>
               <Td>
                 <StatusBadge tone={statusTone(co.status)}>
                   {co.status.replace(/_/g, " ")}

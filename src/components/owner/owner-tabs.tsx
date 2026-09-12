@@ -35,7 +35,10 @@ export function OwnerTabs({ className }: { className?: string }) {
     <nav
       aria-label="Owner modules"
       className={cn(
-        "flex w-full gap-6 overflow-x-auto border-b border-sb-border",
+        // overflow-y-hidden prevents the classic vertical scrollbar when
+        // overflow-x-auto is set and the active underline sits on the border.
+        "flex w-full gap-6 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-sb-border",
+        "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
         className
       )}
     >
@@ -56,7 +59,7 @@ export function OwnerTabs({ className }: { className?: string }) {
             {tab.label}
             {active ? (
               <span
-                className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-[#8b5cf6]"
+                className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-[#8b5cf6]"
                 aria-hidden
               />
             ) : null}

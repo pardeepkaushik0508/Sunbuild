@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Role } from "@prisma/client";
 import { uploadContractAction } from "@/lib/actions";
 import { PageHeader, Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { FormField, Input, Textarea } from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 
@@ -16,6 +18,7 @@ export default async function PMContractNewPage({ searchParams }: PageProps) {
     Role.PROJECT_MANAGER,
     Role.OWNER,
     Role.CEO,
+    Role.OPERATIONS_ADMIN,
   ]);
   const { projectId } = await searchParams;
   const projectIds = await getAccessibleProjectIds(session);
@@ -44,7 +47,7 @@ export default async function PMContractNewPage({ searchParams }: PageProps) {
       />
 
       <Card>
-        <form
+        <ActionForm
           action={uploadContractAction}
           encType="multipart/form-data"
           className="grid gap-4 md:grid-cols-2"
@@ -112,9 +115,9 @@ export default async function PMContractNewPage({ searchParams }: PageProps) {
             <Textarea name="reviewNotes" />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Upload & review</Button>
+            <SubmitButton pendingLabel="Uploading…">Upload & review</SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
     </div>
   );

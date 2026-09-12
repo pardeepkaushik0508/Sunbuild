@@ -9,6 +9,8 @@ import { ProgressBar, EmptyState, Card } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { dueBadgeLabel, type DueBadge } from "@/lib/client/due";
 import { clientApproveSelectionSectionAction } from "@/lib/client/actions";
+import { useOptionalToast } from "@/components/ui/toast";
+import { toSafeErrorMessage } from "@/lib/errors";
 
 export type ClientSelectionCardData = {
   id: string;
@@ -46,6 +48,7 @@ export function ClientSelectionsBoard({
   const [filterOpen, setFilterOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const toast = useOptionalToast();
 
   const filtered = useMemo(() => {
     return cards.filter((c) => {
@@ -78,8 +81,12 @@ export function ClientSelectionsBoard({
     startTransition(async () => {
       try {
         await clientApproveSelectionSectionAction(id);
+        toast?.success("Selection approved");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not approve selection");
+        const message =
+          e instanceof Error ? e.message : "Could not approve selection";
+        setError(message);
+        toast?.error(toSafeErrorMessage(e));
       }
     });
   }

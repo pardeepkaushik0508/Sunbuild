@@ -6,6 +6,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { resolveTaskDisplayStatus } from "@/lib/schedule/display-status";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
@@ -172,8 +174,9 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
 
       <Card>
         <h2 className="text-lg font-semibold text-sb-ink">Add Task</h2>
-        <form
+        <ActionForm
           action={createTaskFormAction}
+          successMessage="Task created"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
           <FormField label="Project" required>
@@ -224,9 +227,9 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
             <Textarea name="description" />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Create task</Button>
+            <SubmitButton pendingLabel="Creating…">Create task</SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
 
       {tasks.length === 0 ? (
@@ -284,30 +287,40 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
                 <Td>
                   <div className="flex flex-wrap gap-1.5">
                     {task.status !== TaskStatus.DONE ? (
-                      <form
+                      <ActionForm
                         action={updateTaskStatusAction.bind(
                           null,
                           task.id,
                           TaskStatus.DONE
                         )}
+                        successMessage="Task marked done"
                       >
-                        <Button type="submit" size="sm" variant="outline">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Saving…"
+                        >
                           Mark done
-                        </Button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     ) : null}
                     {task.status !== TaskStatus.IN_PROGRESS ? (
-                      <form
+                      <ActionForm
                         action={updateTaskStatusAction.bind(
                           null,
                           task.id,
                           TaskStatus.IN_PROGRESS
                         )}
+                        successMessage="Task updated"
                       >
-                        <Button type="submit" size="sm" variant="outline">
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Saving…"
+                        >
                           In progress
-                        </Button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     ) : null}
                   </div>
                 </Td>

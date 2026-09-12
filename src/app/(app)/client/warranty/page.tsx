@@ -5,6 +5,8 @@ import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -56,8 +58,9 @@ export default async function ClientWarrantyPage() {
           <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
             Create warranty ticket
           </h2>
-          <form
+          <ActionForm
             action={createWarrantyTicketAction}
+            successMessage="Warranty ticket submitted"
             encType="multipart/form-data"
             className="mt-4 grid gap-4 md:grid-cols-2"
           >
@@ -89,9 +92,11 @@ export default async function ClientWarrantyPage() {
               <Textarea name="description" required />
             </FormField>
             <div className="md:col-span-2">
-              <Button type="submit">Submit ticket</Button>
+              <SubmitButton pendingLabel="Submitting…">
+                Submit ticket
+              </SubmitButton>
             </div>
-          </form>
+          </ActionForm>
         </Card>
       ) : (
         <Card className="mb-6">

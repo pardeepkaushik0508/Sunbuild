@@ -5,6 +5,8 @@ import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -89,8 +91,9 @@ export default async function PMWarrantyPage({ searchParams }: PageProps) {
                 </p>
               ) : null}
 
-              <form
+              <ActionForm
                 action={updateWarrantyStatusAction.bind(null, ticket.id)}
+                successMessage="Warranty ticket updated"
                 className="mt-4 grid gap-4 border-t border-sb-border pt-4 md:grid-cols-2"
               >
                 <FormField label="Status">
@@ -125,11 +128,11 @@ export default async function PMWarrantyPage({ searchParams }: PageProps) {
                   <Input name="comment" placeholder="Internal note..." />
                 </FormField>
                 <div className="md:col-span-2">
-                  <Button type="submit" size="sm">
+                  <SubmitButton size="sm" pendingLabel="Saving…">
                     Update ticket
-                  </Button>
+                  </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
               {ticket.closedAt ? (
                 <p className="mt-2 text-xs text-sb-muted">
                   Closed {formatDate(ticket.closedAt)}

@@ -48,6 +48,10 @@ model User {
   selectionApprovals SelectionApproval[]
   auditLogs         AuditLog[]
   invitationsSent   Invitation[]        @relation("InvitationSender")
+  googleCalendarConnections GoogleCalendarConnection[]
+  microsoftTodoConnections  MicrosoftTodoConnection[]
+  microsoftTodoProjectLinks MicrosoftTodoProjectLink[]
+  whatsappMessagesSent      WhatsAppMessage[]           @relation("WhatsAppSender")
 }
 
 /// Better Auth two-factor secrets (never expose to the browser).
@@ -287,6 +291,13 @@ model LeadActivity {
   dueAt        DateTime?
   priority     Priority?
   completedAt  DateTime?
+  location     String?
+  /// Google Calendar sync (null = never synced)
+  googleEventId       String?
+  googleCalendarId    String?
+  googleMeetUrl       String?
+  googleSyncStatus    String    @default("LOCAL_ONLY")
+  googleLastSyncedAt  DateTime?
   createdAt    DateTime  @default(now())
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -294,6 +305,7 @@ model LeadActivity {
 
   @@index([leadId, activityDate])
   @@index([dueAt])
+  @@index([googleEventId])
 }
 
 model Proposal {
@@ -332,6 +344,7 @@ model Buyer {
 
   projects  Project[]
   contracts PurchaseContract[]
+  whatsappConversations WhatsAppConversation[]
 }
 
 enum ProjectStatus {
@@ -387,6 +400,8 @@ model Project {
   photos    Photo[]
   invoices  Invoice[]
   warrantyTickets WarrantyTicket[]
+  microsoftTodoLinks MicrosoftTodoProjectLink[]
+  whatsappConversations WhatsAppConversation[]
 
   @@index([companyId, status])
   @@index([companyId, updatedAt])
@@ -513,6 +528,12 @@ model Task {
   notes       String?
   assigneeId  String?
   createdById String
+  /// Google Calendar sync (pushed to assignee/creator calendar)
+  googleEventId       String?
+  googleCalendarId    String?
+  googleMeetUrl       String?
+  googleSyncStatus    String    @default("LOCAL_ONLY")
+  googleLastSyncedAt  DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -523,6 +544,7 @@ model Task {
   @@index([projectId, status])
   @@index([projectId, dueDate])
   @@index([assigneeId, status])
+  @@index([googleEventId])
 }
 
 enum ScheduleStatus {
@@ -560,6 +582,13 @@ model ScheduleItem {
   status       ScheduleStatus @default(PLANNED)
   dependsOnId  String?
   assigneeName String?
+  location     String?
+  /// Google Calendar sync (null = never synced)
+  googleEventId       String?
+  googleCalendarId    String?
+  googleMeetUrl       String?
+  googleSyncStatus    String    @default("LOCAL_ONLY")
+  googleLastSyncedAt  DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -567,6 +596,73 @@ model ScheduleItem {
 
   @@index([projectId, startDate])
   @@index([projectId, status])
+  @@index([googleEventId])
+}
+
+/// Per-user Google Calendar OAuth connection (tokens encrypted at rest).
+model GoogleCalendarConnection {
+  id                     String   @id @default(cuid())
+  userId                 String
+  companyId              String
+  googleAccountEmail     String?
+  googleCalendarId       String   @default("primary")
+  accessTokenEncrypted   String
+  refreshTokenEncrypted  String?
+  tokenExpiry            DateTime?
+  scope                  String?
+  /// CONNECTED | RECONNECT_REQUIRED | ERROR | DISCONNECTED
+  status                 String   @default("CONNECTED")
+  connectedAt            DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId, status])
+  @@index([userId])
+}
+
+/// Per-user Microsoft To Do OAuth connection (tokens encrypted at rest).
+model MicrosoftTodoConnection {
+  id                      String   @id @default(cuid())
+  userId                  String
+  companyId               String
+  microsoftAccountEmail   String?
+  microsoftAccountId      String?
+  accessTokenEncrypted    String
+  refreshTokenEncrypted   String?
+  tokenExpiry             DateTime?
+  scope                   String?
+  /// CONNECTED | RECONNECT_REQUIRED | ERROR | DISCONNECTED
+  status                  String   @default("CONNECTED")
+  connectedAt             DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId, status])
+  @@index([userId])
+}
+
+/// Maps a Microsoft To Do task to a SUNBUILD project (live project name via relation).
+model MicrosoftTodoProjectLink {
+  id              String   @id @default(cuid())
+  userId          String
+  companyId       String
+  microsoftTaskId String
+  microsoftListId String
+  projectId       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId, microsoftTaskId])
+  @@index([projectId])
+  @@index([userId, companyId])
+  @@index([microsoftTaskId])
 }
 
 // ─── Selections / Change Orders ──────────────────────────────────────────────
@@ -675,6 +771,11 @@ model ChangeOrder {
   relatedSelectionItemId String?
   attachmentPath String?
   createdById String
+  scheduleImpact String?
+  budgetImpact Float?
+  submittedAt DateTime?
+  version Int @default(1)
+  clientResponseBy String?
   clientActionAt DateTime?
   clientComment  String?
   createdAt   DateTime          @default(now())
@@ -725,9 +826,8 @@ model DailyLog {
   logDate      DateTime
   workCompleted String?
   siteNotes    String?
-  issues       String?
-  weather      String?
-  workforce    String?
+  status       String   @default("SUBMITTED")
+  submittedAt  DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -735,6 +835,7 @@ model DailyLog {
   author  User    @relation(fields: [authorId], references: [id])
 
   @@index([projectId, logDate])
+  @@index([authorId])
 }
 
 enum DocumentVisibility {
@@ -909,3 +1010,60 @@ model AuditLog {
 
   user User? @relation(fields: [userId], references: [id])
 }
+
+// ─── WhatsApp Integration ───────────────────────────────────────────────────
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WhatsAppMessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model WhatsAppConversation {
+  id            String   @id @default(cuid())
+  projectId     String
+  buyerId       String?
+  clientPhone   String
+  clientName    String?
+  lastMessageAt DateTime?
+  unreadCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  buyer         Buyer?   @relation(fields: [buyerId], references: [id])
+  messages      WhatsAppMessage[]
+
+  @@unique([projectId, clientPhone])
+  @@index([projectId])
+  @@index([buyerId])
+}
+
+model WhatsAppMessage {
+  id                String   @id @default(cuid())
+  conversationId    String
+  direction         WhatsAppMessageDirection
+  senderName        String?
+  senderUserId      String?
+  senderPhone       String?
+  body              String
+  mediaUrl          String?
+  mediaType         String?
+  status            WhatsAppMessageStatus @default(SENT)
+  whatsappMessageId String?
+  errorMessage      String?
+  sentAt            DateTime @default(now())
+
+  conversation      WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderUser        User?                @relation("WhatsAppSender", fields: [senderUserId], references: [id])
+
+  @@index([conversationId, sentAt])
+  @@index([whatsappMessageId])
+}
+

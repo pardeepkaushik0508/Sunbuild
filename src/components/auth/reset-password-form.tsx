@@ -11,10 +11,12 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { assertPasswordMeetsPolicy } from "@/lib/settings/validation";
 import type { PasswordPolicy } from "@/lib/settings/types";
 import { DEFAULT_PASSWORD_POLICY } from "@/lib/settings/defaults";
+import { useOptionalToast } from "@/components/ui/toast";
 
 export function ResetPasswordForm() {
   const params = useSearchParams();
   const router = useRouter();
+  const toast = useOptionalToast();
   const token = params.get("token") || "";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -52,14 +54,17 @@ export function ResetPasswordForm() {
     const policyError = assertPasswordMeetsPolicy(password, policy);
     if (policyError) {
       setError(policyError);
+      toast?.error(policyError);
       return;
     }
     if (password !== confirm) {
       setError("Passwords do not match");
+      toast?.error("Passwords do not match");
       return;
     }
     if (!token) {
       setError("Invalid or expired reset link");
+      toast?.error("Invalid or expired reset link");
       return;
     }
     setLoading(true);
@@ -70,8 +75,10 @@ export function ResetPasswordForm() {
     setLoading(false);
     if (res.error) {
       setError("Invalid or expired reset link");
+      toast?.error("Invalid or expired reset link");
       return;
     }
+    toast?.success("Password updated");
     router.push("/login");
     router.refresh();
   }

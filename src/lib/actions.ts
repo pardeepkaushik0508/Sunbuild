@@ -23,6 +23,7 @@ import {
   DocumentVisibility,
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { redirectWithToast } from "@/lib/flash-toast";
 import {
   requireSession,
   assertProjectAccess,
@@ -477,7 +478,10 @@ export async function uploadContractAction(form: FormData) {
     entityId: contract.id,
   });
 
-  redirect(`/pm/contracts/${contract.id}`);
+  await redirectWithToast(
+    `/pm/contracts/${contract.id}`,
+    "Contract uploaded successfully"
+  );
 }
 
 export async function updateContractReviewAction(contractId: string, form: FormData) {
@@ -540,7 +544,11 @@ export async function confirmContractAction(contractId: string, form: FormData) 
     throw new AppError("Contract is not ready to confirm");
   }
 
-  const pmId = formString(form, "pmId") || null;
+  // PMs must own the job they create — empty assign defaults to the confirmer.
+  let pmId = formString(form, "pmId") || null;
+  if (!pmId && session.membership.role === Role.PROJECT_MANAGER) {
+    pmId = session.user.id;
+  }
   if (pmId) await assertCompanyUser(session, pmId);
 
   // If contract already linked to a project, verify access (already done) and
@@ -575,6 +583,18 @@ export async function confirmContractAction(contractId: string, form: FormData) 
       buyerId = buyer.id;
     }
 
+    async function ensurePmAccess(targetProjectId: string, userId: string) {
+      await tx.projectAccess.upsert({
+        where: { projectId_userId: { projectId: targetProjectId, userId } },
+        update: { role: Role.PROJECT_MANAGER },
+        create: {
+          projectId: targetProjectId,
+          userId,
+          role: Role.PROJECT_MANAGER,
+        },
+      });
+    }
+
     if (!projectId) {
       const project = await tx.project.create({
         data: {
@@ -593,11 +613,14 @@ export async function confirmContractAction(contractId: string, form: FormData) 
       });
       projectId = project.id;
       if (pmId) {
-        await tx.projectAccess.upsert({
-          where: { projectId_userId: { projectId, userId: pmId } },
-          update: { role: Role.PROJECT_MANAGER },
-          create: { projectId, userId: pmId, role: Role.PROJECT_MANAGER },
-        });
+        await ensurePmAccess(projectId, pmId);
+      }
+      // Confirming PM always retains access even if another PM is assigned.
+      if (
+        session.membership.role === Role.PROJECT_MANAGER &&
+        session.user.id !== pmId
+      ) {
+        await ensurePmAccess(projectId, session.user.id);
       }
     } else {
       const existing = await tx.project.findFirst({
@@ -677,7 +700,10 @@ export async function confirmContractAction(contractId: string, form: FormData) 
   });
 
   revalidateJobsSurfaces(resultProjectId);
-  redirect(`/pm/projects/${resultProjectId}`);
+  await redirectWithToast(
+    `/pm/projects/${resultProjectId}`,
+    "Project created successfully"
+  );
 }
 
 export async function createTaskAction(form: FormData) {
@@ -705,6 +731,18 @@ export async function createTaskAction(form: FormData) {
       createdById: session.user.id,
     },
   });
+
+  // Push dated tasks to the assignee's Google Calendar (else creator's).
+  if (task.dueDate) {
+    const googleUserId = task.assigneeId || session.user.id;
+    const { syncTaskToGoogle } = await import("@/lib/google/sync");
+    await syncTaskToGoogle({
+      googleUserId,
+      companyId: session.membership.companyId,
+      taskId: task.id,
+    });
+  }
+
   revalidatePath("/pm/tasks");
   revalidatePath("/pm");
   revalidatePath("/owner");
@@ -810,7 +848,11 @@ export async function createScheduleItemAction(form: FormData) {
   const status = allowedStatuses.includes(statusRaw as ScheduleStatus)
     ? (statusRaw as ScheduleStatus)
     : ScheduleStatus.PLANNED;
-  await prisma.scheduleItem.create({
+  const location = formString(form, "location") || null;
+  const syncToGoogle = formString(form, "syncToGoogle") === "on" || formString(form, "syncToGoogle") === "true";
+  const createMeet = formString(form, "createMeet") === "on" || formString(form, "createMeet") === "true";
+
+  const item = await prisma.scheduleItem.create({
     data: {
       projectId,
       title,
@@ -820,9 +862,22 @@ export async function createScheduleItemAction(form: FormData) {
       assigneeName: formString(form, "assigneeName") || null,
       dependsOnId,
       status,
+      location,
+      googleSyncStatus: syncToGoogle ? "SYNCING" : "LOCAL_ONLY",
     },
   });
   await refreshProjectProgress(projectId);
+
+  if (syncToGoogle) {
+    const { syncScheduleItemToGoogle } = await import("@/lib/google/sync");
+    await syncScheduleItemToGoogle({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      scheduleItemId: item.id,
+      createMeet,
+    });
+  }
+
   revalidateScheduleSurfaces(projectId);
 }
 
@@ -984,26 +1039,36 @@ export async function answerRfiAction(rfiId: string, form: FormData) {
 
 export async function createDailyLogAction(form: FormData) {
   const session = await requireSession();
-  requireCapability(session, "manageDailyLogs");
+  requireCapability(session, "createDailyLog");
   await rateLimitAction(session.user.id, "daily-log");
   const projectId = formString(form, "projectId");
+  if (!projectId) throw new AppError("Project is required");
   await assertProjectAccess(session, projectId);
+
+  const logDateStr = formString(form, "logDate") || formString(form, "date");
+  const logDate = logDateStr ? new Date(logDateStr) : new Date();
+  const workCompleted = formString(form, "workCompleted");
+  const siteNotes = formString(form, "siteNotes") || formString(form, "notes") || null;
+
+  if (!workCompleted) {
+    throw new AppError("Work completed description is required");
+  }
+
   await prisma.dailyLog.create({
     data: {
       projectId,
       authorId: session.user.id,
-      logDate: formString(form, "logDate")
-        ? new Date(formString(form, "logDate"))
-        : new Date(),
-      workCompleted: formString(form, "workCompleted") || null,
-      siteNotes: formString(form, "siteNotes") || null,
-      issues: formString(form, "issues") || null,
-      weather: formString(form, "weather") || null,
-      workforce: formString(form, "workforce") || null,
+      logDate,
+      workCompleted,
+      siteNotes,
+      status: "SUBMITTED",
+      submittedAt: new Date(),
     },
   });
   revalidatePath("/pm/daily-logs");
   revalidatePath("/sub");
+  revalidatePath("/sub/daily-logs");
+  revalidatePath(`/sub/jobs/${projectId}`);
 }
 
 export async function uploadDocumentAction(form: FormData) {
@@ -1071,17 +1136,23 @@ export async function uploadPhotoAction(form: FormData) {
     `photos/${projectId}`
   );
 
-  // Uploads are always INTERNAL. Client visibility requires publishPhotos.
-  let visibility: PhotoVisibility = PhotoVisibility.INTERNAL;
+  // Default: PM/staff uploads are client-visible so they appear on the client portal.
+  // Subcontractors remain INTERNAL until a PM publishes.
   const requested = formString(form, "visibility") as PhotoVisibility;
-  if (
-    requested === PhotoVisibility.CLIENT_VISIBLE &&
+  let visibility: PhotoVisibility = PhotoVisibility.INTERNAL;
+
+  const staffCanPublish =
     session.membership.role !== Role.SUBCONTRACTOR &&
-    canSetClientVisibility(session.membership.role)
-  ) {
-    // Only staff with publish capability may publish at upload time.
+    canSetClientVisibility(session.membership.role);
+
+  if (staffCanPublish) {
     requireCapability(session, "publishPhotos");
-    visibility = PhotoVisibility.CLIENT_VISIBLE;
+    if (requested === PhotoVisibility.INTERNAL) {
+      visibility = PhotoVisibility.INTERNAL;
+    } else {
+      // Explicit CLIENT_VISIBLE, empty, or any other value → show to client
+      visibility = PhotoVisibility.CLIENT_VISIBLE;
+    }
   }
 
   await prisma.photo.create({
@@ -1102,6 +1173,7 @@ export async function uploadPhotoAction(form: FormData) {
   });
   revalidatePath("/pm/photos");
   revalidatePath("/sub");
+  revalidatePath("/client");
   revalidatePath("/client/photos");
 }
 
@@ -1129,6 +1201,7 @@ export async function publishPhotoAction(photoId: string) {
     entityId: photoId,
   });
   revalidatePath("/pm/photos");
+  revalidatePath("/client");
   revalidatePath("/client/photos");
 }
 
@@ -1434,12 +1507,16 @@ export async function createChangeOrderAction(form: FormData) {
       title: data.title,
       description: data.description || null,
       amount: data.amount,
+      scheduleImpact: data.scheduleImpact != null ? String(data.scheduleImpact) : null,
+      budgetImpact: typeof data.budgetImpact === "number" ? data.budgetImpact : null,
       reason: data.reason || null,
       status: ChangeOrderStatus.PENDING_CLIENT,
       createdById: session.user.id,
+      submittedAt: new Date(),
     },
   });
   revalidatePath("/pm/change-orders");
+  revalidatePath("/client");
   revalidatePath("/client/change-orders");
   revalidatePath("/client/payments");
 }

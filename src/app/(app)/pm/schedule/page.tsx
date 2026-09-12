@@ -4,6 +4,8 @@ import { createScheduleItemAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-lazy";
 import {
   MilestoneStatusList,
@@ -24,6 +26,7 @@ import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
+import { PmProjectPicker } from "@/components/pm/project-picker";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -241,13 +244,25 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
         title="Schedule"
         description="Gantt timeline, client info, and schedule insights"
         actions={
-          filterProjectId ? (
-            <Link href="/pm/schedule">
-              <Button variant="outline" size="sm">
-                All projects
-              </Button>
-            </Link>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            <PmProjectPicker
+              compact
+              returnTo="/pm/schedule"
+              selectedProjectId={filterProjectId}
+              projects={projects.map((p) => ({
+                id: p.id,
+                name: p.name,
+                status: "ACTIVE",
+              }))}
+            />
+            {filterProjectId ? (
+              <Link href="/pm/schedule">
+                <Button variant="outline" size="sm">
+                  All projects
+                </Button>
+              </Link>
+            ) : null}
+          </div>
         }
       />
 
@@ -301,8 +316,9 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
 
       <Card id="add-schedule">
         <h2 className="text-lg font-semibold text-sb-ink">Add schedule item</h2>
-        <form
+        <ActionForm
           action={createScheduleItemAction}
+          successMessage="Schedule item added"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
           <FormField label="Project">
@@ -355,10 +371,33 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
               ))}
             </Select>
           </FormField>
-          <div className="md:col-span-2">
-            <Button type="submit">Add to schedule</Button>
+          <FormField label="Location">
+            <Input name="location" placeholder="Optional jobsite / address" />
+          </FormField>
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <label className="flex items-center gap-2 text-[13px] text-sb-ink">
+              <input
+                type="checkbox"
+                name="syncToGoogle"
+                value="true"
+                className="rounded border-sb-border"
+              />
+              Sync to Google Calendar (if connected)
+            </label>
+            <label className="flex items-center gap-2 text-[13px] text-sb-ink">
+              <input
+                type="checkbox"
+                name="createMeet"
+                value="true"
+                className="rounded border-sb-border"
+              />
+              Add Google Meet link
+            </label>
           </div>
-        </form>
+          <div className="md:col-span-2">
+            <SubmitButton pendingLabel="Adding…">Add to schedule</SubmitButton>
+          </div>
+        </ActionForm>
       </Card>
     </div>
   );

@@ -82,6 +82,7 @@ export default async function ClientPaymentsPage({
     actionDate: (co.clientActionAt ?? co.createdAt).toISOString(),
     attachmentPath: co.attachmentPath,
     canDecide: co.status === ChangeOrderStatus.PENDING_CLIENT,
+    clientComment: co.clientComment,
   }));
 
   return (

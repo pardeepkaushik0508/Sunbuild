@@ -159,6 +159,28 @@ body {
   background: transparent;
 }
 
+/* Compact task list scroll areas (High Priority / To Do) */
+.sb-task-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--sb-muted) 45%, transparent) transparent;
+}
+
+.sb-task-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sb-task-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--sb-muted) 40%, transparent);
+  border-radius: 999px;
+}
+
+.sb-task-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* Main content column scroll */
 .sb-shell-main-scroll {
   overflow-x: hidden;

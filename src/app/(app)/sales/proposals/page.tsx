@@ -4,8 +4,9 @@ import { createProposalAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
@@ -44,7 +45,11 @@ export default async function SalesProposalsPage() {
 
       <Card>
         <h2 className="text-lg font-semibold text-sb-ink">Create proposal</h2>
-        <form action={createProposalAction} className="mt-4 grid gap-4 md:grid-cols-2">
+        <ActionForm
+          action={createProposalAction}
+          successMessage="Proposal created"
+          className="mt-4 grid gap-4 md:grid-cols-2"
+        >
           <FormField label="Lead" required>
             <Select name="leadId" required defaultValue={leads[0]?.id ?? ""}>
               <option value="" disabled>
@@ -76,11 +81,14 @@ export default async function SalesProposalsPage() {
             <Textarea name="notes" rows={3} />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit" disabled={leads.length === 0}>
+            <SubmitButton
+              disabled={leads.length === 0}
+              pendingLabel="Saving…"
+            >
               Save proposal
-            </Button>
+            </SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
 
       {proposals.length === 0 ? (

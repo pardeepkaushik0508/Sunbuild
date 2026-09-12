@@ -30,15 +30,23 @@ export default async function PMContractsPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const canManage = session.membership.role !== Role.PROJECT_MANAGER && (
+    session.membership.role === Role.OWNER ||
+    session.membership.role === Role.OPERATIONS_ADMIN ||
+    session.membership.role === Role.SALES_MANAGER
+  );
+
   return (
     <div>
       <PageHeader
         title="Contracts"
-        description="Purchase agreements and review workflow"
+        description="Purchase agreements and operational contracts"
         actions={
-          <Link href="/pm/contracts/new">
-            <Button size="sm">Upload contract</Button>
-          </Link>
+          canManage ? (
+            <Link href="/pm/contracts/new">
+              <Button size="sm">Upload contract</Button>
+            </Link>
+          ) : null
         }
       />
 
@@ -46,9 +54,11 @@ export default async function PMContractsPage() {
         <EmptyState
           title="No contracts"
           action={
-            <Link href="/pm/contracts/new">
-              <Button>Upload contract</Button>
-            </Link>
+            canManage ? (
+              <Link href="/pm/contracts/new">
+                <Button>Upload contract</Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (

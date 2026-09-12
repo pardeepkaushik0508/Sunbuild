@@ -2,7 +2,7 @@ import { OrganizationHeader } from "@/components/dashboard/organization-header";
 import { OrganizationManagement } from "@/components/dashboard/organization-management";
 import { OwnerTabs } from "@/components/owner/owner-tabs";
 import { RecentJobsCard } from "@/components/dashboard/recent-jobs-widget";
-import { HighPriorityCard } from "@/components/dashboard/high-priority-widget";
+import { HighPriorityMicrosoftCard } from "@/components/dashboard/high-priority-widget";
 import { TodoWidget } from "@/components/dashboard/todo-widget";
 import { CalendarWidget } from "@/components/dashboard/calendar-widget";
 import { ClientInfoStrip } from "@/components/dashboard/client-info-strip";
@@ -65,9 +65,10 @@ export function OverviewDashboard({ data }: { data: OverviewDashboardData }) {
           viewAllHref={data.jobsViewAllHref}
         />
         {data.showOwnerChrome ? (
-          <HighPriorityCard
-            items={data.highPriority}
+          <HighPriorityMicrosoftCard
             viewAllHref={data.highPriorityViewAllHref}
+            connectReturnPath={data.basePath}
+            initialConnection={data.microsoftTodoConnection}
           />
         ) : (
           <TodoWidget
@@ -80,7 +81,12 @@ export function OverviewDashboard({ data }: { data: OverviewDashboardData }) {
           />
         )}
         <div className="lg:col-span-2 xl:col-span-1">
-          <CalendarWidget events={data.calendarEvents} />
+          <CalendarWidget
+            events={data.calendarEvents}
+            googleConnected={data.googleCalendarConnected}
+            googleReconnectRequired={data.googleReconnectRequired}
+            connectReturnPath={data.basePath}
+          />
         </div>
       </div>
 

@@ -10,6 +10,8 @@ import { PageHeader, Card } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, whatsappLink } from "@/lib/utils";
@@ -98,8 +100,9 @@ export default async function LeadDetailPage({ params }: PageProps) {
           <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
             Edit lead
           </h2>
-          <form
+          <ActionForm
             action={updateLeadAction.bind(null, lead.id)}
+            successMessage="Lead updated"
             className="mt-4 grid gap-4"
           >
             <div className="grid gap-4 sm:grid-cols-2">
@@ -183,8 +186,8 @@ export default async function LeadDetailPage({ params }: PageProps) {
             <FormField label="Notes">
               <Textarea name="notes" defaultValue={lead.notes ?? ""} />
             </FormField>
-            <Button type="submit">Save changes</Button>
-          </form>
+            <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
+          </ActionForm>
         </Card>
 
         <div className="space-y-6">
@@ -197,9 +200,14 @@ export default async function LeadDetailPage({ params }: PageProps) {
                 Creates a buyer record and pre-construction project, then opens
                 the contract workflow.
               </p>
-              <form action={convertLeadAction.bind(null, lead.id)} className="mt-4">
-                <Button type="submit">Convert lead</Button>
-              </form>
+              <ActionForm
+                action={convertLeadAction.bind(null, lead.id)}
+                className="mt-4"
+              >
+                <SubmitButton pendingLabel="Converting…">
+                  Convert lead
+                </SubmitButton>
+              </ActionForm>
             </Card>
           ) : lead.projectId ? (
             <Card>
@@ -219,17 +227,18 @@ export default async function LeadDetailPage({ params }: PageProps) {
             <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
               Activity
             </h2>
-            <form
+            <ActionForm
               action={addLeadNoteAction.bind(null, lead.id)}
+              successMessage="Note added"
               className="mt-4 space-y-3"
             >
               <FormField label="Add note">
                 <Textarea name="content" required placeholder="Call summary, next steps..." />
               </FormField>
-              <Button type="submit" size="sm">
+              <SubmitButton size="sm" pendingLabel="Adding…">
                 Add note
-              </Button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
             <ul className="mt-6 space-y-4">
               {lead.activities.length === 0 ? (
                 <li className="text-sm text-sb-muted">No activity yet.</li>

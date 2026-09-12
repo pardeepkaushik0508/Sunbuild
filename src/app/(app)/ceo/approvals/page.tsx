@@ -3,8 +3,9 @@ import { CompletionDocStatus, Role } from "@prisma/client";
 import { ceoCompletionDecisionAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { FormField, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName } from "@/lib/utils";
@@ -113,27 +114,31 @@ export default async function CeoApprovalsPage() {
                   </div>
 
                   <div className="w-full shrink-0 lg:max-w-sm">
-                    <form
+                    <ActionForm
                       action={ceoCompletionDecisionAction.bind(
                         null,
                         doc.projectId,
                         "APPROVED"
                       )}
+                      successMessage="Handover approved"
                       className="space-y-3"
                     >
                       <FormField label="Comments (optional)">
                         <Textarea name="comments" placeholder="Approval notes..." />
                       </FormField>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="submit">Approve handover</Button>
+                        <SubmitButton pendingLabel="Approving…">
+                          Approve handover
+                        </SubmitButton>
                       </div>
-                    </form>
-                    <form
+                    </ActionForm>
+                    <ActionForm
                       action={ceoCompletionDecisionAction.bind(
                         null,
                         doc.projectId,
                         "REJECTED"
                       )}
+                      successMessage="Handover rejected"
                       className="mt-3 space-y-3 border-t border-sb-border pt-3"
                     >
                       <FormField label="Rejection reason">
@@ -143,10 +148,10 @@ export default async function CeoApprovalsPage() {
                           placeholder="What needs to be corrected?"
                         />
                       </FormField>
-                      <Button type="submit" variant="danger">
+                      <SubmitButton variant="danger" pendingLabel="Rejecting…">
                         Reject
-                      </Button>
-                    </form>
+                      </SubmitButton>
+                    </ActionForm>
                   </div>
                 </div>
               </Card>

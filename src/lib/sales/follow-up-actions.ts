@@ -60,9 +60,16 @@ export async function createSalesFollowUpAction(form: FormData) {
   const activityType = formString(form, "activityType") || "FOLLOW_UP";
   const description =
     formString(form, "description") || `Follow-up scheduled for ${title}`;
+  const location = formString(form, "location") || null;
+  const syncToGoogle =
+    formString(form, "syncToGoogle") === "on" ||
+    formString(form, "syncToGoogle") === "true";
+  const createMeet =
+    formString(form, "createMeet") === "on" ||
+    formString(form, "createMeet") === "true";
 
-  await prisma.$transaction(async (tx) => {
-    await tx.leadActivity.create({
+  const activity = await prisma.$transaction(async (tx) => {
+    const created = await tx.leadActivity.create({
       data: {
         leadId,
         userId: assigneeId,
@@ -72,6 +79,8 @@ export async function createSalesFollowUpAction(form: FormData) {
         activityDate: new Date(),
         dueAt,
         priority,
+        location,
+        googleSyncStatus: syncToGoogle ? "SYNCING" : "LOCAL_ONLY",
       },
     });
     await tx.lead.update({
@@ -82,7 +91,18 @@ export async function createSalesFollowUpAction(form: FormData) {
         flaggedForFollowUp: true,
       },
     });
+    return created;
   });
+
+  if (syncToGoogle) {
+    const { syncLeadActivityToGoogle } = await import("@/lib/google/sync");
+    await syncLeadActivityToGoogle({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      activityId: activity.id,
+      createMeet,
+    });
+  }
 
   revalidatePath("/sales");
   revalidatePath("/sales/leads");

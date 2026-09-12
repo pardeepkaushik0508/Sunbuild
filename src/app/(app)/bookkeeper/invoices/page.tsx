@@ -9,6 +9,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -51,8 +53,9 @@ export default async function BookkeeperInvoicesPage() {
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
           Upload invoice
         </h2>
-        <form
+        <ActionForm
           action={uploadInvoiceAction}
+          successMessage="Invoice uploaded"
           encType="multipart/form-data"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
@@ -106,9 +109,11 @@ export default async function BookkeeperInvoicesPage() {
             <Textarea name="notes" placeholder="Payment terms, line items..." />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Upload invoice</Button>
+            <SubmitButton pendingLabel="Uploading…">
+              Upload invoice
+            </SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
 
       <DataTable
@@ -142,8 +147,9 @@ export default async function BookkeeperInvoicesPage() {
             <Td>{formatDate(invoice.issueDate)}</Td>
             <Td>{formatDate(invoice.dueDate)}</Td>
             <Td>
-              <form
+              <ActionForm
                 action={updateInvoiceStatusAction.bind(null, invoice.id)}
+                successMessage="Invoice status updated"
                 className="flex items-center gap-2"
               >
                 <Select
@@ -159,10 +165,10 @@ export default async function BookkeeperInvoicesPage() {
                       </option>
                     ))}
                 </Select>
-                <Button type="submit" size="sm" variant="outline">
+                <SubmitButton size="sm" variant="outline" pendingLabel="Saving…">
                   Update
-                </Button>
-              </form>
+                </SubmitButton>
+              </ActionForm>
               <div className="mt-1">
                 <StatusBadge tone={statusTone(invoice.status)}>
                   {invoice.status.replace(/_/g, " ")}

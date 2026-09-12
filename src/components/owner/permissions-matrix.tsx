@@ -14,6 +14,8 @@ import {
   type PermissionMatrixState,
   type PermissionModuleKey,
 } from "@/lib/permission-matrix";
+import { useOptionalToast } from "@/components/ui/toast";
+import { toSafeErrorMessage } from "@/lib/errors";
 
 type Props = {
   initialMatrix: PermissionMatrixState;
@@ -25,6 +27,7 @@ export function PermissionsMatrixClient({ initialMatrix, insights }: Props) {
   const [saved, setSaved] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useOptionalToast();
 
   const dirtyCount = useMemo(() => {
     let n = 0;
@@ -54,10 +57,12 @@ export function PermissionsMatrixClient({ initialMatrix, insights }: Props) {
         await savePermissionMatrixAction(matrix);
         setSaved(true);
         setMessage("Permissions saved. Changes apply to role checks for this company.");
+        toast?.success("Permissions saved");
       } catch (e) {
-        setMessage(
-          e instanceof Error ? e.message : "Could not save permissions."
-        );
+        const msg =
+          e instanceof Error ? e.message : "Could not save permissions.";
+        setMessage(msg);
+        toast?.error(toSafeErrorMessage(e));
       }
     });
   }

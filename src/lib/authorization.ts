@@ -17,7 +17,6 @@ export const CAPABILITIES = {
   manageContracts: [
     Role.OWNER,
     Role.OPERATIONS_ADMIN,
-    Role.PROJECT_MANAGER,
     Role.SALES_MANAGER,
   ] as Role[],
   manageTasks: [
@@ -55,10 +54,13 @@ export const CAPABILITIES = {
     Role.PROJECT_MANAGER,
     Role.SUBCONTRACTOR,
   ] as Role[],
+  createDailyLog: [
+    Role.SUBCONTRACTOR,
+  ] as Role[],
   uploadDocuments: [
     Role.OWNER,
     Role.OPERATIONS_ADMIN,
-    Role.PROJECT_MANAGER,
+    Role.SALES_MANAGER,
   ] as Role[],
   uploadPhotos: [
     Role.OWNER,

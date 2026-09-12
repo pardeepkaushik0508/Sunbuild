@@ -555,12 +555,11 @@ async function main() {
   await prisma.dailyLog.create({
     data: {
       projectId: project.id,
-      authorId: pm.id,
+      authorId: sub.id,
       logDate: new Date(),
       workCompleted: "Framing progressed on second floor.",
       siteNotes: "Material delivery on schedule.",
-      weather: "Clear, 12°C",
-      workforce: "6 framers",
+      status: "SUBMITTED",
     },
   });
 

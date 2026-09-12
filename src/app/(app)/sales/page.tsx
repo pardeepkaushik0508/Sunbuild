@@ -16,8 +16,8 @@ export default async function SalesOverviewPage() {
   const data = await loadSalesOverviewData(
     companyId,
     session.membership.role === Role.SALES_MANAGER
-      ? { salesUserId: session.user.id }
-      : undefined
+      ? { salesUserId: session.user.id, session }
+      : { session }
   );
 
   return (
@@ -41,6 +41,9 @@ export default async function SalesOverviewPage() {
           <CalendarWidget
             events={data.calendarEvents}
             subtitle="Sales schedule overview"
+            googleConnected={data.googleCalendarConnected}
+            googleReconnectRequired={data.googleReconnectRequired}
+            connectReturnPath="/sales"
           />
         </div>
       </div>

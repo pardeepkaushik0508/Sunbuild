@@ -214,6 +214,7 @@ export async function clientChangeOrderDecisionAction(
           : ChangeOrderStatus.REJECTED,
       clientActionAt: new Date(),
       clientComment: comment,
+      clientResponseBy: session.user.id,
     },
   });
   if (updated.count !== 1) {
@@ -236,4 +237,6 @@ export async function clientChangeOrderDecisionAction(
   });
 
   revalidateClientPortal(co.projectId);
+  revalidatePath("/pm/change-orders");
+  revalidatePath(`/pm/projects/${co.projectId}`);
 }

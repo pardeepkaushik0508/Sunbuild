@@ -6,6 +6,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
@@ -75,7 +77,11 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
           Create RFI
         </h2>
-        <form action={createRfiAction} className="mt-4 grid gap-4 md:grid-cols-2">
+        <ActionForm
+          action={createRfiAction}
+          successMessage="RFI created"
+          className="mt-4 grid gap-4 md:grid-cols-2"
+        >
           <FormField label="Project">
             <Select
               name="projectId"
@@ -121,9 +127,9 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
             <Textarea name="question" required />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Create RFI</Button>
+            <SubmitButton pendingLabel="Creating…">Create RFI</SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
 
       {rfis.length === 0 ? (
@@ -157,17 +163,18 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
                 </div>
               ) : rfi.status !== RfiStatus.ANSWERED &&
                 rfi.status !== RfiStatus.CLOSED ? (
-                <form
+                <ActionForm
                   action={answerRfiAction.bind(null, rfi.id)}
+                  successMessage="RFI answered"
                   className="mt-4 space-y-3"
                 >
                   <FormField label="Answer">
                     <Textarea name="response" required />
                   </FormField>
-                  <Button type="submit" size="sm">
+                  <SubmitButton size="sm" pendingLabel="Submitting…">
                     Submit answer
-                  </Button>
-                </form>
+                  </SubmitButton>
+                </ActionForm>
               ) : null}
             </Card>
           ))}

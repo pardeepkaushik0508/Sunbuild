@@ -11,6 +11,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
@@ -200,18 +202,26 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                     Download
                   </Button>
                 </a>
-                <form action={removeMaterialListAction}>
+                <ActionForm
+                  action={removeMaterialListAction}
+                  successMessage="Deleted successfully"
+                >
                   <input type="hidden" name="projectId" value={selectedId} />
-                  <Button type="submit" variant="outline" size="sm">
+                  <SubmitButton
+                    variant="outline"
+                    size="sm"
+                    pendingLabel="Removing…"
+                  >
                     Remove
-                  </Button>
-                </form>
+                  </SubmitButton>
+                </ActionForm>
               </>
             ) : null}
           </div>
         </div>
-        <form
+        <ActionForm
           action={uploadMaterialListAction}
+          successMessage="Material list uploaded"
           className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
           encType="multipart/form-data"
         >
@@ -219,8 +229,8 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
           <FormField label="Upload list (CSV)" className="flex-1" required>
             <Input name="file" type="file" accept=".csv,text/csv" required />
           </FormField>
-          <Button type="submit">Upload List</Button>
-        </form>
+          <SubmitButton pendingLabel="Uploading…">Upload List</SubmitButton>
+        </ActionForm>
       </Card>
 
       {packages.length === 0 ? (
@@ -231,10 +241,12 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
           <p className="mt-1 text-sm text-sb-muted">
             Creates the standard selection package for this project.
           </p>
-          <form action={createPackageFormAction} className="mt-4">
+          <ActionForm action={createPackageFormAction} className="mt-4">
             <input type="hidden" name="projectId" value={selectedId} />
-            <Button type="submit">Create Selection Sheet</Button>
-          </form>
+            <SubmitButton pendingLabel="Creating…">
+              Create Selection Sheet
+            </SubmitButton>
+          </ActionForm>
         </Card>
       ) : null}
 
@@ -268,7 +280,11 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
               <summary className="cursor-pointer text-sm font-semibold">
                 Set Budget
               </summary>
-              <form action={setSectionBudgetAction} className="mt-3 grid gap-3 sm:grid-cols-2">
+              <ActionForm
+                action={setSectionBudgetAction}
+                successMessage="Budget saved"
+                className="mt-3 grid gap-3 sm:grid-cols-2"
+              >
                 <FormField label="Category" required>
                   <Select name="sectionId" required defaultValue="">
                     <option value="" disabled>
@@ -294,11 +310,11 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                   />
                 </FormField>
                 <div className="sm:col-span-2">
-                  <Button type="submit" size="sm">
+                  <SubmitButton size="sm" pendingLabel="Saving…">
                     Save budget
-                  </Button>
+                  </SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             </details>
           </Card>
 
@@ -383,7 +399,11 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
             <summary className="cursor-pointer text-sm font-semibold text-sb-ink">
               + Create New
             </summary>
-            <form action={createSelectionSectionAction} className="mt-3 space-y-3">
+            <ActionForm
+              action={createSelectionSectionAction}
+              successMessage="Category created"
+              className="mt-3 space-y-3"
+            >
               <input type="hidden" name="packageId" value={activePackage.id} />
               <FormField label="Category name" required>
                 <Input name="name" required placeholder="e.g. Kitchen Cabinets" />
@@ -404,10 +424,10 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                   <option value="HIGH">High</option>
                 </Select>
               </FormField>
-              <Button type="submit" size="sm">
+              <SubmitButton size="sm" pendingLabel="Creating…">
                 Create category
-              </Button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
           </details>
         </div>
       ) : view === "tracker" ? (
@@ -504,8 +524,9 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                 ))}
               </div>
               {section.status !== SelectionSectionStatus.LOCKED ? (
-                <form
+                <ActionForm
                   action={addSelectionItemAction}
+                  successMessage="Item added"
                   className="mt-4 grid gap-3 border-t border-sb-border pt-4 sm:grid-cols-2 lg:grid-cols-4"
                 >
                   <input type="hidden" name="sectionId" value={section.id} />
@@ -519,11 +540,11 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                     <Input name="unitCost" type="number" min="0" step="0.01" />
                   </FormField>
                   <div className="flex items-end">
-                    <Button type="submit" size="sm">
+                    <SubmitButton size="sm" pendingLabel="Adding…">
                       Add to List
-                    </Button>
+                    </SubmitButton>
                   </div>
-                </form>
+                </ActionForm>
               ) : null}
             </Card>
           ))}

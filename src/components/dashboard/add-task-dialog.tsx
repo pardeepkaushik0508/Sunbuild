@@ -7,6 +7,10 @@ import { X } from "lucide-react";
 import { createTaskAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { useOptionalToast } from "@/components/ui/toast";
+import { toSafeErrorMessage } from "@/lib/errors";
+import { isNextNavigationError } from "@/lib/navigation-errors";
 
 export function AddTaskDialog({
   open,
@@ -22,6 +26,7 @@ export function AddTaskDialog({
   defaultProjectId?: string | null;
 }) {
   const router = useRouter();
+  const toast = useOptionalToast();
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
 
@@ -33,8 +38,12 @@ export function AddTaskDialog({
     try {
       await createTaskAction(formData);
       formRef.current?.reset();
+      toast?.success("Task created");
       onClose();
       router.refresh();
+    } catch (err) {
+      if (isNextNavigationError(err)) throw err;
+      toast?.error(toSafeErrorMessage(err));
     } finally {
       pendingRef.current = false;
     }
@@ -121,7 +130,7 @@ export function AddTaskDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">Save task</Button>
+            <SubmitButton pendingLabel="Saving…">Save task</SubmitButton>
           </div>
         </form>
       </div>

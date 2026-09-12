@@ -117,13 +117,18 @@ export default async function ClientHomePage({
           <div className="grid grid-cols-3 gap-1 p-2">
             {full.photos.length > 0 ? (
               full.photos.slice(0, 3).map((ph) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Link
                   key={ph.id}
-                  src={`/api/files/${ph.filePath}`}
-                  alt={ph.caption || ph.fileName}
-                  className="h-40 w-full rounded-xl object-cover"
-                />
+                  href={`/client/photos?projectId=${full.id}`}
+                  className="block"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/files/${ph.filePath}`}
+                    alt={ph.caption || ph.fileName}
+                    className="h-40 w-full rounded-xl object-cover"
+                  />
+                </Link>
               ))
             ) : (
               <>
@@ -133,6 +138,16 @@ export default async function ClientHomePage({
               </>
             )}
           </div>
+          {full.photos.length > 0 ? (
+            <div className="border-t border-sb-border px-3 py-2">
+              <Link
+                href={`/client/photos?projectId=${full.id}`}
+                className="text-sm font-medium text-sb-ink underline"
+              >
+                View all photos
+              </Link>
+            </div>
+          ) : null}
         </Card>
 
         <Card className="relative overflow-hidden bg-[linear-gradient(135deg,#1f2937_0%,#374151_100%)] p-0 text-white">
@@ -205,9 +220,9 @@ export default async function ClientHomePage({
                   <StatusBadge tone="danger">URGENT</StatusBadge>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <Link href="/client/payments">
+                  <Link href={`/client/change-orders?projectId=${full.id}`}>
                     <Button size="sm" variant="outline">
-                      VIEW
+                      REVIEW
                     </Button>
                   </Link>
                 </div>
@@ -286,21 +301,34 @@ export default async function ClientHomePage({
           </Card>
 
           <Card>
-            <h3 className="mb-3 text-base font-semibold">Build Feed</h3>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-base font-semibold">Build Feed</h3>
+              <Link
+                href={`/client/photos?projectId=${full.id}`}
+                className="text-xs font-medium text-sb-ink underline"
+              >
+                All photos
+              </Link>
+            </div>
             {full.photos.length === 0 ? (
               <p className="text-sm text-sb-muted">
-                Published photos will appear here.
+                Progress photos from your project manager will appear here.
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {full.photos.map((ph) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Link
                     key={ph.id}
-                    src={`/api/files/${ph.filePath}`}
-                    alt={ph.caption || ""}
-                    className="aspect-square rounded-lg object-cover"
-                  />
+                    href={`/client/photos?projectId=${full.id}`}
+                    className="block"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/files/${ph.filePath}`}
+                      alt={ph.caption || ""}
+                      className="aspect-square rounded-lg object-cover"
+                    />
+                  </Link>
                 ))}
               </div>
             )}

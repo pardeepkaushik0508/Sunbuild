@@ -153,6 +153,14 @@ export const changeOrderFormSchema = z.object({
   title: requiredText("Title", 1, 160),
   description: optionalText("Description", 4000),
   amount: nonNegativeNumber("Amount"),
+  scheduleImpact: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().optional()
+  ),
+  budgetImpact: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().optional()
+  ),
   reason: optionalText("Reason", 500),
 });
 

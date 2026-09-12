@@ -72,7 +72,7 @@ export const DEFAULT_PERMISSION_MATRIX: PermissionMatrixState = {
   },
   projectCreation: {
     OPERATIONS_ADMIN: true,
-    PROJECT_MANAGER: true,
+    PROJECT_MANAGER: false,
     SALES_MANAGER: true,
     BOOKKEEPER: false,
     SUBCONTRACTOR: false,

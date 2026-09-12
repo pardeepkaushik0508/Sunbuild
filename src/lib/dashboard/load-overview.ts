@@ -30,6 +30,10 @@ import type { HighPriorityItem } from "@/components/dashboard/high-priority-widg
 import type { TodoItem } from "@/components/dashboard/todo-widget";
 import type { GanttTask } from "@/lib/schedule/gantt-status";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
+import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
+import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicMicrosoftConnection } from "@/lib/microsoft/todo";
+import type { PublicMicrosoftTodoConnection } from "@/lib/microsoft/types";
 
 export type OverviewJob = {
   id: string;
@@ -57,9 +61,13 @@ export type OverviewDashboardData = {
   selectedProjectId: string | null;
   selectedProjectName: string | null;
   selectedCompanyId: string | null;
+  /** @deprecated High Priority loads Microsoft To Do client-side; kept empty for type compat. */
   highPriority: HighPriorityItem[];
   todos: TodoItem[];
   calendarEvents: CalendarEvent[];
+  googleCalendarConnected: boolean;
+  googleReconnectRequired: boolean;
+  microsoftTodoConnection: PublicMicrosoftTodoConnection;
   ganttTasks: GanttTask[];
   progressPercent: number;
   clientItems: ClientInfoItem[];
@@ -128,7 +136,7 @@ export async function loadOverviewDashboardData(input: {
     company,
     companies,
     projects,
-    highPriorityTasks,
+    _unusedHighPriorityLegacy,
     tasks,
     scheduleAll,
     delayedCount,
@@ -180,21 +188,16 @@ export async function loadOverviewDashboardData(input: {
         pm: { select: { name: true } },
       },
     }),
-    prisma.task.findMany({
-      where: {
-        projectId: { in: projectIds },
-        status: {
-          in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED],
-        },
-        priority: { in: [Priority.HIGH, Priority.MEDIUM] },
-      },
-      include: {
-        assignee: { select: { name: true } },
-        project: { select: { id: true, name: true } },
-      },
-      orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-      take: 8,
-    }),
+    // High Priority is loaded from Microsoft To Do (client/API), not local tasks.
+    Promise.resolve([] as Array<{
+      id: string;
+      title: string;
+      description: string | null;
+      dueDate: Date | null;
+      priority: Priority;
+      assignee: { name: string } | null;
+      project: { id: string; name: string };
+    }>),
     prisma.task.findMany({
       where: {
         projectId: { in: projectIds },
@@ -385,13 +388,23 @@ export async function loadOverviewDashboardData(input: {
     return insight;
   });
 
-  const calendarEvents = buildCalendarEvents({
+  const localCalendarEvents = buildCalendarEvents({
     tasks,
     schedule: scheduleAll,
   });
 
+  const [mergedCalendar, googleConnection, microsoftTodoConnection] =
+    await Promise.all([
+      mergeExternalGoogleEvents({
+        session,
+        localEvents: localCalendarEvents,
+      }),
+      getPublicConnection(session.user.id, session.membership.companyId),
+      getPublicMicrosoftConnection(session.user.id, session.membership.companyId),
+    ]);
+
   const mapTask = (
-    t: (typeof highPriorityTasks)[number]
+    t: (typeof tasks)[number]
   ): HighPriorityItem & TodoItem => ({
     id: t.id,
     title: t.title,
@@ -402,7 +415,10 @@ export async function loadOverviewDashboardData(input: {
     projectId: t.project.id,
     assigneeName: t.assignee?.name,
     href: `/pm/tasks?projectId=${t.project.id}`,
+    source: "SUNBUILD_TASK",
   });
+
+  void _unusedHighPriorityLegacy;
 
   return {
     company: {
@@ -422,9 +438,14 @@ export async function loadOverviewDashboardData(input: {
     selectedProjectId: selectedId,
     selectedProjectName: selected?.name ?? null,
     selectedCompanyId,
-    highPriority: highPriorityTasks.slice(0, 4).map(mapTask),
+    highPriority: [],
     todos: tasks.map(mapTask),
-    calendarEvents,
+    calendarEvents: mergedCalendar.events,
+    googleCalendarConnected: googleConnection.connected,
+    googleReconnectRequired:
+      googleConnection.status === "RECONNECT_REQUIRED" ||
+      mergedCalendar.googleReconnectRequired,
+    microsoftTodoConnection,
     ganttTasks,
     progressPercent,
     clientItems,
@@ -437,8 +458,7 @@ export async function loadOverviewDashboardData(input: {
     basePath,
     jobsViewAllHref: basePath === "/owner" ? "/owner/jobs" : "/pm/projects",
     todoViewAllHref: "/pm/tasks",
-    highPriorityViewAllHref:
-      basePath === "/owner" ? "/owner/alerts" : "/pm/tasks",
+    highPriorityViewAllHref: "/owner/high-priority",
     addScheduleHref: "/pm/schedule#add-schedule",
     taskDetailBaseHref: "/pm/tasks",
     showOwnerChrome,

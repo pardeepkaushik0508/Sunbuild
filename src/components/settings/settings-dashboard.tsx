@@ -24,6 +24,11 @@ import {
   describePasswordPolicy,
   formatSessionTimeout,
 } from "@/lib/settings/validation";
+import { GoogleCalendarSettingsCard } from "@/components/settings/google-calendar-card";
+import { MicrosoftTodoSettingsCard } from "@/components/settings/microsoft-todo-card";
+import { useOptionalToast } from "@/components/ui/toast";
+import type { PublicGoogleConnection } from "@/lib/google/types";
+import type { PublicMicrosoftTodoConnection } from "@/lib/microsoft/types";
 
 type ModalId =
   | "email"
@@ -150,13 +155,22 @@ export function SettingsDashboard({
   insights,
   canEditSecurity,
   canEditOperational,
+  googleCalendar,
+  googleFlash,
+  microsoftTodo,
+  microsoftFlash,
 }: {
   initialSettings: CompanySettingsSnapshot;
   insights: InsightCard[];
   canEditSecurity: boolean;
   canEditOperational: boolean;
+  googleCalendar: PublicGoogleConnection;
+  googleFlash?: { kind: "connected" | "disconnected" | "error"; message?: string } | null;
+  microsoftTodo: PublicMicrosoftTodoConnection;
+  microsoftFlash?: { kind: "connected" | "disconnected" | "error"; message?: string } | null;
 }) {
   const router = useRouter();
+  const toast = useOptionalToast();
   const [settings, setSettings] = useState(initialSettings);
   const [modal, setModal] = useState<ModalId>(null);
   const [pending, startTransition] = useTransition();
@@ -182,13 +196,49 @@ export function SettingsDashboard({
   function afterSave(message: string) {
     setSuccess(message);
     setError(null);
+    toast?.success(message);
     startTransition(() => {
       router.refresh();
     });
   }
 
+  function onModalError(message: string | null) {
+    setError(message);
+    if (message) toast?.error(message);
+  }
+
   return (
     <div className="space-y-6">
+      {googleFlash?.kind === "connected" ? (
+        <p className="rounded-[10px] border border-sb-green/40 bg-sb-green-soft px-3 py-2 text-sm text-sb-ink">
+          Google Calendar connected successfully
+        </p>
+      ) : null}
+      {googleFlash?.kind === "disconnected" ? (
+        <p className="rounded-[10px] border border-sb-border bg-sb-canvas px-3 py-2 text-sm text-sb-ink">
+          Google Calendar disconnected. Local SUNBUILD events were kept.
+        </p>
+      ) : null}
+      {googleFlash?.kind === "error" ? (
+        <p className="rounded-[10px] border border-sb-red/40 bg-sb-red-soft px-3 py-2 text-sm text-sb-ink">
+          {googleFlash.message || "Could not connect Google Calendar"}
+        </p>
+      ) : null}
+      {microsoftFlash?.kind === "connected" ? (
+        <p className="rounded-[10px] border border-sb-green/40 bg-sb-green-soft px-3 py-2 text-sm text-sb-ink">
+          Microsoft To Do connected successfully
+        </p>
+      ) : null}
+      {microsoftFlash?.kind === "disconnected" ? (
+        <p className="rounded-[10px] border border-sb-border bg-sb-canvas px-3 py-2 text-sm text-sb-ink">
+          Microsoft To Do disconnected. SUNBUILD project tasks were kept.
+        </p>
+      ) : null}
+      {microsoftFlash?.kind === "error" ? (
+        <p className="rounded-[10px] border border-sb-red/40 bg-sb-red-soft px-3 py-2 text-sm text-sb-ink">
+          {microsoftFlash.message || "Could not connect Microsoft To Do"}
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="space-y-3">
           <h2 className="text-[15px] font-semibold text-sb-ink">
@@ -203,6 +253,16 @@ export function SettingsDashboard({
                   Configure
                 </Button>
               }
+            />
+            <GoogleCalendarSettingsCard
+              connection={googleCalendar}
+              canManage
+              returnTo="/owner/settings"
+            />
+            <MicrosoftTodoSettingsCard
+              connection={microsoftTodo}
+              canManage
+              returnTo="/owner/settings"
             />
             <SettingCard
               title="WhatsApp Integration"
@@ -375,7 +435,7 @@ export function SettingsDashboard({
           pending={pending}
           error={error}
           success={success}
-          onError={setError}
+          onError={onModalError}
           onSaved={(next) => {
             setSettings((s) => ({ ...s, fileStorage: next }));
             afterSave("File storage settings saved");
@@ -391,7 +451,7 @@ export function SettingsDashboard({
           pending={pending}
           error={error}
           success={success}
-          onError={setError}
+          onError={onModalError}
           onSaved={(next) => {
             setSettings((s) => ({ ...s, mfa: next }));
             afterSave("MFA policy updated");
@@ -407,7 +467,7 @@ export function SettingsDashboard({
           pending={pending}
           error={error}
           success={success}
-          onError={setError}
+          onError={onModalError}
           onSaved={(next) => {
             setSettings((s) => ({ ...s, passwordPolicy: next }));
             afterSave("Password policy updated");
@@ -423,7 +483,7 @@ export function SettingsDashboard({
           pending={pending}
           error={error}
           success={success}
-          onError={setError}
+          onError={onModalError}
           onSaved={(minutes) => {
             setSettings((s) => ({ ...s, sessionTimeoutMinutes: minutes }));
             afterSave("Session timeout updated");

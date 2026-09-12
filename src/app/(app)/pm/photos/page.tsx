@@ -5,6 +5,8 @@ import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -63,8 +65,9 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
           Upload photo
         </h2>
-        <form
+        <ActionForm
           action={uploadPhotoAction}
+          successMessage="Photo uploaded"
           encType="multipart/form-data"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
@@ -88,21 +91,25 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
             <Input name="caption" />
           </FormField>
           <FormField label="Visibility">
-            <Select name="visibility" defaultValue={PhotoVisibility.INTERNAL}>
-              {Object.values(PhotoVisibility).map((v) => (
-                <option key={v} value={v}>
-                  {v.replace(/_/g, " ")}
-                </option>
-              ))}
+            <Select
+              name="visibility"
+              defaultValue={PhotoVisibility.CLIENT_VISIBLE}
+            >
+              <option value={PhotoVisibility.CLIENT_VISIBLE}>
+                Client visible (shows on client portal)
+              </option>
+              <option value={PhotoVisibility.INTERNAL}>
+                Internal only (publish later)
+              </option>
             </Select>
           </FormField>
           <FormField label="Image">
             <Input name="file" type="file" accept="image/*" required />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Upload</Button>
+            <SubmitButton pendingLabel="Uploading…">Upload</SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
 
       {photos.length === 0 ? (
@@ -135,11 +142,18 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
                     {photo.visibility.replace(/_/g, " ")}
                   </StatusBadge>
                   {photo.visibility === PhotoVisibility.INTERNAL ? (
-                    <form action={publishPhotoAction.bind(null, photo.id)}>
-                      <Button type="submit" size="sm" variant="outline">
+                    <ActionForm
+                      action={publishPhotoAction.bind(null, photo.id)}
+                      successMessage="Photo published"
+                    >
+                      <SubmitButton
+                        size="sm"
+                        variant="outline"
+                        pendingLabel="Publishing…"
+                      >
                         Publish to client
-                      </Button>
-                    </form>
+                      </SubmitButton>
+                    </ActionForm>
                   ) : photo.publishedAt ? (
                     <span className="text-xs text-sb-muted">
                       Published {formatDate(photo.publishedAt)}

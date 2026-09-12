@@ -135,7 +135,7 @@ export async function saveCompanyUpload(
 
 export async function readUpload(filePath: string) {
   const { absolute } = assertSafeRelativePath(filePath);
-  return readFile(absolute);
+  return readFile(/*turbopackIgnore: true*/ absolute);
 }
 
 export async function deleteUpload(filePath: string) {

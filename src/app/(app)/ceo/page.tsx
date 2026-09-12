@@ -7,6 +7,9 @@ import { CalendarWidget } from "@/components/dashboard/calendar-widget";
 import { MetricBarChart, StatusDonutChart } from "@/components/dashboard/charts-lazy";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
+import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
+import { getPublicConnection } from "@/lib/google/calendar";
+import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 
 export default async function CeoOverviewPage() {
   const session = await requireRole([Role.CEO, Role.OWNER]);
@@ -18,36 +21,78 @@ export default async function CeoOverviewPage() {
   });
   const projectIdList = companyProjects.map((p) => p.id);
 
-  const [active, pendingApprovals, projects, openRfis] = await Promise.all([
-    prisma.project.count({
-      where: {
-        companyId,
-        status: {
-          in: [
-            ProjectStatus.IN_PROGRESS,
-            ProjectStatus.PRE_CONSTRUCTION,
-            ProjectStatus.SUBSTANTIAL_COMPLETION,
-          ],
+  const [active, pendingApprovals, projects, openRfis, scheduleItems, milestones] =
+    await Promise.all([
+      prisma.project.count({
+        where: {
+          companyId,
+          status: {
+            in: [
+              ProjectStatus.IN_PROGRESS,
+              ProjectStatus.PRE_CONSTRUCTION,
+              ProjectStatus.SUBSTANTIAL_COMPLETION,
+            ],
+          },
         },
-      },
-    }),
-    prisma.completionDocument.count({
-      where: {
-        status: CompletionDocStatus.PENDING_CEO_APPROVAL,
-        projectId: { in: projectIdList },
-      },
-    }),
-    prisma.project.findMany({
-      where: { companyId },
-      orderBy: { updatedAt: "desc" },
-      take: 4,
-    }),
-    prisma.rFI.count({
-      where: {
-        project: { companyId },
-        status: { in: ["OPEN", "IN_PROGRESS"] },
-      },
-    }),
+      }),
+      prisma.completionDocument.count({
+        where: {
+          status: CompletionDocStatus.PENDING_CEO_APPROVAL,
+          projectId: { in: projectIdList },
+        },
+      }),
+      prisma.project.findMany({
+        where: { companyId },
+        orderBy: { updatedAt: "desc" },
+        take: 4,
+      }),
+      prisma.rFI.count({
+        where: {
+          project: { companyId },
+          status: { in: ["OPEN", "IN_PROGRESS"] },
+        },
+      }),
+      prisma.scheduleItem.findMany({
+        where: { projectId: { in: projectIdList } },
+        select: {
+          id: true,
+          title: true,
+          startDate: true,
+          trade: true,
+          googleEventId: true,
+        },
+        take: 100,
+      }),
+      prisma.milestone.findMany({
+        where: {
+          projectId: { in: projectIdList },
+          dueDate: { not: null },
+        },
+        select: { id: true, title: true, dueDate: true },
+        take: 50,
+      }),
+    ]);
+
+  const localEvents: CalendarEvent[] = [
+    ...scheduleItems.map((s) => ({
+      id: `sched-${s.id}`,
+      date: s.startDate.toISOString(),
+      title: s.title,
+      type: "schedule" as const,
+      meta: s.trade || undefined,
+      googleEventId: s.googleEventId ?? undefined,
+    })),
+    ...milestones.map((m) => ({
+      id: `ms-${m.id}`,
+      date: m.dueDate!.toISOString(),
+      title: m.title,
+      type: "milestone" as const,
+    })),
+  ];
+
+  const [merged, connection] = await Promise.all([
+    mergeExternalGoogleEvents({ session, localEvents }),
+    getPublicConnection(session.user.id, companyId),
   ]);
 
   return (
@@ -123,7 +168,16 @@ export default async function CeoOverviewPage() {
             </Link>
           </div>
           <div className="mt-4">
-            <CalendarWidget />
+            <CalendarWidget
+              events={merged.events}
+              googleConnected={connection.connected}
+              googleReconnectRequired={
+                connection.status === "RECONNECT_REQUIRED" ||
+                merged.googleReconnectRequired
+              }
+              connectReturnPath="/ceo"
+              subtitle="Company schedule overview"
+            />
           </div>
         </Card>
       </div>

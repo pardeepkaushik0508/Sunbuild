@@ -9,6 +9,8 @@ import { PageHeader, Card } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ClientInfoStrip } from "@/components/dashboard/client-info-strip";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
 import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-lazy";
@@ -22,7 +24,7 @@ import {
   getAccessibleProjectIds,
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, fullName, whatsappLink } from "@/lib/utils";
+import { formatDate, fullName, whatsappLink, cn } from "@/lib/utils";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -58,6 +60,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
     deposits,
     delayedCount,
     docsCount,
+    projectTasks,
   ] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
@@ -92,6 +95,12 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       where: { projectId: id, status: ScheduleStatus.DELAYED },
     }),
     prisma.document.count({ where: { projectId: id } }),
+    prisma.task.findMany({
+      where: { projectId: id },
+      include: { assignee: { select: { id: true, name: true } } },
+      orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+      take: 8,
+    }),
   ]);
 
   if (!project) notFound();
@@ -166,6 +175,67 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
         />
       ) : null}
 
+      <Card>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-sb-ink">Project Tasks</h2>
+            <p className="text-sm text-sb-muted">
+              Active and assigned tasks scoped to {project.name}
+            </p>
+          </div>
+          <Link href={`/pm/tasks?projectId=${project.id}`}>
+            <Button variant="outline" size="sm">
+              Manage tasks →
+            </Button>
+          </Link>
+        </div>
+        {projectTasks.length === 0 ? (
+          <p className="mt-4 text-sm text-sb-muted">
+            No tasks created for this project yet.{" "}
+            <Link
+              href={`/pm/tasks?projectId=${project.id}`}
+              className="text-sb-orange hover:underline font-medium"
+            >
+              Create first task
+            </Link>
+          </p>
+        ) : (
+          <div className="mt-4 divide-y divide-sb-border-subtle">
+            {projectTasks.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between py-2.5 text-sm"
+              >
+                <div className="min-w-0 flex-1 pr-4">
+                  <p className="font-medium text-sb-ink truncate">{t.title}</p>
+                  <p className="text-xs text-sb-muted">
+                    Assignee: {t.assignee?.name ?? "Unassigned"}
+                    {t.dueDate ? ` · Due ${formatDate(t.dueDate)}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span
+                    className={cn(
+                      "rounded px-2 py-0.5 text-xs font-semibold uppercase",
+                      t.priority === "HIGH"
+                        ? "bg-red-50 text-red-700"
+                        : t.priority === "MEDIUM"
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-slate-50 text-slate-700"
+                    )}
+                  >
+                    {t.priority}
+                  </span>
+                  <StatusBadge tone={statusTone(t.status)}>
+                    {t.status.replace(/_/g, " ")}
+                  </StatusBadge>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <ClientInfoStrip
         items={[
           {
@@ -173,36 +243,36 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             label: "Sales Deposit",
             value: deposits[0]
               ? `$${deposits[0].amount.toLocaleString()}`
-              : "—",
+              : "ÎÃÃ¶",
           },
           {
             id: "client",
             label: "Client Name",
             value: project.buyer
               ? fullName(project.buyer.firstName, project.buyer.lastName)
-              : "—",
+              : "ÎÃÃ¶",
           },
           {
             id: "lot",
             label: "Lot Info",
-            value: project.lotInfo ?? "—",
+            value: project.lotInfo ?? "ÎÃÃ¶",
           },
           {
             id: "address",
             label: "Municipal Address",
-            value: project.municipalAddress ?? "—",
+            value: project.municipalAddress ?? "ÎÃÃ¶",
           },
           {
             id: "pm",
             label: "Project Manager",
-            value: project.pm?.name ?? "—",
+            value: project.pm?.name ?? "ÎÃÃ¶",
           },
           {
             id: "price",
             label: "Purchase Price",
             value: project.purchasePrice
               ? `$${project.purchasePrice.toLocaleString()}`
-              : "—",
+              : "ÎÃÃ¶",
           },
         ]}
         viewAllHref="/pm/contracts"
@@ -226,15 +296,15 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
               </div>
               <div>
                 <dt className="text-sb-muted">Email</dt>
-                <dd>{project.buyer.email ?? "—"}</dd>
+                <dd>{project.buyer.email ?? "ÎÃÃ¶"}</dd>
               </div>
               <div>
                 <dt className="text-sb-muted">Phone</dt>
-                <dd>{project.buyer.phone ?? "—"}</dd>
+                <dd>{project.buyer.phone ?? "ÎÃÃ¶"}</dd>
               </div>
               <div>
                 <dt className="text-sb-muted">Mailing address</dt>
-                <dd>{project.buyer.mailingAddress ?? "—"}</dd>
+                <dd>{project.buyer.mailingAddress ?? "ÎÃÃ¶"}</dd>
               </div>
             </dl>
           ) : (
@@ -278,8 +348,9 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           <h2 className="text-lg font-semibold text-sb-ink">
             Assign subcontractor
           </h2>
-          <form
+          <ActionForm
             action={assignSubcontractorAction}
+            successMessage="Subcontractor assigned"
             className="mt-4 grid gap-4 sm:grid-cols-2"
           >
             <input type="hidden" name="projectId" value={project.id} />
@@ -296,9 +367,11 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
               </Select>
             </FormField>
             <div className="sm:col-span-2">
-              <Button type="submit">Assign to project</Button>
+              <SubmitButton pendingLabel="Assigning…">
+                Assign to project
+              </SubmitButton>
             </div>
-          </form>
+          </ActionForm>
         </Card>
 
         <Card>
@@ -323,8 +396,9 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
               </a>
             </div>
           ) : null}
-          <form
+          <ActionForm
             action={uploadCompletionDocumentAction}
+            successMessage="Completion document uploaded"
             encType="multipart/form-data"
             className="mt-4 space-y-4"
           >
@@ -337,8 +411,10 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
                 required
               />
             </FormField>
-            <Button type="submit">Upload for CEO approval</Button>
-          </form>
+            <SubmitButton pendingLabel="Uploading…">
+              Upload for CEO approval
+            </SubmitButton>
+          </ActionForm>
         </Card>
       </div>
 

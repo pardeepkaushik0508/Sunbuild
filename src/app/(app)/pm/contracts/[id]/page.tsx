@@ -9,6 +9,8 @@ import { PageHeader, Card } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -26,6 +28,7 @@ export default async function PMContractDetailPage({ params }: PageProps) {
     Role.PROJECT_MANAGER,
     Role.OWNER,
     Role.CEO,
+    Role.OPERATIONS_ADMIN,
   ]);
   const { id } = await params;
   const projectIds = await getAccessibleProjectIds(session);
@@ -63,6 +66,13 @@ export default async function PMContractDetailPage({ params }: PageProps) {
   });
 
   const confirmed = contract.status === ContractStatus.CONFIRMED;
+  const defaultPmId =
+    session.membership.role === Role.PROJECT_MANAGER
+      ? session.user.id
+      : pms[0]?.user.id ?? "";
+
+  const saveReview = updateContractReviewAction.bind(null, contract.id);
+  const confirmContract = confirmContractAction.bind(null, contract.id);
 
   return (
     <div>
@@ -104,8 +114,9 @@ export default async function PMContractDetailPage({ params }: PageProps) {
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
           Review fields
         </h2>
-        <form
-          action={updateContractReviewAction.bind(null, contract.id)}
+        <ActionForm
+          action={saveReview}
+          successMessage="Contract review saved"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
           <FormField label="Project name">
@@ -177,10 +188,10 @@ export default async function PMContractDetailPage({ params }: PageProps) {
           </FormField>
           {!confirmed ? (
             <div className="md:col-span-2">
-              <Button type="submit">Save review</Button>
+              <SubmitButton pendingLabel="Saving…">Save review</SubmitButton>
             </div>
           ) : null}
-        </form>
+        </ActionForm>
       </Card>
 
       {!confirmed ? (
@@ -191,20 +202,22 @@ export default async function PMContractDetailPage({ params }: PageProps) {
           <p className="mt-2 text-sm text-sb-muted">
             Creates or updates the project, deposits, and conditions.
           </p>
-          <form
-            action={confirmContractAction.bind(null, contract.id)}
+          <ActionForm
+            action={confirmContract}
             className="mt-4 grid gap-4 md:grid-cols-2"
           >
             <FormField label="Assign project manager">
               <select
                 name="pmId"
-                defaultValue=""
+                defaultValue={defaultPmId}
+                required={!contract.projectId}
                 className="h-10 w-full rounded-[10px] border border-sb-border bg-white px-3 text-sm"
               >
                 <option value="">Select PM</option>
                 {pms.map((m) => (
                   <option key={m.user.id} value={m.user.id}>
                     {m.user.name}
+                    {m.user.id === session.user.id ? " (you)" : ""}
                   </option>
                 ))}
               </select>
@@ -237,9 +250,11 @@ export default async function PMContractDetailPage({ params }: PageProps) {
               <p className="mb-2 text-sm text-sb-muted">
                 Price: {formatCurrency(contract.purchasePrice)}
               </p>
-              <Button type="submit">Confirm & create project</Button>
+              <SubmitButton pendingLabel="Creating project…">
+                Confirm & create project
+              </SubmitButton>
             </div>
-          </form>
+          </ActionForm>
         </Card>
       ) : contract.project ? (
         <Card>

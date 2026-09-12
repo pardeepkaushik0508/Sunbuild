@@ -7,7 +7,9 @@ import { ProjectStatus } from "@prisma/client";
 import { configureProjectAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
+import { useOptionalToast } from "@/components/ui/toast";
 import { projectStatusLabel } from "@/lib/jobs/status";
+import { toSafeErrorMessage } from "@/lib/errors";
 import type { JobsListItem } from "@/lib/jobs/load-jobs";
 
 function toInputDate(date: Date | null) {
@@ -34,6 +36,7 @@ export function ConfigureJobDialog({
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const toast = useOptionalToast();
 
   if (!open) return null;
 
@@ -42,10 +45,14 @@ export function ConfigureJobDialog({
     startTransition(async () => {
       try {
         await configureProjectAction(formData);
+        toast?.success("Project updated");
         onClose();
         router.refresh();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to save configuration");
+        const message =
+          e instanceof Error ? e.message : "Failed to save configuration";
+        setError(message);
+        toast?.error(toSafeErrorMessage(e));
       }
     });
   }

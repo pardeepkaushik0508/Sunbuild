@@ -6,6 +6,8 @@ import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -44,6 +46,12 @@ export default async function PMDocumentsPage({ searchParams }: PageProps) {
     }),
   ]);
 
+  const canUpload = session.membership.role !== Role.PROJECT_MANAGER && (
+    session.membership.role === Role.OWNER ||
+    session.membership.role === Role.OPERATIONS_ADMIN ||
+    session.membership.role === Role.SALES_MANAGER
+  );
+
   return (
     <div>
       <PageHeader
@@ -60,12 +68,14 @@ export default async function PMDocumentsPage({ searchParams }: PageProps) {
         }
       />
 
-      <Card className="mb-6">
-        <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
-          Upload document
-        </h2>
-        <form
+      {canUpload && (
+        <Card className="mb-6">
+          <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
+            Upload document
+          </h2>
+        <ActionForm
           action={uploadDocumentAction}
+          successMessage="Document uploaded"
           encType="multipart/form-data"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
@@ -107,10 +117,11 @@ export default async function PMDocumentsPage({ searchParams }: PageProps) {
             <Textarea name="notes" />
           </FormField>
           <div className="md:col-span-2">
-            <Button type="submit">Upload</Button>
+            <SubmitButton pendingLabel="Uploading…">Upload</SubmitButton>
           </div>
-        </form>
+        </ActionForm>
       </Card>
+      )}
 
       {documents.length === 0 ? (
         <EmptyState title="No documents" />

@@ -65,12 +65,13 @@ function settingsHrefForRole(role: Role) {
   switch (role) {
     case Role.OWNER:
       return "/owner/settings";
-    case Role.OPERATIONS_ADMIN:
-      return "/admin";
     case Role.CLIENT:
       return "/client";
+    case Role.SUBCONTRACTOR:
+      return "/sub";
     default:
-      return "/pm/projects";
+      // PM, Sales, CEO, Ops, Bookkeeper — personal integrations (Google Calendar)
+      return "/settings";
   }
 }
 
@@ -101,6 +102,7 @@ function navForRole(role: Role): NavDef[] {
         { label: "Overview", href: "/ceo", icon: LayoutDashboard },
         { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
         { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
+        { label: "Settings", href: "/settings", icon: Settings },
       ];
     case Role.OPERATIONS_ADMIN:
       return [
@@ -108,14 +110,18 @@ function navForRole(role: Role): NavDef[] {
         { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
         { label: "Manage Users", href: "/owner/users", icon: Users },
         { label: "Contracts", href: "/pm/contracts", icon: FileText },
+        { label: "Settings", href: "/settings", icon: Settings },
       ];
     case Role.SALES_MANAGER:
       return [
         { label: "Overview", href: "/sales", icon: LayoutDashboard },
         { label: "Lead Management", href: "/sales/leads", icon: ClipboardList },
         { label: "Proposals", href: "/sales/proposals", icon: FileText },
+        { label: "Contracts", href: "/sales/contracts", icon: FileText },
+        { label: "Documents", href: "/sales/documents", icon: FileText },
         { label: "Activities", href: "/sales/activities", icon: CalendarDays },
         { label: "Reports", href: "/sales/reports", icon: Briefcase },
+        { label: "Settings", href: "/settings", icon: Settings },
       ];
     case Role.PROJECT_MANAGER:
       return [
@@ -131,14 +137,19 @@ function navForRole(role: Role): NavDef[] {
         { label: "Photos", href: "/pm/photos", icon: Camera },
         { label: "Contracts", href: "/pm/contracts", icon: FileText },
         { label: "Warranty", href: "/pm/warranty", icon: Wrench },
+        { label: "Settings", href: "/settings", icon: Settings },
       ];
     case Role.BOOKKEEPER:
       return [
         { label: "Overview", href: "/bookkeeper", icon: LayoutDashboard },
         { label: "Invoices", href: "/bookkeeper/invoices", icon: Receipt },
+        { label: "Settings", href: "/settings", icon: Settings },
       ];
     case Role.SUBCONTRACTOR:
-      return [{ label: "Jobs", href: "/sub", icon: Briefcase }];
+      return [
+        { label: "Jobs", href: "/sub", icon: Briefcase },
+        { label: "Daily Logs", href: "/sub/daily-logs", icon: ClipboardList },
+      ];
     case Role.CLIENT:
       return [
         { label: "Overview", href: "/client", icon: LayoutDashboard },

@@ -9,6 +9,7 @@ import { FormField, Input } from "@/components/ui/form";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Card } from "@/components/ui/card";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { useOptionalToast } from "@/components/ui/toast";
 import { safeInternalPath } from "@/lib/safe-redirect";
 
 type Step = "credentials" | "totp";
@@ -16,6 +17,7 @@ type Step = "credentials" | "totp";
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const toast = useOptionalToast();
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +41,7 @@ export function LoginForm() {
       const res = await authClient.signIn.email({ email, password });
       if (res.error) {
         setError("Invalid credentials");
+        toast?.error("Invalid credentials");
         return;
       }
       const data = res.data as { twoFactorRedirect?: boolean } | null;
@@ -51,6 +54,7 @@ export function LoginForm() {
       await finishLogin();
     } catch {
       setError("Invalid credentials");
+      toast?.error("Invalid credentials");
     } finally {
       setLoading(false);
     }
@@ -65,19 +69,27 @@ export function LoginForm() {
       if (useBackup) {
         const res = await authClient.twoFactor.verifyBackupCode({ code });
         if (res.error) {
-          setError(res.error.message || "Invalid backup code");
+          const msg = res.error.message || "Invalid backup code";
+          setError(msg);
+          toast?.error(msg);
           return;
         }
       } else {
         const res = await authClient.twoFactor.verifyTotp({ code });
         if (res.error) {
-          setError(res.error.message || "Invalid authenticator code");
+          const msg = res.error.message || "Invalid authenticator code";
+          setError(msg);
+          toast?.error(msg);
           return;
         }
       }
       await finishLogin();
     } catch {
-      setError(useBackup ? "Invalid backup code" : "Invalid authenticator code");
+      const msg = useBackup
+        ? "Invalid backup code"
+        : "Invalid authenticator code";
+      setError(msg);
+      toast?.error(msg);
     } finally {
       setLoading(false);
     }

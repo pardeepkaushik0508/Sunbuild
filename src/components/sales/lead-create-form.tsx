@@ -18,7 +18,8 @@ export function LeadCreateForm({
 }) {
   const { onSubmit, errors, formError, pending } = useValidatedAction(
     leadFormSchema,
-    createLeadAction
+    createLeadAction,
+    { successMessage: "Lead created" }
   );
 
   return (

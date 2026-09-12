@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Download, X } from "lucide-react";
 import { ChangeOrderStatus, type InvoiceStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { FormField, Textarea } from "@/components/ui/form";
+import { useOptionalToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { clientChangeOrderDecisionAction } from "@/lib/client/actions";
+import { toSafeErrorMessage } from "@/lib/errors";
 
 export type ClientInvoiceCardData = {
   id: string;
@@ -34,9 +37,12 @@ export type ClientCoCardData = {
   amount: number;
   status: ChangeOrderStatus;
   phase: string | null;
+  scheduleImpact?: string | null;
+  budgetImpact?: number | null;
   actionDate: string | null;
   attachmentPath: string | null;
   canDecide: boolean;
+  clientComment?: string | null;
 };
 
 export function ClientPaymentsBoard({
@@ -46,6 +52,8 @@ export function ClientPaymentsBoard({
   invoices: ClientInvoiceCardData[];
   changeOrders: ClientCoCardData[];
 }) {
+  const router = useRouter();
+  const toast = useOptionalToast();
   const [invoiceDetail, setInvoiceDetail] =
     useState<ClientInvoiceCardData | null>(null);
   const [payInfo, setPayInfo] = useState<ClientInvoiceCardData | null>(null);
@@ -59,10 +67,17 @@ export function ClientPaymentsBoard({
       try {
         await clientChangeOrderDecisionAction(id, decision, form);
         setCoDetail(null);
-      } catch (e) {
-        setError(
-          e instanceof Error ? e.message : "Could not update change order"
+        toast?.success(
+          decision === "APPROVED"
+            ? "Change order approved"
+            : "Change order rejected"
         );
+        router.refresh();
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Could not update change order";
+        setError(message);
+        toast?.error(toSafeErrorMessage(e));
       }
     });
   }
@@ -175,7 +190,9 @@ export function ClientPaymentsBoard({
                     {co.title}
                   </h3>
                   <StatusBadge tone={statusTone(co.status)}>
-                    {co.status.replace(/_/g, " ")}
+                    {co.status === ChangeOrderStatus.REJECTED
+                      ? "DENIED"
+                      : co.status.replace(/_/g, " ")}
                   </StatusBadge>
                 </div>
                 <p className="mt-2 line-clamp-3 text-sm text-sb-muted">
@@ -198,7 +215,7 @@ export function ClientPaymentsBoard({
                         size="sm"
                         onClick={() => setCoDetail(co)}
                       >
-                        Approve (e-sign)
+                        Approve
                       </Button>
                       <Button
                         type="button"
@@ -206,10 +223,19 @@ export function ClientPaymentsBoard({
                         variant="outline"
                         onClick={() => setCoDetail(co)}
                       >
-                        Reject
+                        Deny
                       </Button>
                     </>
-                  ) : null}
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCoDetail(co)}
+                    >
+                      View details
+                    </Button>
+                  )}
                   {co.attachmentPath ? (
                     <a
                       href={`/api/files/${co.attachmentPath}`}
@@ -221,11 +247,7 @@ export function ClientPaymentsBoard({
                         Download PDF
                       </Button>
                     </a>
-                  ) : (
-                    <Button type="button" size="sm" variant="outline" disabled>
-                      Download PDF
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
               </Card>
             ))}
@@ -335,18 +357,18 @@ export function ClientPaymentsBoard({
                   <Textarea name="comment" />
                 </FormField>
                 <Button type="submit" disabled={pending}>
-                  Approve (e-sign)
+                  Approve change order
                 </Button>
               </form>
               <form
                 action={(fd) => decide(coDetail.id, "REJECTED", fd)}
                 className="space-y-3 border-t border-sb-border pt-4"
               >
-                <FormField label="Rejection reason">
+                <FormField label="Denial reason">
                   <Textarea name="comment" required />
                 </FormField>
                 <Button type="submit" variant="outline" disabled={pending}>
-                  Reject
+                  Deny change order
                 </Button>
               </form>
             </div>
