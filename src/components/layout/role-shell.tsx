@@ -47,6 +47,8 @@ export async function RoleShell({
       role={session.membership.role}
       companyName={session.membership.companyName}
       projectCount={projectCount}
+      profiles={session.memberships}
+      activeMembershipId={session.membership.id}
       whatsappContacts={[]}
     >
       <AuthResumeGuard />

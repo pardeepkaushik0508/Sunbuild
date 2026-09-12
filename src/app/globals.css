@@ -249,3 +249,34 @@ textarea {
   color: var(--sb-orange);
   letter-spacing: 0.02em;
 }
+
+/* Global route-change progress bar */
+@keyframes sb-nav-progress {
+  0% {
+    transform: scaleX(0.08);
+  }
+  20% {
+    transform: scaleX(0.35);
+  }
+  50% {
+    transform: scaleX(0.65);
+  }
+  80% {
+    transform: scaleX(0.85);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+
+.sb-nav-progress {
+  transform-origin: left center;
+  animation: sb-nav-progress 8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-nav-progress {
+    animation: none;
+    transform: scaleX(0.6);
+  }
+}

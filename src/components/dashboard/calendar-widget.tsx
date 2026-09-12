@@ -202,8 +202,8 @@ export function CalendarWidget({
       : "Connect Google Calendar";
 
   return (
-    <section className="flex h-full min-h-[280px] max-h-[70vh] flex-col rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)] sm:min-h-[320px] sm:max-h-[420px] xl:max-h-none xl:h-[420px]">
-      <div className="mb-4 flex items-start justify-between gap-2">
+    <section className="flex h-full min-h-[280px] max-h-[70vh] flex-col overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)] sm:min-h-[320px] sm:max-h-[420px] xl:max-h-none xl:h-[420px]">
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-2">
         <div className="flex items-start gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#ede9fe] text-[#8b5cf6]">
             <CalendarDays size={18} />
@@ -245,7 +245,7 @@ export function CalendarWidget({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-[#9ca3af]">
+      <div className="grid shrink-0 grid-cols-7 gap-1 text-center text-[11px] text-[#9ca3af]">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="py-1 font-medium">
             {d}
@@ -288,15 +288,15 @@ export function CalendarWidget({
         })}
       </div>
 
-      <div className="mt-3 min-h-[72px] border-t border-sb-border pt-3">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-sb-muted">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-sb-border pt-3">
+        <p className="mb-1.5 shrink-0 text-[11px] font-medium uppercase tracking-wide text-sb-muted">
           {format(selected, "MMM d")}
         </p>
         {selectedEvents.length === 0 ? (
           <p className="text-[12px] text-sb-muted">No events this day.</p>
         ) : (
-          <ul className="max-h-24 space-y-1 overflow-y-auto">
-            {selectedEvents.slice(0, 4).map((ev) => (
+          <ul className="min-h-0 max-h-36 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
+            {selectedEvents.map((ev) => (
               <li key={ev.id} className="truncate text-[12px] text-sb-ink">
                 <span className="font-medium">{ev.title}</span>
                 {ev.meta ? (

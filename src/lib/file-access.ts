@@ -34,6 +34,23 @@ export async function assertFileDownloadAccess(
   const isClient = role === Role.CLIENT;
   const isSub = role === Role.SUBCONTRACTOR;
 
+  // Profile avatars — owner always; same-company members may view
+  if (filePath.startsWith("avatars/")) {
+    const ownerId = filePath.split("/")[1];
+    if (!ownerId) throw new NotFoundError();
+    if (ownerId === session.user.id) return;
+    const shared = await prisma.membership.findFirst({
+      where: {
+        userId: ownerId,
+        companyId: session.membership.companyId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!shared) throw new ForbiddenError();
+    return;
+  }
+
   // Documents
   const document = await prisma.document.findFirst({
     where: { filePath },

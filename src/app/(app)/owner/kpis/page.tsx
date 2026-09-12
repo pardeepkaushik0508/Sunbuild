@@ -3,6 +3,7 @@ import { OwnerTabs } from "@/components/owner/owner-tabs";
 import { PageHeader, MetricCard, Card } from "@/components/ui/card";
 import { MetricBarChart, StatusDonutChart } from "@/components/dashboard/charts-lazy";
 import {
+  formatGrowthPercent,
   loadCompanyOverviewStats,
   resolveOwnerCompanies,
 } from "@/lib/dashboard/company-stats";
@@ -50,7 +51,11 @@ export default async function OwnerKpisPage() {
           accent="green"
         />
         <MetricCard label="Completed" value={totals.completed} accent="purple" />
-        <MetricCard label="Avg Growth" value={`${avgGrowth}%`} accent="orange" />
+        <MetricCard
+          label="Avg Growth"
+          value={formatGrowthPercent(avgGrowth)}
+          accent="orange"
+        />
         <MetricCard label="Deadlines" value={totals.deadlines} accent="red" />
         <MetricCard
           label="Pipeline Revenue"
@@ -112,7 +117,9 @@ export default async function OwnerKpisPage() {
               </div>
               <div>
                 <dt className="text-xs text-sb-muted">Growth</dt>
-                <dd className="font-semibold">{c.growthPercent}%</dd>
+                <dd className="font-semibold">
+                  {formatGrowthPercent(c.growthPercent)}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-sb-muted">Revenue</dt>

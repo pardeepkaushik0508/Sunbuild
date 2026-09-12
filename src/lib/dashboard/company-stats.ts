@@ -52,9 +52,20 @@ function formatCompactRevenue(amount: number): string {
   }).format(amount);
 }
 
+/** MoM growth: (lastMonth − secondLastMonth) / secondLastMonth × 100. */
 function growthFromCounts(current: number, previous: number): number {
   if (previous <= 0) return current > 0 ? 100 : 0;
   return Number((((current - previous) / previous) * 100).toFixed(1));
+}
+
+/** Display helper — always shows sign for non-zero growth (+12.5% / -8%). */
+export function formatGrowthPercent(percent: number): string {
+  if (percent > 0) return `+${percent}%`;
+  return `${percent}%`;
+}
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function countMap(
@@ -102,8 +113,18 @@ export async function loadCompanyOverviewStats(
   const deadlineEnd = new Date(
     now.getTime() + UPCOMING_DEADLINE_DAYS * 86400000
   );
-  const d30 = new Date(now.getTime() - 30 * 86400000);
-  const d60 = new Date(now.getTime() - 60 * 86400000);
+  // Calendar MoM: previous month vs second-last month (complete months).
+  const thisMonthStart = startOfMonth(now);
+  const lastMonthStart = new Date(
+    thisMonthStart.getFullYear(),
+    thisMonthStart.getMonth() - 1,
+    1
+  );
+  const secondLastMonthStart = new Date(
+    thisMonthStart.getFullYear(),
+    thisMonthStart.getMonth() - 2,
+    1
+  );
   const ids = { in: companyIds };
 
   const [
@@ -112,8 +133,8 @@ export async function loadCompanyOverviewStats(
     projectStatusGroups,
     deadlineGroups,
     revenueGroups,
-    createdLast30Groups,
-    createdPrev30Groups,
+    createdLastMonthGroups,
+    createdSecondLastMonthGroups,
   ] = await Promise.all([
     prisma.company.findMany({
       where: { id: ids, isActive: true },
@@ -157,22 +178,30 @@ export async function loadCompanyOverviewStats(
       },
       _sum: { purchasePrice: true },
     }),
+    // Previous calendar month project creations
     prisma.project.groupBy({
       by: ["companyId"],
-      where: { companyId: ids, createdAt: { gte: d30 } },
+      where: {
+        companyId: ids,
+        createdAt: { gte: lastMonthStart, lt: thisMonthStart },
+      },
       _count: { _all: true },
     }),
+    // Second-last calendar month project creations
     prisma.project.groupBy({
       by: ["companyId"],
-      where: { companyId: ids, createdAt: { gte: d60, lt: d30 } },
+      where: {
+        companyId: ids,
+        createdAt: { gte: secondLastMonthStart, lt: lastMonthStart },
+      },
       _count: { _all: true },
     }),
   ]);
 
   const usersByCompany = countMap(userGroups);
   const deadlinesByCompany = countMap(deadlineGroups);
-  const last30ByCompany = countMap(createdLast30Groups);
-  const prev30ByCompany = countMap(createdPrev30Groups);
+  const lastMonthByCompany = countMap(createdLastMonthGroups);
+  const secondLastMonthByCompany = countMap(createdSecondLastMonthGroups);
 
   const activeByCompany = new Map<string, number>();
   const completedByCompany = new Map<string, number>();
@@ -207,8 +236,9 @@ export async function loadCompanyOverviewStats(
 
   return ordered.map((company, index) => {
     const revenue = revenueByCompany.get(company.id) ?? 0;
-    const createdLast30 = last30ByCompany.get(company.id) ?? 0;
-    const createdPrev30 = prev30ByCompany.get(company.id) ?? 0;
+    const createdLastMonth = lastMonthByCompany.get(company.id) ?? 0;
+    const createdSecondLastMonth =
+      secondLastMonthByCompany.get(company.id) ?? 0;
     return {
       id: company.id,
       name: company.name,
@@ -221,7 +251,10 @@ export async function loadCompanyOverviewStats(
       users: usersByCompany.get(company.id) ?? 0,
       activeProjects: activeByCompany.get(company.id) ?? 0,
       completed: completedByCompany.get(company.id) ?? 0,
-      growthPercent: growthFromCounts(createdLast30, createdPrev30),
+      growthPercent: growthFromCounts(
+        createdLastMonth,
+        createdSecondLastMonth
+      ),
       deadlines: deadlinesByCompany.get(company.id) ?? 0,
       revenue,
       revenueLabel: formatCompactRevenue(revenue),

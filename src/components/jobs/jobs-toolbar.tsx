@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { ChevronDown, Plus, Search } from "lucide-react";
 import type { JobsCompanyOption } from "@/lib/jobs/load-jobs";
 import type { JobsSortKey, JobsStatusFilter } from "@/lib/jobs/constants";
+import { pushWithProgress } from "@/lib/navigate";
 
 export function JobsToolbar({
   companies,
@@ -55,7 +56,7 @@ export function JobsToolbar({
       if (!("page" in patch)) params.delete("page");
       const qs = params.toString();
       startTransition(() => {
-        router.push(qs ? `${pathname}?${qs}` : pathname);
+        pushWithProgress(router, qs ? `${pathname}?${qs}` : pathname);
       });
     },
     [pathname, router, searchParams]

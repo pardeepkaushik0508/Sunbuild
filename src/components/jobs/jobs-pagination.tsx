@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { pushWithProgress } from "@/lib/navigate";
 
 export function JobsPagination({
   page,
@@ -26,7 +27,7 @@ export function JobsPagination({
     else params.set("page", String(next));
     const qs = params.toString();
     startTransition(() => {
-      router.push(qs ? `${pathname}?${qs}` : pathname);
+      pushWithProgress(router, qs ? `${pathname}?${qs}` : pathname);
     });
   }
 

@@ -181,8 +181,8 @@ model Membership {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  /// One email/user may hold only one role per company (no multi-role stacking).
-  @@unique([userId, companyId])
+  /// One email/user may hold multiple roles (profiles) per company; switch via active membership cookie.
+  @@unique([userId, companyId, role])
   @@index([companyId, isActive])
   @@index([companyId, role, isActive])
 }

@@ -47,10 +47,21 @@ const WhatsAppSidebar = dynamic(
 
 type ShellProps = {
   children: React.ReactNode;
-  user: { name: string; email: string; phone?: string | null };
+  user: {
+    name: string;
+    email: string;
+    image?: string | null;
+    phone?: string | null;
+  };
   role: Role;
   companyName: string;
   projectCount?: number;
+  profiles?: Array<{
+    id: string;
+    role: Role;
+    companyName: string;
+  }>;
+  activeMembershipId?: string;
   whatsappContacts?: WhatsAppContact[];
 };
 
@@ -186,6 +197,8 @@ function AppShellInner({
   role,
   companyName,
   projectCount = 0,
+  profiles = [],
+  activeMembershipId,
   whatsappContacts = [],
 }: ShellProps) {
   const pathname = usePathname();
@@ -275,6 +288,8 @@ function AppShellInner({
               companyName={companyName}
               projectCount={projectCount}
               settingsHref={settingsHref}
+              profiles={profiles}
+              activeMembershipId={activeMembershipId}
             />
             <Button
               variant="whatsapp"
@@ -342,7 +357,7 @@ function AppShellInner({
                         "flex h-14 w-full items-center gap-3 rounded-[14px] px-4 text-left text-sm font-medium transition hover:bg-sb-canvas",
                         childActive || groupOpen
                           ? "bg-sb-canvas text-sb-ink"
-                          : "text-[#4b5563]"
+                          : "text-sb-body"
                       )}
                     >
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-sb-canvas text-sb-muted">
@@ -374,7 +389,7 @@ function AppShellInner({
                                 "flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition",
                                 isChild
                                   ? "bg-sb-orange text-white shadow-sm"
-                                  : "text-[#4b5563] hover:bg-sb-canvas"
+                                  : "text-sb-body hover:bg-sb-canvas"
                               )}
                             >
                               <span
@@ -406,7 +421,7 @@ function AppShellInner({
                     "flex h-14 items-center gap-3 rounded-[14px] px-4 text-sm font-medium transition",
                     active
                       ? "bg-sb-yellow text-sb-ink shadow-sm"
-                      : "text-[#4b5563] hover:bg-sb-canvas"
+                      : "text-sb-body hover:bg-sb-canvas"
                   )}
                 >
                   <span

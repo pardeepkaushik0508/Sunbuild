@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { useOptionalToast } from "@/components/ui/toast";
 import { safeInternalPath } from "@/lib/safe-redirect";
+import { pushWithProgress } from "@/lib/navigate";
 
 type Step = "credentials" | "totp";
 
@@ -29,7 +30,7 @@ export function LoginForm() {
   const nextPath = safeInternalPath(params.get("next"), "/");
 
   async function finishLogin() {
-    router.push(nextPath);
+    pushWithProgress(router, nextPath);
     router.refresh();
   }
 

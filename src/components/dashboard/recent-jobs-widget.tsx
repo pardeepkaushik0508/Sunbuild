@@ -41,7 +41,8 @@ export type RecentJob = {
   id: string;
   name: string;
   progressPercent: number;
-  href: string;
+  /** Optional deep-link; ignored for card selection (stays on dashboard). */
+  href?: string;
 };
 
 export function RecentJobsCard({
@@ -66,9 +67,16 @@ export function RecentJobsCard({
     day: "numeric",
   }).format(new Date());
 
+  function selectHrefFor(projectId: string) {
+    const [path, query] = selectHrefBase.split("?");
+    const params = new URLSearchParams(query || "");
+    params.set("projectId", projectId);
+    return `${path}?${params.toString()}`;
+  }
+
   return (
-    <section className="flex h-full min-h-[320px] flex-col rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)]">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <section className="flex h-full min-h-[320px] max-h-[420px] flex-col overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)]">
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#ede9fe] text-[#8b5cf6]">
             <FolderKanban size={18} />
@@ -101,7 +109,7 @@ export function RecentJobsCard({
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
         {isLoading ? (
           <JobsSkeleton />
         ) : error ? (
@@ -126,48 +134,39 @@ export function RecentJobsCard({
             const visual = JOB_VISUALS[idx % JOB_VISUALS.length];
             const Icon = visual.icon;
             const selected = selectedProjectId === job.id;
-            const selectHref = `${selectHrefBase}?projectId=${job.id}`;
+            const selectHref = selectHrefFor(job.id);
             return (
-              <div
+              <PmSelectProjectLink
                 key={job.id}
+                projectId={job.id}
+                href={selectHref}
+                aria-label={`Focus ${job.name} on dashboard`}
+                title="Update dashboard for this project"
                 className={cn(
-                  "rounded-[14px] border bg-sb-canvas p-3.5 transition",
+                  "block rounded-[14px] border bg-sb-canvas p-3.5 text-left transition",
                   selected
                     ? "border-sb-orange/60 ring-1 ring-sb-orange/30"
                     : "border-sb-border hover:border-sb-orange/40"
                 )}
               >
                 <div className="mb-2.5 flex items-center gap-2.5">
-                  <PmSelectProjectLink
-                    projectId={job.id}
-                    href={selectHref}
+                  <span
                     className={cn(
                       "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
                       visual.wrap
                     )}
-                    aria-label={`Select ${job.name}`}
-                    title="Select for dashboard"
                   >
                     <Icon size={16} />
-                  </PmSelectProjectLink>
-                  <Link
-                    href={job.href}
-                    className="min-w-0 flex-1 truncate text-sm font-medium text-sb-ink hover:text-sb-orange"
-                  >
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-sb-ink">
                     {job.name}
-                  </Link>
+                  </span>
                   <span className={cn("text-sm font-semibold", visual.pct)}>
                     {job.progressPercent}%
                   </span>
                 </div>
-                <Link
-                  href={selectHref}
-                  className="block"
-                  aria-label={`Focus ${job.name} on dashboard`}
-                >
-                  <ProgressBar value={job.progressPercent} color={visual.bar} />
-                </Link>
-              </div>
+                <ProgressBar value={job.progressPercent} color={visual.bar} />
+              </PmSelectProjectLink>
             );
           })
         )}
@@ -204,7 +203,7 @@ export function RecentJobsWidget({
     id: string;
     name: string;
     progressPercent: number;
-    href: string;
+    href?: string;
   }>;
 }) {
   return (

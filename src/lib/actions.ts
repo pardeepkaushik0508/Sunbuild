@@ -31,7 +31,7 @@ import {
   assertContractAccess,
   assertCompanyUser,
 } from "@/lib/session";
-import { saveCompanyUpload } from "@/lib/storage";
+import { deleteUpload, saveCompanyUpload, saveUpload } from "@/lib/storage";
 import {
   assertPasswordMeetsPolicy,
   getPasswordPolicy,
@@ -1983,12 +1983,13 @@ export async function inviteUserAction(form: FormData) {
     const flags = membershipFlagsForRole(role);
     await tx.membership.upsert({
       where: {
-        userId_companyId: {
+        userId_companyId_role: {
           userId: user.id,
           companyId,
+          role,
         },
       },
-      update: { role, isActive: createActive, ...flags },
+      update: { isActive: createActive, ...flags },
       create: {
         userId: user.id,
         companyId,
@@ -2289,18 +2290,9 @@ export async function updateUserAction(form: FormData) {
     });
 
     if (nextRole !== membership.role) {
-      await tx.membership.upsert({
-        where: {
-          userId_companyId: { userId, companyId },
-        },
-        update: {
-          role: nextRole,
-          isActive: setActive,
-          ...membershipFlagsForRole(nextRole),
-        },
-        create: {
-          userId,
-          companyId,
+      await tx.membership.update({
+        where: { id: membership.id },
+        data: {
           role: nextRole,
           isActive: setActive,
           ...membershipFlagsForRole(nextRole),
@@ -2494,18 +2486,9 @@ export async function bulkUpdateUsersAction(form: FormData) {
             throw new AppError("Cannot demote the last active owner");
           }
         }
-        await tx.membership.upsert({
-          where: {
-            userId_companyId: { userId, companyId },
-          },
-          update: {
-            role: nextRole,
-            isActive: true,
-            ...membershipFlagsForRole(nextRole),
-          },
-          create: {
-            userId,
-            companyId,
+        await tx.membership.update({
+          where: { id: membership.id },
+          data: {
             role: nextRole,
             isActive: true,
             ...membershipFlagsForRole(nextRole),
@@ -2750,5 +2733,62 @@ export async function configureProjectAction(form: FormData) {
   });
 
   revalidateJobsSurfaces(data.projectId);
+}
+
+const PROFILE_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+const PROFILE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+export async function updateOwnProfileAction(form: FormData) {
+  const session = await requireSession();
+  await rateLimitAction(session.user.id, "profile-update", true);
+
+  const name = formString(form, "name");
+  if (!name || name.length < 2) {
+    throw new AppError("Name must be at least 2 characters");
+  }
+  if (name.length > 120) {
+    throw new AppError("Name is too long");
+  }
+
+  const file = form.get("image");
+  let nextImage: string | undefined;
+
+  if (file instanceof File && file.size > 0) {
+    const uploaded = await saveUpload(file, `avatars/${session.user.id}`, {
+      maxUploadBytes: PROFILE_IMAGE_MAX_BYTES,
+      allowedExtensions: PROFILE_IMAGE_EXTENSIONS,
+    });
+    nextImage = uploaded.filePath;
+
+    const previous = session.user.image;
+    if (
+      previous &&
+      !previous.startsWith("http") &&
+      !previous.startsWith("/") &&
+      previous.startsWith(`avatars/${session.user.id}/`)
+    ) {
+      await deleteUpload(previous);
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: {
+      name,
+      ...(nextImage ? { image: nextImage } : {}),
+    },
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    action: "PROFILE_UPDATED",
+    entityType: "User",
+    entityId: session.user.id,
+    metadata: { name, imageUpdated: Boolean(nextImage) },
+  });
+
+  revalidatePath("/profile", "layout");
+  revalidatePath("/owner/users");
 }
 

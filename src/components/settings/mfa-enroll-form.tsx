@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FormField, Input } from "@/components/ui/form";
 import { TotpQrCode } from "@/components/auth/totp-qr-code";
 import { toSafeErrorMessage } from "@/lib/errors";
+import { pushWithProgress } from "@/lib/navigate";
 
 /**
  * TOTP enrollment for roles that require MFA under company policy.
@@ -64,7 +65,7 @@ export function MfaEnrollForm({
         setError(res.error.message || "Invalid verification code");
         return;
       }
-      router.push("/");
+      pushWithProgress(router, "/");
       router.refresh();
     } catch (e) {
       setError(toSafeErrorMessage(e));
@@ -80,7 +81,7 @@ export function MfaEnrollForm({
         <p className="mt-2 text-sm text-sb-muted">
           Two-factor authentication is already active on your account.
         </p>
-        <Button className="mt-4" variant="yellow" onClick={() => router.push("/")}>
+        <Button className="mt-4" variant="yellow" onClick={() => pushWithProgress(router, "/")}>
           Continue
         </Button>
       </Card>

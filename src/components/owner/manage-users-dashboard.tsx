@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Role } from "@prisma/client";
+import { pushWithProgress } from "@/lib/navigate";
 import {
   Download,
   Eye,
@@ -40,7 +41,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { useOptionalToast } from "@/components/ui/toast";
 import { ROLE_LABELS } from "@/lib/permissions";
 import { toSafeErrorMessage } from "@/lib/errors";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, mediaUrl } from "@/lib/utils";
 
 type DialogMode = "add" | "edit" | "view" | "bulk" | null;
 
@@ -56,11 +57,12 @@ function UserAvatar({
   size?: "sm" | "md" | "lg";
 }) {
   const dims = size === "lg" ? "h-14 w-14 text-base" : size === "sm" ? "h-9 w-9 text-xs" : "h-11 w-11 text-sm";
-  if (image) {
+  const src = mediaUrl(image);
+  if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={image}
+        src={src}
         alt={name}
         className={cn("shrink-0 rounded-full object-cover", dims)}
       />
@@ -143,7 +145,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
       }
       const qs = params.toString();
       startTransition(() => {
-        router.push(qs ? `/owner/users?${qs}` : "/owner/users");
+        pushWithProgress(router, qs ? `/owner/users?${qs}` : "/owner/users");
       });
     },
     [data.filters, data.pagination.page, router]

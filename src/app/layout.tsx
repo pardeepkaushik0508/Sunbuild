@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Poppins, Pacifico } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
+import { NavigationProgress } from "@/components/layout/navigation-progress";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -33,6 +35,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${poppins.variable} ${pacifico.variable} h-full`}>
       <body className="min-h-full antialiased">
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

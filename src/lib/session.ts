@@ -8,6 +8,8 @@ import { ROLE_HOME } from "@/lib/permissions";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
 import { type PermissionMatrixState } from "@/lib/permission-matrix";
 import { getCompanyPermissionMatrix } from "@/lib/permission-matrix-store";
+import { getActiveMembershipCookie } from "@/lib/membership-cookie";
+import { isCompanyVisibleInMvp } from "@/lib/companies/mvp-visibility";
 
 export type AppSession = {
   user: {
@@ -33,6 +35,7 @@ export type AppSession = {
     role: Role;
     companyId: string;
     companyName: string;
+    companySlug: string;
   }>;
 };
 
@@ -71,15 +74,22 @@ const loadAppSession = cache(async (): Promise<AppSession | null> => {
             },
           },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { role: "asc" }],
       },
     },
   });
 
   if (!user || !user.isActive) return null;
 
-  const membership = user.memberships[0];
-  if (!membership || !membership.company.isActive) return null;
+  const activeMemberships = user.memberships.filter(
+    (m) => m.company.isActive && isCompanyVisibleInMvp(m.company.slug)
+  );
+  if (activeMemberships.length === 0) return null;
+
+  const preferredId = await getActiveMembershipCookie();
+  const membership =
+    activeMemberships.find((m) => m.id === preferredId) ??
+    activeMemberships[0];
 
   const permissionMatrix = await getCompanyPermissionMatrix(
     membership.company.id
@@ -104,11 +114,12 @@ const loadAppSession = cache(async (): Promise<AppSession | null> => {
       financeAccess: membership.financeAccess,
       permissionMatrix,
     },
-    memberships: user.memberships.map((m) => ({
+    memberships: activeMemberships.map((m) => ({
       id: m.id,
       role: m.role,
       companyId: m.company.id,
       companyName: m.company.name,
+      companySlug: m.company.slug,
     })),
   };
 });

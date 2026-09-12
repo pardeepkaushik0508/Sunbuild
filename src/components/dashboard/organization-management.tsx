@@ -80,7 +80,9 @@ function metricValue(company: CompanyOverviewStats, key: (typeof metricDefs)[num
     case "completed":
       return String(company.completed);
     case "growth":
-      return `${company.growthPercent}%`;
+      return company.growthPercent > 0
+        ? `+${company.growthPercent}%`
+        : `${company.growthPercent}%`;
     case "deadlines":
       return String(company.deadlines);
     case "revenue":

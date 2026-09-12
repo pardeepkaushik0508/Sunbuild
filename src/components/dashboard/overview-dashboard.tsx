@@ -61,7 +61,11 @@ export function OverviewDashboard({ data }: { data: OverviewDashboardData }) {
         <RecentJobsCard
           jobs={data.jobs}
           selectedProjectId={data.selectedProjectId}
-          selectHrefBase={data.basePath}
+          selectHrefBase={
+            data.selectedCompanyId
+              ? `${data.basePath}?companyId=${data.selectedCompanyId}`
+              : data.basePath
+          }
           viewAllHref={data.jobsViewAllHref}
         />
         {data.showOwnerChrome ? (

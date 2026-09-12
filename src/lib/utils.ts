@@ -46,6 +46,20 @@ export function initials(name?: string | null) {
     .toUpperCase();
 }
 
+/** Resolve a stored upload path or absolute URL for use in <img src>. */
+export function mediaUrl(path?: string | null) {
+  if (!path) return null;
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("data:") ||
+    path.startsWith("/")
+  ) {
+    return path;
+  }
+  return `/api/files/${path}`;
+}
+
 /** Relative activity labels for user list (e.g. "2 hours ago", "Yesterday"). */
 export function formatRelativeTime(date: Date | string | null | undefined) {
   if (!date) return "Never";

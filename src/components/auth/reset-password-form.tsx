@@ -12,6 +12,7 @@ import { assertPasswordMeetsPolicy } from "@/lib/settings/validation";
 import type { PasswordPolicy } from "@/lib/settings/types";
 import { DEFAULT_PASSWORD_POLICY } from "@/lib/settings/defaults";
 import { useOptionalToast } from "@/components/ui/toast";
+import { pushWithProgress } from "@/lib/navigate";
 
 export function ResetPasswordForm() {
   const params = useSearchParams();
@@ -79,7 +80,7 @@ export function ResetPasswordForm() {
       return;
     }
     toast?.success("Password updated");
-    router.push("/login");
+    pushWithProgress(router, "/login");
     router.refresh();
   }
 

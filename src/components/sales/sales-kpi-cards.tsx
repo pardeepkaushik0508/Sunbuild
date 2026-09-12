@@ -6,6 +6,7 @@ import {
   FileText,
   Home,
   Rocket,
+  TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -100,6 +101,8 @@ export function SalesKpiCards({
         const Icon = ICONS[kpi.icon];
         const accent = ACCENT[kpi.accent];
         const hasGrowth = Boolean(kpi.growth && kpi.growth !== "—");
+        const isNegative =
+          hasGrowth && (kpi.growth?.startsWith("-") ?? false);
         return (
           <article
             key={kpi.id}
@@ -125,10 +128,20 @@ export function SalesKpiCards({
               <span
                 className={cn(
                   "inline-flex items-center gap-0.5 text-[11px] font-semibold",
-                  hasGrowth ? "text-emerald-600" : "text-sb-muted"
+                  !hasGrowth
+                    ? "text-sb-muted"
+                    : isNegative
+                      ? "text-rose-600"
+                      : "text-emerald-600"
                 )}
               >
-                {hasGrowth ? <TrendingUp size={11} /> : null}
+                {hasGrowth ? (
+                  isNegative ? (
+                    <TrendingDown size={11} />
+                  ) : (
+                    <TrendingUp size={11} />
+                  )
+                ) : null}
                 {kpi.growth ?? "—"}
               </span>
             </div>

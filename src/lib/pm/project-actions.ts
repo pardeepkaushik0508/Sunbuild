@@ -45,11 +45,17 @@ export async function setSelectedProjectAction(form: FormData) {
   revalidatePath("/pm/change-orders");
   revalidatePath("/pm/selections");
   revalidatePath("/pm/projects");
+  revalidatePath("/owner");
+  revalidatePath("/ceo");
+  revalidatePath("/admin");
+  revalidatePath("/bookkeeper");
 
-  const url = returnTo.includes("projectId=")
-    ? returnTo
-    : `${returnTo}${returnTo.includes("?") ? "&" : "?"}projectId=${projectId}`;
-  redirect(url);
+  // Stay on the same dashboard; swap focused project and keep other query params.
+  const [pathPart, queryPart] = returnTo.split("?");
+  const base = pathPart || "/pm";
+  const params = new URLSearchParams(queryPart || "");
+  params.set("projectId", projectId);
+  redirect(`${base}?${params.toString()}`);
 }
 
 export async function clearSelectedProjectAction() {
