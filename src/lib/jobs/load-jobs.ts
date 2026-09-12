@@ -1,5 +1,6 @@
 import { cache } from "react";
 import {
+  ChangeOrderStatus,
   DepositStatus,
   InvoiceStatus,
   ProjectStatus,
@@ -387,6 +388,7 @@ export async function loadJobsDashboardData(input: {
   const [
     invoiceSums,
     depositSums,
+    approvedCoSums,
     taskGroups,
     subAccess,
     nextMilestones,
@@ -394,7 +396,7 @@ export async function loadJobsDashboardData(input: {
     scheduleRows,
   ] =
     pageProjectIds.length === 0
-      ? [[], [], [], [], [], [], []]
+      ? [[], [], [], [], [], [], [], []]
       : await Promise.all([
           prisma.invoice.groupBy({
             by: ["projectId"],
@@ -409,6 +411,14 @@ export async function loadJobsDashboardData(input: {
             where: {
               projectId: { in: pageProjectIds },
               status: DepositStatus.RECEIVED,
+            },
+            _sum: { amount: true },
+          }),
+          prisma.changeOrder.groupBy({
+            by: ["projectId"],
+            where: {
+              projectId: { in: pageProjectIds },
+              status: ChangeOrderStatus.APPROVED,
             },
             _sum: { amount: true },
           }),
@@ -447,6 +457,9 @@ export async function loadJobsDashboardData(input: {
   );
   const depositByProject = new Map(
     depositSums.map((r) => [r.projectId, r._sum.amount ?? 0])
+  );
+  const approvedCoByProject = new Map(
+    approvedCoSums.map((r) => [r.projectId, r._sum.amount ?? 0])
   );
 
   const tasksByProject = new Map<
@@ -524,6 +537,7 @@ export async function loadJobsDashboardData(input: {
     const received = depositByProject.get(p.id) ?? 0;
     const budget = computeBudgetUtilization({
       purchasePrice: p.purchasePrice,
+      approvedChangeOrderTotal: approvedCoByProject.get(p.id) ?? 0,
       invoices: paid > 0 ? [{ amount: paid, status: "PAID" }] : [],
       deposits:
         received > 0 ? [{ amount: received, status: "RECEIVED" }] : [],

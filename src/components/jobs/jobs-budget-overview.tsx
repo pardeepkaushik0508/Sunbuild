@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { Role, DepositStatus, InvoiceStatus } from "@prisma/client";
+import {
+  Role,
+  DepositStatus,
+  InvoiceStatus,
+  ChangeOrderStatus,
+} from "@prisma/client";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { sessionHasFinanceAccess } from "@/lib/authorization";
@@ -49,9 +54,9 @@ export async function JobsBudgetOverview({
   });
 
   const ids = projects.map((p) => p.id);
-  const [invoiceSums, depositSums] =
+  const [invoiceSums, depositSums, approvedChangeOrders] =
     ids.length === 0
-      ? [[], []]
+      ? [[], [], []]
       : await Promise.all([
           prisma.invoice.groupBy({
             by: ["projectId"],
@@ -63,6 +68,18 @@ export async function JobsBudgetOverview({
             where: { projectId: { in: ids }, status: DepositStatus.RECEIVED },
             _sum: { amount: true },
           }),
+          prisma.changeOrder.findMany({
+            where: {
+              projectId: { in: ids },
+              status: ChangeOrderStatus.APPROVED,
+            },
+            select: {
+              projectId: true,
+              title: true,
+              amount: true,
+            },
+            orderBy: { clientActionAt: "asc" },
+          }),
         ]);
 
   const invoiceByProject = new Map(
@@ -71,12 +88,21 @@ export async function JobsBudgetOverview({
   const depositByProject = new Map(
     depositSums.map((r) => [r.projectId, r._sum.amount ?? 0])
   );
+  const cosByProject = new Map<
+    string,
+    Array<{ title: string; amount: number }>
+  >();
+  for (const co of approvedChangeOrders) {
+    const list = cosByProject.get(co.projectId) ?? [];
+    list.push({ title: co.title, amount: co.amount });
+    cosByProject.set(co.projectId, list);
+  }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Budget Overview"
-        description="Project budget utilization from purchase price, paid invoices, and received deposits"
+        description="Project total cost = purchase price + approved change orders. Utilization uses paid invoices or received deposits."
         actions={
           <Link href={backHref}>
             <Button variant="outline" size="sm">
@@ -96,8 +122,10 @@ export async function JobsBudgetOverview({
           {projects.map((p) => {
             const paid = invoiceByProject.get(p.id) ?? 0;
             const received = depositByProject.get(p.id) ?? 0;
+            const changeOrders = cosByProject.get(p.id) ?? [];
             const budget = computeBudgetUtilization({
               purchasePrice: p.purchasePrice,
+              approvedChangeOrders: changeOrders,
               invoices: paid > 0 ? [{ amount: paid, status: "PAID" }] : [],
               deposits:
                 received > 0
@@ -120,8 +148,37 @@ export async function JobsBudgetOverview({
                   </p>
                 </div>
                 {budget.hasBudget ? (
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-2">
                     <JobsProgressBar value={budget.percent} />
+                    <dl className="grid gap-1 text-xs text-sb-muted sm:grid-cols-2">
+                      <div className="flex justify-between gap-3 sm:block">
+                        <dt>Purchase price</dt>
+                        <dd className="font-medium text-sb-ink">
+                          {formatCurrency(budget.baseTotal)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-3 sm:block">
+                        <dt>Approved change orders</dt>
+                        <dd className="font-medium text-sb-ink">
+                          {formatCurrency(budget.changeOrderTotal)}
+                        </dd>
+                      </div>
+                    </dl>
+                    {budget.changeOrders.length > 0 ? (
+                      <ul className="space-y-1 border-t border-sb-border pt-2 text-xs">
+                        {budget.changeOrders.map((co, idx) => (
+                          <li
+                            key={`${co.title}-${idx}`}
+                            className="flex items-start justify-between gap-3"
+                          >
+                            <span className="text-sb-muted">{co.title}</span>
+                            <span className="shrink-0 font-medium text-sb-ink">
+                              +{formatCurrency(co.amount)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 ) : null}
               </Card>

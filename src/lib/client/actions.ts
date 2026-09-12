@@ -20,6 +20,7 @@ import {
 } from "@/lib/rate-limit";
 import { requireClientProjectAccess } from "@/lib/client/project";
 import { computeAllowanceUsage } from "@/lib/client/allowance";
+import { revalidateJobsSurfaces } from "@/lib/jobs/revalidate-jobs";
 
 function formString(form: FormData, key: string) {
   const v = form.get(key);
@@ -233,10 +234,15 @@ export async function clientChangeOrderDecisionAction(
       acceptedAt: new Date().toISOString(),
       version: co.updatedAt.toISOString(),
       comment,
+      title: co.title,
+      amount: co.amount,
     },
   });
 
+  // Keep client portal, PM change-order list, and every budget/total-cost
+  // surface in sync after an approval or rejection.
   revalidateClientPortal(co.projectId);
-  revalidatePath("/pm/change-orders");
-  revalidatePath(`/pm/projects/${co.projectId}`);
+  revalidateJobsSurfaces(co.projectId);
+  revalidatePath("/pm/change-orders", "page");
+  revalidatePath("/pm", "layout");
 }

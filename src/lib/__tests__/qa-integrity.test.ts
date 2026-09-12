@@ -199,6 +199,23 @@ describe("change order transition rules", () => {
   });
 });
 
+describe("budget includes approved change orders", () => {
+  it("adds approved CO amounts to purchase price by title", async () => {
+    const { computeBudgetUtilization } = await import("@/lib/jobs/budget");
+    const budget = computeBudgetUtilization({
+      purchasePrice: 35000,
+      approvedChangeOrders: [
+        { title: "Client need marble Upgrade", amount: 3500 },
+      ],
+    });
+    assert.equal(budget.baseTotal, 35000);
+    assert.equal(budget.changeOrderTotal, 3500);
+    assert.equal(budget.total, 38500);
+    assert.equal(budget.changeOrders[0]?.title, "Client need marble Upgrade");
+    assert.equal(budget.hasBudget, true);
+  });
+});
+
 describe("CEO approval capability", () => {
   it("PM cannot approve completion", () => {
     assert.equal(

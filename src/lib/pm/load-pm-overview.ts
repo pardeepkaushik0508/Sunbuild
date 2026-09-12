@@ -18,6 +18,7 @@ import type { InsightCard } from "@/components/dashboard/ai-insights";
 import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
 import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
+import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
 
@@ -63,6 +64,7 @@ export async function loadPmOverviewData(
     overdue,
     pendingCos,
     activeProjectCount,
+    approvedChangeOrders,
   ] = await Promise.all([
     prisma.task.count({
       where: {
@@ -178,6 +180,16 @@ export async function loadPmOverviewData(
         },
       },
     }),
+    selectedId
+      ? prisma.changeOrder.findMany({
+          where: {
+            projectId: selectedId,
+            status: ChangeOrderStatus.APPROVED,
+          },
+          select: { title: true, amount: true },
+          orderBy: { clientActionAt: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const stats: PmOverviewStat[] = [
@@ -289,6 +301,11 @@ export async function loadPmOverviewData(
       })
     : 0;
 
+  const selectedBudget = computeBudgetUtilization({
+    purchasePrice: selectedProject?.purchasePrice,
+    approvedChangeOrders,
+  });
+
   const clientItems: ClientInfoItem[] = selectedProject
     ? [
         {
@@ -320,8 +337,10 @@ export async function loadPmOverviewData(
         },
         {
           id: "price",
-          label: "Purchase Price",
-          value: formatCurrency(selectedProject.purchasePrice),
+          label: "Total project cost",
+          value: selectedBudget.hasBudget
+            ? formatCurrency(selectedBudget.total)
+            : formatCurrency(selectedProject.purchasePrice),
         },
         {
           id: "closing",

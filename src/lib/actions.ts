@@ -1845,6 +1845,7 @@ export async function createChangeOrderAction(form: FormData) {
       submittedAt: new Date(),
     },
   });
+  revalidateJobsSurfaces(data.projectId);
   revalidatePath("/pm/change-orders");
   revalidatePath("/client");
   revalidatePath("/client/change-orders");

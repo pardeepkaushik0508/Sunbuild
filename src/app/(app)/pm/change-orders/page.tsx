@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Role } from "@prisma/client";
+import { ChangeOrderStatus, Role } from "@prisma/client";
 import { createChangeOrderAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
@@ -14,9 +14,18 @@ import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
 };
+
+function clientActionLabel(status: ChangeOrderStatus) {
+  if (status === ChangeOrderStatus.APPROVED) return "Approved";
+  if (status === ChangeOrderStatus.REJECTED) return "Rejected";
+  if (status === ChangeOrderStatus.PENDING_CLIENT) return "Awaiting client";
+  return status.replace(/_/g, " ");
+}
 
 export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
   const session = await requireRole([
@@ -53,7 +62,7 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
     <div>
       <PageHeader
         title="Change Orders"
-        description="Track scope and cost changes"
+        description="Track scope and cost changes. Client approvals update status here and add the amount to project total cost."
         actions={
           filterProjectId ? (
             <Link href="/pm/change-orders">
@@ -137,6 +146,7 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
               co.status,
               co.createdBy.name,
               co.clientComment,
+              clientActionLabel(co.status),
             ]
               .filter(Boolean)
               .join(" "),
@@ -173,13 +183,16 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
               <Td key="client">
                 {co.clientActionAt ? (
                   <>
-                    {formatDate(co.clientActionAt)}
+                    <p className="font-medium">{clientActionLabel(co.status)}</p>
+                    <p className="text-xs text-sb-muted">
+                      {formatDate(co.clientActionAt)}
+                    </p>
                     {co.clientComment ? (
                       <p className="text-xs text-sb-muted">{co.clientComment}</p>
                     ) : null}
                   </>
                 ) : (
-                  "—"
+                  clientActionLabel(co.status)
                 )}
               </Td>,
             ],

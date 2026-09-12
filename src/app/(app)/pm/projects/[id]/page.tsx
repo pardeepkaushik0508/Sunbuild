@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Role, ScheduleStatus } from "@prisma/client";
+import { ChangeOrderStatus, Role, ScheduleStatus } from "@prisma/client";
 import {
   assignSubcontractorAction,
   uploadCompletionDocumentAction,
@@ -24,8 +24,9 @@ import {
   getAccessibleProjectIds,
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
+import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
+import { computeBudgetUtilization } from "@/lib/jobs/budget";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -63,6 +64,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
     docsCount,
     projectTasks,
     progressSources,
+    approvedChangeOrders,
   ] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
@@ -113,9 +115,19 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
         tasks: { select: { status: true } },
       },
     }),
+    prisma.changeOrder.findMany({
+      where: { projectId: id, status: ChangeOrderStatus.APPROVED },
+      select: { title: true, amount: true },
+      orderBy: { clientActionAt: "asc" },
+    }),
   ]);
 
   if (!project) notFound();
+
+  const projectBudget = computeBudgetUtilization({
+    purchasePrice: project.purchasePrice,
+    approvedChangeOrders,
+  });
 
   const liveProgress = progressSources
     ? computeProjectProgress({
@@ -291,14 +303,39 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           },
           {
             id: "price",
-            label: "Purchase Price",
-            value: project.purchasePrice
-              ? `$${project.purchasePrice.toLocaleString()}`
-              : "ÎÃÃ¶",
+            label: "Total project cost",
+            value: projectBudget.hasBudget
+              ? formatCurrency(projectBudget.total)
+              : "—",
           },
         ]}
         viewAllHref="/pm/contracts"
       />
+
+      {projectBudget.changeOrders.length > 0 ? (
+        <Card className="mb-6">
+          <h2 className="text-lg font-semibold text-sb-ink">
+            Approved change orders
+          </h2>
+          <p className="mt-1 text-sm text-sb-muted">
+            Added to purchase price ({formatCurrency(projectBudget.baseTotal)})
+            for a total of {formatCurrency(projectBudget.total)}.
+          </p>
+          <ul className="mt-4 space-y-2 text-sm">
+            {projectBudget.changeOrders.map((co, idx) => (
+              <li
+                key={`${co.title}-${idx}`}
+                className="flex items-start justify-between gap-3 border-b border-sb-border pb-2 last:border-0 last:pb-0"
+              >
+                <span>{co.title}</span>
+                <span className="shrink-0 font-medium">
+                  +{formatCurrency(co.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <AiInsightsPanel
         insights={insights}

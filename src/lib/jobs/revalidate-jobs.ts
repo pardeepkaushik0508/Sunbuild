@@ -9,6 +9,9 @@ export function revalidateJobsSurfaces(projectId?: string | null) {
   revalidatePath("/owner/users");
   revalidatePath("/pm");
   revalidatePath("/pm/projects");
+  revalidatePath("/pm/projects/budget");
+  revalidatePath("/pm/projects/reports");
+  revalidatePath("/pm/change-orders");
   revalidatePath("/pm/schedule");
   revalidatePath("/pm/tasks");
   revalidatePath("/ceo");
@@ -16,6 +19,8 @@ export function revalidateJobsSurfaces(projectId?: string | null) {
   revalidatePath("/bookkeeper");
   revalidatePath("/bookkeeper/invoices");
   revalidatePath("/client");
+  revalidatePath("/client/change-orders");
+  revalidatePath("/client/payments");
   if (projectId) {
     revalidatePath(`/pm/projects/${projectId}`);
   }

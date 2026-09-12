@@ -1,4 +1,4 @@
-import { ProjectStatus, Role } from "@prisma/client";
+import { ChangeOrderStatus, ProjectStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   ACTIVE_PROJECT_STATUSES,
@@ -133,6 +133,7 @@ export async function loadCompanyOverviewStats(
     projectStatusGroups,
     deadlineGroups,
     revenueGroups,
+    approvedCoRows,
     createdLastMonthGroups,
     createdSecondLastMonthGroups,
   ] = await Promise.all([
@@ -177,6 +178,19 @@ export async function loadCompanyOverviewStats(
         purchasePrice: { not: null },
       },
       _sum: { purchasePrice: true },
+    }),
+    prisma.changeOrder.findMany({
+      where: {
+        status: ChangeOrderStatus.APPROVED,
+        project: {
+          companyId: ids,
+          status: { not: ProjectStatus.CANCELLED },
+        },
+      },
+      select: {
+        amount: true,
+        project: { select: { companyId: true } },
+      },
     }),
     // Previous calendar month project creations
     prisma.project.groupBy({
@@ -227,6 +241,13 @@ export async function loadCompanyOverviewStats(
   const revenueByCompany = new Map<string, number>();
   for (const row of revenueGroups) {
     revenueByCompany.set(row.companyId, row._sum.purchasePrice ?? 0);
+  }
+  for (const row of approvedCoRows) {
+    const companyId = row.project.companyId;
+    revenueByCompany.set(
+      companyId,
+      (revenueByCompany.get(companyId) ?? 0) + (row.amount ?? 0)
+    );
   }
 
   const byId = new Map(companies.map((c) => [c.id, c]));
