@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
@@ -14,17 +14,60 @@ type NotificationItem = {
   tone?: "danger" | "warning" | "info";
 };
 
+function viewAllForPath(pathname: string) {
+  if (pathname.startsWith("/client")) return "/client/change-orders";
+  if (pathname.startsWith("/sub")) return "/sub";
+  if (pathname.startsWith("/pm")) return "/pm/change-orders";
+  if (pathname.startsWith("/sales")) return "/sales";
+  if (pathname.startsWith("/bookkeeper")) return "/bookkeeper/invoices";
+  return "/owner/alerts";
+}
+
 export function NotificationsMenu() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const viewAllHref = pathname.startsWith("/sub")
-    ? "/sub"
-    : pathname.startsWith("/pm")
-      ? "/pm/tasks"
-      : "/owner/alerts";
+  const viewAllHref = viewAllForPath(pathname);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/notifications", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error("failed");
+      const data = (await res.json()) as { items: NotificationItem[] };
+      setItems(data.items ?? []);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+      setFetched(true);
+    }
+  }, []);
+
+  // Load on mount + refresh periodically so the bell badge stays accurate
+  useEffect(() => {
+    void load();
+    const id = window.setInterval(() => {
+      void load();
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  // Refresh when opening the panel
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
+
+  // Refresh after route changes (e.g. after approving a CO)
+  useEffect(() => {
+    void load();
+  }, [pathname, load]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -40,29 +83,6 @@ export function NotificationsMenu() {
       document.removeEventListener("keydown", onKey);
     };
   }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    fetch("/api/notifications", { credentials: "same-origin" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("failed");
-        return res.json() as Promise<{ items: NotificationItem[] }>;
-      })
-      .then((data) => {
-        if (!cancelled) setItems(data.items ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   const unread = items.length > 0;
 
@@ -94,7 +114,7 @@ export function NotificationsMenu() {
             </Link>
           </div>
           <div className="max-h-[360px] overflow-y-auto">
-            {loading ? (
+            {loading && !fetched ? (
               <p className="px-4 py-8 text-center text-sm text-sb-muted">
                 Loading…
               </p>
@@ -105,7 +125,10 @@ export function NotificationsMenu() {
             ) : (
               <ul>
                 {items.map((item) => (
-                  <li key={item.id} className="border-b border-sb-border-subtle last:border-0">
+                  <li
+                    key={item.id}
+                    className="border-b border-sb-border-subtle last:border-0"
+                  >
                     <Link
                       href={item.href}
                       onClick={() => setOpen(false)}

@@ -1,7 +1,13 @@
 import "server-only";
 
+import {
+  getEmailProvider,
+  getSmtpConfig,
+  isEmailConfigured,
+  SmtpConfigError,
+} from "@/lib/email/config";
+import { verifyResendConnection } from "@/lib/email/send-resend";
 import { getMailTransporter, resetMailTransporter } from "@/lib/email/transporter";
-import { getSmtpConfig, isSmtpConfigured, SmtpConfigError } from "@/lib/email/config";
 
 function safeSmtpErrorMessage(error: unknown): string {
   const raw =
@@ -9,42 +15,62 @@ function safeSmtpErrorMessage(error: unknown): string {
       ? error.message.replace(/pass(word)?[=:].*/gi, "[redacted]")
       : "unknown";
   const lower = raw.toLowerCase();
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: string }).code).toLowerCase()
+      : "";
+
   if (
     lower.includes("invalid login") ||
     lower.includes("badcredentials") ||
     lower.includes("username and password not accepted") ||
     lower.includes("535") ||
     lower.includes("authentication failed") ||
-    lower.includes("eauth")
+    lower.includes("eauth") ||
+    code === "eauth"
   ) {
-    return "SMTP login rejected by Google (535). Use a valid 16-character App Password for SMTP_USER in .env.local (not your normal Gmail password), then restart the server.";
+    return "SMTP login rejected by Google (535). Use a valid 16-character App Password in SMTP_PASSWORD (not your normal Gmail password), then restart the server.";
   }
   if (lower.includes("enotfound") || lower.includes("getaddrinfo")) {
     return "SMTP host could not be reached. Check SMTP_HOST.";
   }
-  if (lower.includes("etimedout") || lower.includes("timeout")) {
-    return "SMTP connection timed out. Check SMTP_HOST / SMTP_PORT / firewall.";
+  if (
+    code === "etimedout" ||
+    code === "econnrefused" ||
+    code === "enetunreach" ||
+    code === "esocket" ||
+    lower.includes("etimedout") ||
+    lower.includes("timeout") ||
+    lower.includes("econnrefused") ||
+    lower.includes("enetunreach")
+  ) {
+    return "SMTP connection blocked or timed out. Render Free blocks ports 465/587 — set RESEND_API_KEY (HTTPS) or upgrade to a paid Render instance.";
   }
   if (lower.includes("self signed") || lower.includes("certificate")) {
     return "SMTP TLS certificate error. Check SMTP_SECURE and SMTP_PORT (465 TLS or 587 STARTTLS).";
   }
-  return "SMTP connection failed. Check SMTP_* values in .env.local and restart the server.";
+  return "SMTP connection failed. Check SMTP_* env values (and restart). On Render Free, use RESEND_API_KEY instead.";
 }
 
 /**
- * Verify SMTP connectivity. Call only from authorized server actions / scripts.
- * Do not run on every production send.
+ * Verify active email provider connectivity.
+ * Call only from authorized server actions / scripts — not on every production send.
  */
 export async function verifySmtpConnection(): Promise<{
   ok: boolean;
   message: string;
 }> {
-  if (!isSmtpConfigured()) {
+  if (!isEmailConfigured()) {
     return {
       ok: false,
       message:
-        "SMTP is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM_EMAIL in .env.local, then restart the server.",
+        "Email is not configured. Set RESEND_API_KEY + from address (recommended on Render), or SMTP_HOST / SMTP_USER / SMTP_PASSWORD / SMTP_FROM_EMAIL, then restart.",
     };
+  }
+
+  const provider = getEmailProvider();
+  if (provider === "resend") {
+    return verifyResendConnection();
   }
 
   try {

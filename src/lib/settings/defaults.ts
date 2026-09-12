@@ -76,9 +76,10 @@ export const DEFAULT_EMAIL_NOTIFICATIONS: EmailNotificationSettings = {
   status: "phase_2",
   transactionalAuthEmails: true,
   providerConfigured: Boolean(
-    process.env.SMTP_USER?.trim() &&
-      process.env.SMTP_PASSWORD?.trim() &&
-      process.env.SMTP_HOST?.trim()
+    process.env.RESEND_API_KEY?.trim() ||
+      (process.env.SMTP_USER?.trim() &&
+        process.env.SMTP_PASSWORD?.trim() &&
+        process.env.SMTP_HOST?.trim())
   ),
 };
 

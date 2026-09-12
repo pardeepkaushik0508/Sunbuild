@@ -170,9 +170,10 @@ export async function getCompanySettings(
   const email: EmailNotificationSettings = {
     ...emailNotifications,
     providerConfigured: Boolean(
-      process.env.SMTP_USER?.trim() &&
-        process.env.SMTP_PASSWORD?.trim() &&
-        process.env.SMTP_HOST?.trim()
+      process.env.RESEND_API_KEY?.trim() ||
+        (process.env.SMTP_USER?.trim() &&
+          process.env.SMTP_PASSWORD?.trim() &&
+          process.env.SMTP_HOST?.trim())
     ),
     transactionalAuthEmails: true,
   };

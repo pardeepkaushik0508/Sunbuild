@@ -360,7 +360,7 @@ export function SettingsDashboard({
         <DialogShell title="Email Notifications" onClose={close}>
           <Phase2Notice
             title="Advanced notification automation is not part of the current MVP."
-            body="Transactional authentication emails (password reset and account invite notices) use server-side Google SMTP when configured. Task notifications, approval emails, RFI alerts, invoice alerts, and warranty notifications are planned for Phase 2."
+            body="Transactional authentication emails (password reset and account invite notices) use Resend (HTTPS) or Google SMTP when configured. Task notifications, approval emails, RFI alerts, invoice alerts, and warranty notifications are planned for Phase 2."
             bullets={[
               `Transactional auth emails: ${
                 settings.emailNotifications.transactionalAuthEmails
@@ -369,7 +369,7 @@ export function SettingsDashboard({
               }`,
               `Email provider: ${
                 settings.emailNotifications.providerConfigured
-                  ? "SMTP configured (server)"
+                  ? "Configured (server env)"
                   : "Not configured"
               }`,
               `Status: ${settings.emailNotifications.status === "phase_2" ? "Phase 2 (advanced alerts)" : settings.emailNotifications.status}`,
@@ -503,10 +503,12 @@ function SmtpTestButton() {
   return (
     <div className="mt-4 rounded-xl border border-sb-border bg-sb-canvas/50 p-3">
       <p className="text-sm text-sb-muted">
-        Verify Google SMTP using values from <code className="text-xs">.env.local</code>.
-        For Gmail you must use a 16-character{" "}
-        <strong>App Password</strong> (not your normal Gmail password). After
-        changing SMTP values, restart <code className="text-xs">next dev</code>.
+        Local: Google SMTP via <code className="text-xs">SMTP_*</code> in{" "}
+        <code className="text-xs">.env.local</code> (Gmail needs a 16-character App
+        Password). Render Free blocks SMTP ports — set{" "}
+        <code className="text-xs">RESEND_API_KEY</code> +{" "}
+        <code className="text-xs">RESEND_FROM_EMAIL</code> (or upgrade to a paid
+        Render instance). Restart the server after changing env values.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
@@ -523,7 +525,7 @@ function SmtpTestButton() {
             });
           }}
         >
-          {pending ? "Testing…" : "Test SMTP connection"}
+          {pending ? "Testing…" : "Test email connection"}
         </Button>
         {message ? (
           <span

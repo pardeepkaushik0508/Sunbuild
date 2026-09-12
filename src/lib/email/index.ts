@@ -1,4 +1,12 @@
-export { isSmtpConfigured, getSmtpConfig, SmtpConfigError } from "@/lib/email/config";
+export {
+  isSmtpConfigured,
+  isResendConfigured,
+  isEmailConfigured,
+  getEmailProvider,
+  getSmtpConfig,
+  getResendConfig,
+  SmtpConfigError,
+} from "@/lib/email/config";
 export { sendEmail, trySendEmail } from "@/lib/email/send-email";
 export type { SendEmailInput, SendEmailResult } from "@/lib/email/send-email";
 export { verifySmtpConnection } from "@/lib/email/verify-smtp";

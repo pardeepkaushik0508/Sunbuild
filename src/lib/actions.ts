@@ -50,7 +50,7 @@ import {
   isValidRole,
   canSetClientVisibility,
 } from "@/lib/authorization";
-import { ForbiddenError, AppError } from "@/lib/errors";
+import { ForbiddenError, AppError, toSafeErrorMessage } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/permissions";
 import {
   ACTION_RATE,
@@ -2244,234 +2244,282 @@ function membershipFlagsForRole(role: Role) {
   };
 }
 
-export async function inviteUserAction(form: FormData) {
-  const session = await requireSession();
-  requireCapability(session, "manageUsers");
-  await rateLimitAction(session.user.id, "invite");
-  const email = formString(form, "email").toLowerCase();
-  const roleRaw = formString(form, "role");
-  if (!isValidRole(roleRaw)) throw new AppError("Invalid role");
-  const role = roleRaw as Role;
-  if (!canInviteRole(session.membership.role, role)) {
-    throw new ForbiddenError();
-  }
-  const firstName = formString(form, "firstName");
-  const lastName = formString(form, "lastName");
-  const combinedName = [firstName, lastName].filter(Boolean).join(" ").trim();
-  const name =
-    combinedName || formString(form, "name") || email.split("@")[0];
-  const provided = formString(form, "tempPassword");
-  const statusRaw = formString(form, "status");
-  const createActive = statusRaw !== "INACTIVE";
-  const projectIds = form
-    .getAll("projectIds")
-    .filter((v): v is string => typeof v === "string" && v.length > 0);
-
-  const companyId = session.membership.companyId;
-
-  if (projectIds.length > 0) {
-    const valid = await prisma.project.count({
-      where: { companyId, id: { in: projectIds } },
-    });
-    if (valid !== projectIds.length) {
-      throw new AppError("One or more projects are invalid");
+export async function inviteUserAction(form: FormData): Promise<
+  | { ok: true; emailSent: boolean; emailMessage: string | null }
+  | { ok: false; error: string }
+> {
+  try {
+    const session = await requireSession();
+    requireCapability(session, "manageUsers");
+    await rateLimitAction(session.user.id, "invite");
+    const email = formString(form, "email").toLowerCase();
+    if (!email) {
+      return { ok: false, error: "Email is required" };
     }
-  }
+    const roleRaw = formString(form, "role");
+    if (!isValidRole(roleRaw)) {
+      return { ok: false, error: "Invalid role" };
+    }
+    const role = roleRaw as Role;
+    if (!canInviteRole(session.membership.role, role)) {
+      return { ok: false, error: "You cannot invite this role" };
+    }
+    const firstName = formString(form, "firstName");
+    const lastName = formString(form, "lastName");
+    const combinedName = [firstName, lastName].filter(Boolean).join(" ").trim();
+    const name =
+      combinedName || formString(form, "name") || email.split("@")[0];
+    const provided = formString(form, "tempPassword");
+    const statusRaw = formString(form, "status");
+    const createActive = statusRaw !== "INACTIVE";
+    const projectIds = form
+      .getAll("projectIds")
+      .filter((v): v is string => typeof v === "string" && v.length > 0);
 
-  const { hashPassword } = await import("better-auth/crypto");
-  const passwordPolicy = await getPasswordPolicy(companyId);
+    const companyId = session.membership.companyId;
 
-  const userId = await prisma.$transaction(async (tx) => {
-    let user = await tx.user.findUnique({ where: { email } });
-    if (!user) {
-      const policyError = assertPasswordMeetsPolicy(provided, passwordPolicy);
-      if (policyError) {
-        throw new AppError(policyError);
-      }
-      user = await tx.user.create({
-        data: {
-          email,
-          name,
-          phone: formString(form, "phone") || null,
-          emailVerified: true,
-          isActive: createActive,
-        },
-      });
-      await tx.account.create({
-        data: {
-          userId: user.id,
-          accountId: user.id,
-          providerId: "credential",
-          password: await hashPassword(provided),
-        },
-      });
-    } else {
-      const existingMembership = await tx.membership.findFirst({
-        where: { userId: user.id, companyId },
+    // Fail fast with a clear message before creating anything
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      const existingMembership = await prisma.membership.findFirst({
+        where: { userId: existingUser.id, companyId },
       });
       if (existingMembership) {
-        throw new AppError("A user with this email already exists in the company");
+        return {
+          ok: false,
+          error:
+            "A user with this email already exists. Please use a different email.",
+        };
       }
-      if (provided.length > 0) {
-        const policyError = assertPasswordMeetsPolicy(provided, passwordPolicy);
-        if (policyError) {
-          throw new AppError(policyError);
-        }
-        await tx.account.updateMany({
-          where: { userId: user.id, providerId: "credential" },
-          data: { password: await hashPassword(provided) },
-        });
-        await tx.session.deleteMany({ where: { userId: user.id } });
-      }
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          name,
-          phone: formString(form, "phone") || user.phone,
-          isActive: createActive,
-        },
-      });
     }
 
-    const flags = membershipFlagsForRole(role);
-    await tx.membership.upsert({
-      where: {
-        userId_companyId_role: {
+    if (projectIds.length > 0) {
+      const valid = await prisma.project.count({
+        where: { companyId, id: { in: projectIds } },
+      });
+      if (valid !== projectIds.length) {
+        return { ok: false, error: "One or more projects are invalid" };
+      }
+    }
+
+    const { hashPassword } = await import("better-auth/crypto");
+    const passwordPolicy = await getPasswordPolicy(companyId);
+
+    if (!existingUser) {
+      const policyError = assertPasswordMeetsPolicy(provided, passwordPolicy);
+      if (policyError) {
+        return { ok: false, error: policyError };
+      }
+    } else if (provided.length > 0) {
+      const policyError = assertPasswordMeetsPolicy(provided, passwordPolicy);
+      if (policyError) {
+        return { ok: false, error: policyError };
+      }
+    }
+
+    const userId = await prisma.$transaction(async (tx) => {
+      let user = await tx.user.findUnique({ where: { email } });
+      if (!user) {
+        user = await tx.user.create({
+          data: {
+            email,
+            name,
+            phone: formString(form, "phone") || null,
+            emailVerified: true,
+            isActive: createActive,
+          },
+        });
+        await tx.account.create({
+          data: {
+            userId: user.id,
+            accountId: user.id,
+            providerId: "credential",
+            password: await hashPassword(provided),
+          },
+        });
+      } else {
+        const existingMembership = await tx.membership.findFirst({
+          where: { userId: user.id, companyId },
+        });
+        if (existingMembership) {
+          throw new AppError(
+            "A user with this email already exists. Please use a different email.",
+            409,
+            "USER_EXISTS"
+          );
+        }
+        if (provided.length > 0) {
+          await tx.account.updateMany({
+            where: { userId: user.id, providerId: "credential" },
+            data: { password: await hashPassword(provided) },
+          });
+          await tx.session.deleteMany({ where: { userId: user.id } });
+        }
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            name,
+            phone: formString(form, "phone") || user.phone,
+            isActive: createActive,
+          },
+        });
+      }
+
+      const flags = membershipFlagsForRole(role);
+      await tx.membership.upsert({
+        where: {
+          userId_companyId_role: {
+            userId: user.id,
+            companyId,
+            role,
+          },
+        },
+        update: { isActive: createActive, ...flags },
+        create: {
           userId: user.id,
           companyId,
           role,
+          isActive: createActive,
+          ...flags,
         },
-      },
-      update: { isActive: createActive, ...flags },
-      create: {
-        userId: user.id,
-        companyId,
-        role,
-        isActive: createActive,
-        ...flags,
-      },
+      });
+
+      for (const projectId of projectIds) {
+        await tx.projectAccess.upsert({
+          where: {
+            projectId_userId: { projectId, userId: user.id },
+          },
+          update: { role, canEdit: true },
+          create: { projectId, userId: user.id, role, canEdit: true },
+        });
+        if (role === Role.PROJECT_MANAGER) {
+          await tx.project.updateMany({
+            where: { id: projectId, companyId, pmId: null },
+            data: { pmId: user.id },
+          });
+        }
+      }
+
+      const token = nanoid(24);
+      await tx.invitation.create({
+        data: {
+          email,
+          role,
+          companyId,
+          token,
+          invitedById: session.user.id,
+          expiresAt: new Date(Date.now() + 7 * 86400000),
+        },
+      });
+
+      return user.id;
     });
 
-    for (const projectId of projectIds) {
-      await tx.projectAccess.upsert({
-        where: {
-          projectId_userId: { projectId, userId: user.id },
-        },
-        update: { role, canEdit: true },
-        create: { projectId, userId: user.id, role, canEdit: true },
+    await writeAudit({
+      userId: session.user.id,
+      companyId,
+      action: "USER_INVITED",
+      entityType: "User",
+      entityId: userId,
+      metadata: { email, role, projectIds },
+    });
+
+    // Notify invitee by email with a set-password link (never include temporary password)
+    let emailSent = false;
+    let emailMessage: string | null = null;
+    try {
+      const {
+        isEmailConfigured,
+        accountCreatedEmail,
+        trySendEmail,
+        createPasswordSetupLink,
+      } = await import("@/lib/email");
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
       });
-      if (role === Role.PROJECT_MANAGER) {
-        await tx.project.updateMany({
-          where: { id: projectId, companyId, pmId: null },
-          data: { pmId: user.id },
+      const appUrl = (
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.BETTER_AUTH_URL ||
+        "http://localhost:3000"
+      ).replace(/\/$/, "");
+
+      let setupPasswordUrl: string | null = null;
+      try {
+        setupPasswordUrl = await createPasswordSetupLink(userId);
+      } catch (linkError) {
+        console.error("[invite] password setup link failed", {
+          message: linkError instanceof Error ? linkError.message : "unknown",
         });
       }
-    }
 
-    const token = nanoid(24);
-    await tx.invitation.create({
-      data: {
-        email,
-        role,
-        companyId,
-        token,
-        invitedById: session.user.id,
-        expiresAt: new Date(Date.now() + 7 * 86400000),
-      },
-    });
-
-    return user.id;
-  });
-
-  await writeAudit({
-    userId: session.user.id,
-    companyId,
-    action: "USER_INVITED",
-    entityType: "User",
-    entityId: userId,
-    metadata: { email, role, projectIds },
-  });
-
-  // Notify invitee by email with a set-password link (never include temporary password)
-  let emailSent = false;
-  let emailMessage: string | null = null;
-  try {
-    const {
-      isSmtpConfigured,
-      accountCreatedEmail,
-      trySendEmail,
-      createPasswordSetupLink,
-    } = await import("@/lib/email");
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { name: true },
-    });
-    const appUrl = (
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.BETTER_AUTH_URL ||
-      "http://localhost:3000"
-    ).replace(/\/$/, "");
-
-    let setupPasswordUrl: string | null = null;
-    try {
-      setupPasswordUrl = await createPasswordSetupLink(userId);
-    } catch (linkError) {
-      console.error("[invite] password setup link failed", {
-        message: linkError instanceof Error ? linkError.message : "unknown",
-      });
-    }
-
-    if (isSmtpConfigured()) {
-      const template = accountCreatedEmail({
-        userName: name,
-        companyName: company?.name || "Sunbuild",
-        roleLabel: ROLE_LABELS[role] || role.replace(/_/g, " "),
-        loginUrl: `${appUrl}/login`,
-        invitedByName: session.user.name,
-        setupPasswordUrl,
-      });
-      const mail = await trySendEmail({
-        to: email,
-        subject: template.subject,
-        html: template.html,
-        text: template.text,
-        tags: { type: "account_created", role },
-      });
-      if (!mail.success) {
-        console.error("[invite] account email failed:", mail.message);
-        emailMessage = mail.message;
-        if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
-          console.info(
-            `[invite:dev] SMTP failed — password setup URL for ${email}: ${setupPasswordUrl}`
-          );
+      if (isEmailConfigured()) {
+        const template = accountCreatedEmail({
+          userName: name,
+          companyName: company?.name || "Sunbuild",
+          roleLabel: ROLE_LABELS[role] || role.replace(/_/g, " "),
+          loginUrl: `${appUrl}/login`,
+          invitedByName: session.user.name,
+          setupPasswordUrl,
+        });
+        const mail = await trySendEmail({
+          to: email,
+          subject: template.subject,
+          html: template.html,
+          text: template.text,
+          tags: { type: "account_created", role },
+        });
+        if (!mail.success) {
+          console.error("[invite] account email failed:", mail.message);
+          emailMessage = mail.message;
+          if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
+            console.info(
+              `[invite:dev] email failed — password setup URL for ${email}: ${setupPasswordUrl}`
+            );
+          }
+        } else {
+          emailSent = true;
+          emailMessage = "Invite email sent with a set-password link.";
         }
       } else {
-        emailSent = true;
-        emailMessage = "Invite email sent with a set-password link.";
-      }
-    } else {
-      emailMessage =
-        "User created, but SMTP is not configured — invite email was not sent.";
-      if (process.env.NODE_ENV !== "production") {
-        console.info(
-          `[invite] user ${email} created; SMTP not configured — skip account email`
-        );
-        if (setupPasswordUrl) {
+        emailMessage =
+          "User created, but email is not configured — invite email was not sent.";
+        if (process.env.NODE_ENV !== "production") {
           console.info(
-            `[invite:dev] password setup URL for ${email}: ${setupPasswordUrl}`
+            `[invite] user ${email} created; email not configured — skip account email`
           );
+          if (setupPasswordUrl) {
+            console.info(
+              `[invite:dev] password setup URL for ${email}: ${setupPasswordUrl}`
+            );
+          }
         }
       }
+    } catch (error) {
+      console.error("[invite] account email unexpected error", {
+        message: error instanceof Error ? error.message : "unknown",
+      });
+      emailMessage = "User created, but the invite email could not be sent.";
     }
-  } catch (error) {
-    console.error("[invite] account email unexpected error", {
-      message: error instanceof Error ? error.message : "unknown",
-    });
-    emailMessage = "User created, but the invite email could not be sent.";
-  }
 
-  revalidateUserSurfaces(projectIds);
-  return { ok: true as const, emailSent, emailMessage };
+    revalidateUserSurfaces(projectIds);
+    return { ok: true as const, emailSent, emailMessage };
+  } catch (e) {
+    // Prisma unique race on email
+    if (
+      e &&
+      typeof e === "object" &&
+      "code" in e &&
+      (e as { code?: string }).code === "P2002"
+    ) {
+      return {
+        ok: false,
+        error:
+          "A user with this email already exists. Please use a different email.",
+      };
+    }
+    return { ok: false, error: toSafeErrorMessage(e) };
+  }
 }
 
 export async function toggleUserActiveAction(userId: string, isActive: boolean) {

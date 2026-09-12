@@ -1,6 +1,11 @@
 import "server-only";
 
-import { getSmtpConfig, SmtpConfigError } from "@/lib/email/config";
+import {
+  getEmailProvider,
+  getSmtpConfig,
+  SmtpConfigError,
+} from "@/lib/email/config";
+import { sendViaResend } from "@/lib/email/send-resend";
 import { getMailTransporter } from "@/lib/email/transporter";
 
 export type SendEmailInput = {
@@ -41,7 +46,8 @@ function isValidEmail(email: string): boolean {
 
 /**
  * Application-level mail send. All transactional email should go through here.
- * Never logs SMTP_PASSWORD or message bodies that may contain reset tokens.
+ * Never logs SMTP_PASSWORD / API keys or message bodies that may contain reset tokens.
+ * Uses Resend (HTTPS) when RESEND_API_KEY is set; otherwise Google SMTP.
  */
 export async function sendEmail(
   input: SendEmailInput
@@ -67,6 +73,31 @@ export async function sendEmail(
     throw new SmtpConfigError("Invalid email text body");
   }
 
+  const provider = getEmailProvider();
+  if (!provider) {
+    throw new SmtpConfigError(
+      "Email is not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_* values."
+    );
+  }
+
+  if (provider === "resend") {
+    const { messageId } = await sendViaResend({
+      to: recipients,
+      subject,
+      html: input.html,
+      text: input.text,
+      replyTo: input.replyTo,
+    });
+    console.info("[email] sent", {
+      provider: "resend",
+      toCount: recipients.length,
+      subject,
+      messageId,
+      ...(input.tags ?? {}),
+    });
+    return { success: true, messageId };
+  }
+
   const config = getSmtpConfig();
   const transporter = getMailTransporter();
 
@@ -84,6 +115,7 @@ export async function sendEmail(
     });
 
     console.info("[email] sent", {
+      provider: "smtp",
       toCount: recipients.length,
       subject,
       messageId: info.messageId,
@@ -101,6 +133,7 @@ export async function sendEmail(
         ? error.message.replace(/pass(word)?[=:].*/gi, "[redacted]")
         : "unknown";
     console.error("[email] send failed", {
+      provider: "smtp",
       code,
       message: rawMessage,
       ...(input.tags ?? {}),
@@ -115,7 +148,18 @@ export async function sendEmail(
       code === "EAUTH"
     ) {
       throw new Error(
-        "Email login rejected by SMTP. Use a valid Google App Password in SMTP_PASSWORD (.env.local) and restart the server."
+        "Email login rejected by SMTP. Use a valid Google App Password in SMTP_PASSWORD and restart the server."
+      );
+    }
+    if (
+      code === "ETIMEDOUT" ||
+      code === "ECONNREFUSED" ||
+      code === "ENETUNREACH" ||
+      lower.includes("timeout") ||
+      lower.includes("connect")
+    ) {
+      throw new Error(
+        "SMTP blocked or unreachable (common on Render Free). Set RESEND_API_KEY for HTTPS email, or upgrade the Render instance to a paid plan."
       );
     }
     throw new Error("Unable to send email. Please try again.");

@@ -677,24 +677,38 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
           onSubmit={async (formData) => {
             if (dialog === "add") {
               const result = await inviteUserAction(formData);
-              const successMsg = result?.emailSent
+              if (!result.ok) {
+                return { ok: false as const, error: result.error };
+              }
+              const successMsg = result.emailSent
                 ? result.emailMessage || "User created. Invite email sent."
                 : "User created successfully.";
               setNotice(successMsg);
               setError(null);
               toast?.success(successMsg);
-              // Email delivery is secondary — still note it without failing the create UX
-              if (!result?.emailSent && result?.emailMessage) {
+              if (!result.emailSent && result.emailMessage) {
                 toast?.info(result.emailMessage);
               }
-            } else {
-              await updateUserAction(formData);
-              setNotice("User updated.");
-              toast?.success("User updated");
+              setDialog(null);
+              setSelectedUser(null);
+              router.refresh();
+              return { ok: true as const };
             }
+
+            try {
+              await updateUserAction(formData);
+            } catch (e) {
+              return {
+                ok: false as const,
+                error: toSafeErrorMessage(e),
+              };
+            }
+            setNotice("User updated.");
+            toast?.success("User updated");
             setDialog(null);
             setSelectedUser(null);
             router.refresh();
+            return { ok: true as const };
           }}
         />
       )}
@@ -782,7 +796,9 @@ function UserFormDialog({
   inviteRoles: Role[];
   projects: Array<{ id: string; name: string }>;
   onClose: () => void;
-  onSubmit: (form: FormData) => Promise<void>;
+  onSubmit: (
+    form: FormData
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const toast = useOptionalToast();
@@ -799,7 +815,13 @@ function UserFormDialog({
         formData.set("userId", user.userId);
         formData.set("syncProjects", "1");
       }
-      await onSubmit(formData);
+      const result = await onSubmit(formData);
+      if (!result.ok) {
+        setFormError(result.error);
+        toast?.error(result.error);
+        return;
+      }
+      // Parent closes the dialog on success
     } catch (e) {
       const message = toSafeErrorMessage(e);
       setFormError(message);

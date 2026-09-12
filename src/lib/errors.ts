@@ -61,7 +61,11 @@ export function toSafeErrorMessage(error: unknown): string {
       msg === "Section locked" ||
       msg === "Warranty not active for this project" ||
       msg.startsWith("File too large") ||
-      msg.startsWith("Invalid ")
+      msg.startsWith("File is too large") ||
+      msg.startsWith("Invalid ") ||
+      /already exists/i.test(msg) ||
+      /already in use/i.test(msg) ||
+      error.name === "AppError"
     ) {
       return msg.startsWith("Forbidden:") ? "Forbidden" : msg;
     }

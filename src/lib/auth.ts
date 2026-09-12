@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { twoFactor } from "better-auth/plugins";
 import { prisma } from "@/lib/db";
 import {
-  isSmtpConfigured,
+  isEmailConfigured,
   passwordResetEmail,
   trySendEmail,
 } from "@/lib/email";
@@ -27,15 +27,15 @@ async function sendResetPasswordEmail({
   user: { email: string; name: string };
   url: string;
 }) {
-  if (!isSmtpConfigured()) {
+  if (!isEmailConfigured()) {
     if (!isProd) {
       console.info(
-        `[auth] password reset for ${user.email} — SMTP not configured; dev reset URL:`
+        `[auth] password reset for ${user.email} — email not configured; dev reset URL:`
       );
       console.info(`[auth:dev] reset URL: ${url}`);
     } else {
       console.error(
-        "[auth] password reset requested but SMTP is not configured"
+        "[auth] password reset requested but email is not configured"
       );
     }
     return;
@@ -56,10 +56,10 @@ async function sendResetPasswordEmail({
 
   if (!result.success) {
     console.error("[auth] password reset email failed:", result.message);
-    // Dev fallback so local QA is not blocked when SMTP credentials are wrong.
+    // Dev fallback so local QA is not blocked when mail credentials are wrong.
     if (!isProd) {
       console.info(
-        `[auth:dev] SMTP send failed — use this reset URL for ${user.email}:`
+        `[auth:dev] email send failed — use this reset URL for ${user.email}:`
       );
       console.info(`[auth:dev] reset URL: ${url}`);
     }
