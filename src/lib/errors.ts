@@ -49,6 +49,9 @@ export function toSafeErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const msg = error.message;
     // Preserve intentional Forbidden/Not found throws from legacy code
+    if (/Body exceeded .+ limit/i.test(msg)) {
+      return "File is too large to upload. Please use a smaller PDF (max 20 MB).";
+    }
     if (
       msg === "Forbidden" ||
       msg.startsWith("Forbidden:") ||

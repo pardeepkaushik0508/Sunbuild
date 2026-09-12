@@ -245,11 +245,14 @@ export async function getFileStorageSettings(
     SETTING_KEYS.FILE_STORAGE,
     DEFAULT_FILE_STORAGE
   );
-  const parsed = fileStorageSchema.parse(value) as FileStorageSettings;
+  const parsed = fileStorageSchema.safeParse(value);
+  const base = parsed.success
+    ? (parsed.data as FileStorageSettings)
+    : DEFAULT_FILE_STORAGE;
   if (process.env.CLOUDINARY_URL?.trim()) {
-    return { ...parsed, provider: "cloudinary" };
+    return { ...base, provider: "cloudinary" };
   }
-  return parsed;
+  return base;
 }
 
 export async function getUserTwoFactorEnabled(userId: string): Promise<boolean> {

@@ -58,6 +58,11 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns", "recharts"],
+    // Default Server Action body limit is 1MB; uploads allow up to 20MB
+    // (see DEFAULT_FILE_STORAGE). Leave headroom for multipart overhead.
+    serverActions: {
+      bodySizeLimit: "25mb",
+    },
     // Render (and similar hosts) report many CPUs; default worker count can OOM
     // during "Generating static pages". Cap concurrency for reliable deploys.
     cpus: 2,
