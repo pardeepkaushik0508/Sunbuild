@@ -8,7 +8,8 @@ import {
   uploadPhotoAction,
 } from "@/lib/actions";
 import { PageHeader, Card } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Textarea } from "@/components/ui/form";
@@ -63,7 +64,7 @@ export default async function SubJobDetailPage({ params }: PageProps) {
       where: { projectId: id, visibility: "INTERNAL" },
       include: { uploadedBy: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 500,
     }),
   ]);
 
@@ -231,16 +232,42 @@ export default async function SubJobDetailPage({ params }: PageProps) {
         {documents.length === 0 ? (
           <p className="mt-4 text-sm text-sb-muted">No documents.</p>
         ) : (
-          <DataTable headers={["Title", "Category", "Uploaded", "File"]}>
-            {documents.map((doc) => (
-              <tr key={doc.id}>
-                <Td className="font-medium">{doc.title}</Td>
-                <Td>{doc.category}</Td>
-                <Td>
+          <InteractiveDataTable
+            searchPlaceholder="Search documents…"
+            emptyMessage="No documents match your search"
+            columns={[
+              { key: "title", label: "Title" },
+              { key: "category", label: "Category" },
+              { key: "uploaded", label: "Uploaded" },
+              { key: "file", label: "File", sortable: false },
+            ]}
+            rows={documents.map((doc) => ({
+              id: doc.id,
+              searchText: [
+                doc.title,
+                doc.category,
+                doc.uploadedBy.name,
+                doc.fileName,
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                title: doc.title,
+                category: doc.category,
+                uploaded: doc.createdAt.getTime(),
+              },
+              cells: [
+                <Td key="title" className="font-medium">
+                  {doc.title}
+                </Td>,
+                <Td key="category">{doc.category}</Td>,
+                <Td key="uploaded">
                   {doc.uploadedBy.name}
-                  <p className="text-xs text-sb-muted">{formatDate(doc.createdAt)}</p>
-                </Td>
-                <Td>
+                  <p className="text-xs text-sb-muted">
+                    {formatDate(doc.createdAt)}
+                  </p>
+                </Td>,
+                <Td key="file">
                   <a
                     href={`/api/files/${doc.filePath}`}
                     className="text-sm underline"
@@ -249,10 +276,10 @@ export default async function SubJobDetailPage({ params }: PageProps) {
                   >
                     {doc.fileName}
                   </a>
-                </Td>
-              </tr>
-            ))}
-          </DataTable>
+                </Td>,
+              ],
+            }))}
+          />
         )}
       </Card>
     </div>

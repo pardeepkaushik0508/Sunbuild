@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { LeadStatus, Prisma, Role } from "@prisma/client";
 import { PageHeader, Card } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input } from "@/components/ui/form";
@@ -83,7 +84,7 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
         assignee: { select: { id: true, name: true } },
       },
       orderBy: { updatedAt: "desc" },
-      take: 100,
+      take: 500,
     }),
     prisma.membership.findMany({
       where: {
@@ -157,48 +158,64 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
         />
       </Card>
 
-      <DataTable
-        headers={["Lead", "Status", "Value", "Assignee", "Updated", ""]}
-      >
-        {leads.length === 0 ? (
-          <tr>
-            <Td colSpan={6}>
-              <p className="py-8 text-center text-sm text-sb-muted">
-                No leads match this view.
-              </p>
-            </Td>
-          </tr>
-        ) : (
-          leads.map((lead) => (
-            <tr key={lead.id} className="hover:bg-[#f9fafb]">
-              <Td>
-                <p className="font-medium">
-                  {fullName(lead.firstName, lead.lastName)}
-                </p>
+      <InteractiveDataTable
+        searchPlaceholder="Search leads…"
+        emptyMessage="No leads match this view"
+        columns={[
+          { key: "lead", label: "Lead" },
+          { key: "status", label: "Status" },
+          { key: "value", label: "Value" },
+          { key: "assignee", label: "Assignee" },
+          { key: "updated", label: "Updated" },
+          { key: "actions", label: "", sortable: false },
+        ]}
+        rows={leads.map((lead) => {
+          const name = fullName(lead.firstName, lead.lastName);
+          return {
+            id: lead.id,
+            searchText: [
+              name,
+              lead.email,
+              lead.phone,
+              lead.status,
+              lead.assignee?.name,
+            ]
+              .filter(Boolean)
+              .join(" "),
+            sortValues: {
+              lead: name,
+              status: lead.status,
+              value: Number(lead.estimatedValue ?? 0),
+              assignee: lead.assignee?.name ?? "Unassigned",
+              updated: lead.updatedAt.getTime(),
+            },
+            cells: [
+              <Td key="lead">
+                <p className="font-medium">{name}</p>
                 <p className="text-xs text-[#6b7280]">
                   {lead.email || lead.phone || "—"}
                 </p>
-              </Td>
-              <Td>
+              </Td>,
+              <Td key="status">
                 <StatusBadge tone={statusTone(lead.status)}>
                   {lead.status.replace(/_/g, " ")}
                 </StatusBadge>
-              </Td>
-              <Td>{formatCurrency(lead.estimatedValue)}</Td>
-              <Td>{lead.assignee?.name || "Unassigned"}</Td>
-              <Td>{formatDate(lead.updatedAt)}</Td>
-              <Td>
+              </Td>,
+              <Td key="value">{formatCurrency(lead.estimatedValue)}</Td>,
+              <Td key="assignee">{lead.assignee?.name || "Unassigned"}</Td>,
+              <Td key="updated">{formatDate(lead.updatedAt)}</Td>,
+              <Td key="actions">
                 <Link
                   href={`/sales/leads/${lead.id}`}
                   className="text-sm font-medium text-[#f97316]"
                 >
                   Open
                 </Link>
-              </Td>
-            </tr>
-          ))
-        )}
-      </DataTable>
+              </Td>,
+            ],
+          };
+        })}
+      />
     </div>
   );
 }

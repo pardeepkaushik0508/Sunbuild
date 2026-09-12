@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Priority, Role, TaskStatus } from "@prisma/client";
-import { createTaskAction, updateTaskStatusAction } from "@/lib/actions";
+import { createTaskAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
@@ -14,6 +15,8 @@ import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName } from "@/lib/utils";
 import { PmProjectPicker } from "@/components/pm/project-picker";
+import { EditTaskButton } from "@/components/pm/edit-task-button";
+import { TaskStatusSelect } from "@/components/pm/task-status-select";
 
 async function createTaskFormAction(form: FormData) {
   "use server";
@@ -68,10 +71,10 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
       },
       include: {
         project: { select: { id: true, name: true } },
-        assignee: { select: { name: true } },
+        assignee: { select: { id: true, name: true } },
       },
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-      take: 100,
+      take: 500,
     }),
     prisma.project.findMany({
       where: { id: { in: projectIds } },
@@ -88,18 +91,26 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
       where: {
         companyId: session.membership.companyId,
         isActive: true,
-        role: {
-          in: [
-            Role.PROJECT_MANAGER,
-            Role.SUBCONTRACTOR,
-            Role.OPERATIONS_ADMIN,
-            Role.OWNER,
-          ],
-        },
+        role: Role.SUBCONTRACTOR,
       },
       include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: "asc" } },
     }),
   ]);
+
+  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
+  const assigneeOptions = assignees.map((m) => ({
+    id: m.user.id,
+    name: m.user.name,
+  }));
+
+  function toLocalDateInput(d: Date | null | undefined) {
+    if (!d) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
 
   return (
     <div className="space-y-5 pb-8">
@@ -207,7 +218,7 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
               ))}
             </Select>
           </FormField>
-          <FormField label="Assignee">
+          <FormField label="Subcontractor">
             <Select name="assigneeId" defaultValue="">
               <option value="">Unassigned</option>
               {assignees.map((m) => (
@@ -238,96 +249,92 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
           description="Create a task or clear filters."
         />
       ) : (
-        <DataTable
-          headers={[
-            "Task",
-            "Project",
-            "Assignee",
-            "Priority",
-            "Due",
-            "Status",
-            "Actions",
+        <InteractiveDataTable
+          searchPlaceholder="Search tasks…"
+          emptyMessage="No tasks match your search"
+          columns={[
+            { key: "task", label: "Task" },
+            { key: "project", label: "Project" },
+            { key: "assignee", label: "Subcontractor" },
+            { key: "priority", label: "Priority" },
+            { key: "due", label: "Due" },
+            { key: "status", label: "Status", sortable: false },
           ]}
-        >
-          {tasks.map((task) => {
+          rows={tasks.map((task) => {
             const displayStatus = resolveTaskDisplayStatus(
               task.status,
               task.dueDate
             );
-            return (
-              <tr key={task.id}>
-                <Td>
-                  <p className="font-medium">{task.title}</p>
-                  {task.description ? (
-                    <p className="mt-0.5 line-clamp-2 text-xs text-sb-muted">
-                      {task.description}
-                    </p>
-                  ) : null}
-                </Td>
-                <Td>
+            return {
+              id: task.id,
+              searchText: [
+                task.title,
+                task.description,
+                task.project.name,
+                task.assignee?.name,
+                task.priority,
+                displayStatus,
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                task: task.title,
+                project: task.project.name,
+                assignee: task.assignee?.name ?? "",
+                priority: task.priority,
+                due: task.dueDate?.getTime() ?? 0,
+                status: task.status,
+              },
+              cells: [
+                <Td key="task">
+                  <div className="flex items-start gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{task.title}</p>
+                      {task.description ? (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-sb-muted">
+                          {task.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <EditTaskButton
+                      task={{
+                        id: task.id,
+                        title: task.title,
+                        description: task.description,
+                        projectId: task.project.id,
+                        priority: task.priority,
+                        status: task.status,
+                        assigneeId: task.assigneeId,
+                        startDate: toLocalDateInput(task.startDate),
+                        dueDate: toLocalDateInput(task.dueDate),
+                      }}
+                      projects={projectOptions}
+                      assignees={assigneeOptions}
+                    />
+                  </div>
+                </Td>,
+                <Td key="project">
                   <Link
                     href={`/pm/projects/${task.project.id}`}
                     className="hover:underline"
                   >
                     {task.project.name}
                   </Link>
-                </Td>
-                <Td>{task.assignee?.name ?? "—"}</Td>
-                <Td>
+                </Td>,
+                <Td key="assignee">{task.assignee?.name ?? "—"}</Td>,
+                <Td key="priority">
                   <StatusBadge tone={statusTone(task.priority)}>
                     {task.priority}
                   </StatusBadge>
-                </Td>
-                <Td>{formatDate(task.dueDate)}</Td>
-                <Td>
-                  <StatusBadge tone={statusTone(displayStatus)}>
-                    {displayStatus.replace(/_/g, " ")}
-                  </StatusBadge>
-                </Td>
-                <Td>
-                  <div className="flex flex-wrap gap-1.5">
-                    {task.status !== TaskStatus.DONE ? (
-                      <ActionForm
-                        action={updateTaskStatusAction.bind(
-                          null,
-                          task.id,
-                          TaskStatus.DONE
-                        )}
-                        successMessage="Task marked done"
-                      >
-                        <SubmitButton
-                          size="sm"
-                          variant="outline"
-                          pendingLabel="Saving…"
-                        >
-                          Mark done
-                        </SubmitButton>
-                      </ActionForm>
-                    ) : null}
-                    {task.status !== TaskStatus.IN_PROGRESS ? (
-                      <ActionForm
-                        action={updateTaskStatusAction.bind(
-                          null,
-                          task.id,
-                          TaskStatus.IN_PROGRESS
-                        )}
-                        successMessage="Task updated"
-                      >
-                        <SubmitButton
-                          size="sm"
-                          variant="outline"
-                          pendingLabel="Saving…"
-                        >
-                          In progress
-                        </SubmitButton>
-                      </ActionForm>
-                    ) : null}
-                  </div>
-                </Td>
-              </tr>
-            );
+                </Td>,
+                <Td key="due">{formatDate(task.dueDate)}</Td>,
+                <Td key="status">
+                  <TaskStatusSelect taskId={task.id} status={task.status} />
+                </Td>,
+              ],
+            };
           })}
-        </DataTable>
+        />
       )}
     </div>
   );

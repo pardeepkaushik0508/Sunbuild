@@ -2,7 +2,8 @@ import Link from "next/link";
 import { DocumentVisibility, Role } from "@prisma/client";
 import { uploadDocumentAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
@@ -43,7 +44,7 @@ export default async function SalesDocumentsPage({ searchParams }: PageProps) {
       uploadedBy: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: 500,
   });
 
   return (
@@ -112,24 +113,52 @@ export default async function SalesDocumentsPage({ searchParams }: PageProps) {
           description="Use the upload form above to add specifications and project documents."
         />
       ) : (
-        <DataTable
-          headers={["Title", "Project", "Category", "Visibility", "Uploaded", "File"]}
-        >
-          {documents.map((doc) => (
-            <tr key={doc.id}>
-              <Td className="font-medium">{doc.title}</Td>
-              <Td>{doc.project.name}</Td>
-              <Td>{doc.category}</Td>
-              <Td>
+        <InteractiveDataTable
+          searchPlaceholder="Search documents…"
+          emptyMessage="No documents match your search"
+          columns={[
+            { key: "title", label: "Title" },
+            { key: "project", label: "Project" },
+            { key: "category", label: "Category" },
+            { key: "visibility", label: "Visibility" },
+            { key: "uploaded", label: "Uploaded" },
+            { key: "file", label: "File", sortable: false },
+          ]}
+          rows={documents.map((doc) => ({
+            id: doc.id,
+            searchText: [
+              doc.title,
+              doc.project.name,
+              doc.category,
+              doc.visibility,
+              doc.uploadedBy.name,
+              doc.fileName,
+            ]
+              .filter(Boolean)
+              .join(" "),
+            sortValues: {
+              title: doc.title,
+              project: doc.project.name,
+              category: doc.category,
+              visibility: doc.visibility,
+              uploaded: doc.createdAt.getTime(),
+            },
+            cells: [
+              <Td key="title" className="font-medium">
+                {doc.title}
+              </Td>,
+              <Td key="project">{doc.project.name}</Td>,
+              <Td key="category">{doc.category}</Td>,
+              <Td key="visibility">
                 <StatusBadge tone={statusTone(doc.visibility)}>
                   {doc.visibility.replace(/_/g, " ")}
                 </StatusBadge>
-              </Td>
-              <Td>
+              </Td>,
+              <Td key="uploaded">
                 {doc.uploadedBy.name}
                 <p className="text-xs text-sb-muted">{formatDate(doc.createdAt)}</p>
-              </Td>
-              <Td>
+              </Td>,
+              <Td key="file">
                 <a
                   href={`/api/files/${doc.filePath}`}
                   className="text-sm underline hover:text-sb-yellow-dark"
@@ -138,10 +167,10 @@ export default async function SalesDocumentsPage({ searchParams }: PageProps) {
                 >
                   {doc.fileName}
                 </a>
-              </Td>
-            </tr>
-          ))}
-        </DataTable>
+              </Td>,
+            ],
+          }))}
+        />
       )}
     </div>
   );

@@ -122,6 +122,7 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
         },
         milestones: { select: { status: true } },
         scheduleItems: { select: { status: true } },
+        tasks: { select: { status: true } },
       },
     }),
     prisma.deposit.aggregate({
@@ -157,6 +158,7 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
                 progressPercent: p.progressPercent,
                 milestones: p.milestones,
                 scheduleItems: p.scheduleItems,
+                tasks: p.tasks,
               }),
             0
           ) / projectMeta.length

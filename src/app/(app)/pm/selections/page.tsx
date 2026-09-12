@@ -7,7 +7,8 @@ import {
 } from "@/lib/pm/selection-actions";
 import { createSelectionPackageAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
@@ -318,39 +319,50 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
             </details>
           </Card>
 
-          <DataTable
-            headers={[
-              "Category",
-              "Item",
-              "Specification",
-              "Qty Req",
-              "Qty Allotted",
-              "Unit Cost",
-              "Total Cost",
+          <InteractiveDataTable
+            searchPlaceholder="Search budget items…"
+            emptyMessage="No budget rows yet. Upload a material list or add items."
+            columns={[
+              { key: "category", label: "Category" },
+              { key: "item", label: "Item" },
+              { key: "spec", label: "Specification" },
+              { key: "qtyReq", label: "Qty Req" },
+              { key: "qtyAllot", label: "Qty Allotted" },
+              { key: "unit", label: "Unit Cost" },
+              { key: "total", label: "Total Cost" },
             ]}
-          >
-            {budgetRows.length === 0 ? (
-              <tr>
-                <Td colSpan={7}>
-                  <p className="py-8 text-center text-sm text-sb-muted">
-                    No budget rows yet. Upload a material list or add items.
-                  </p>
-                </Td>
-              </tr>
-            ) : (
-              budgetRows.map(({ section, item }) => (
-                <tr key={item.id} className="hover:bg-sb-canvas/60">
-                  <Td>{section.name}</Td>
-                  <Td className="font-medium">{item.label}</Td>
-                  <Td>{item.optionValue || item.notes || "—"}</Td>
-                  <Td>{item.qtyRequired ?? "—"}</Td>
-                  <Td>{item.qtyAllotted ?? "—"}</Td>
-                  <Td>{formatCurrency(item.unitCost)}</Td>
-                  <Td>{formatCurrency(item.selectedCost)}</Td>
-                </tr>
-              ))
-            )}
-          </DataTable>
+            rows={budgetRows.map(({ section, item }) => ({
+              id: item.id,
+              searchText: [
+                section.name,
+                item.label,
+                item.optionValue,
+                item.notes,
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                category: section.name,
+                item: item.label,
+                spec: item.optionValue || item.notes || "",
+                qtyReq: item.qtyRequired ?? 0,
+                qtyAllot: item.qtyAllotted ?? 0,
+                unit: Number(item.unitCost ?? 0),
+                total: Number(item.selectedCost ?? 0),
+              },
+              cells: [
+                <Td key="category">{section.name}</Td>,
+                <Td key="item" className="font-medium">
+                  {item.label}
+                </Td>,
+                <Td key="spec">{item.optionValue || item.notes || "—"}</Td>,
+                <Td key="qtyReq">{item.qtyRequired ?? "—"}</Td>,
+                <Td key="qtyAllot">{item.qtyAllotted ?? "—"}</Td>,
+                <Td key="unit">{formatCurrency(item.unitCost)}</Td>,
+                <Td key="total">{formatCurrency(item.selectedCost)}</Td>,
+              ],
+            }))}
+          />
         </div>
       ) : view === "board" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -431,37 +443,52 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
           </details>
         </div>
       ) : view === "tracker" ? (
-        <DataTable
-          headers={[
-            "Category",
-            "Items",
-            "Status",
-            "Budget",
-            "Used",
-            "Variance",
-            "Approvals",
-            "",
+        <InteractiveDataTable
+          searchPlaceholder="Search categories…"
+          emptyMessage="No categories found"
+          columns={[
+            { key: "category", label: "Category" },
+            { key: "items", label: "Items" },
+            { key: "status", label: "Status" },
+            { key: "budget", label: "Budget" },
+            { key: "used", label: "Used" },
+            { key: "variance", label: "Variance" },
+            { key: "approvals", label: "Approvals" },
+            { key: "actions", label: "", sortable: false },
           ]}
-        >
-          {activePackage.sections.map((section) => {
+          rows={activePackage.sections.map((section) => {
             const used = section.items.reduce(
               (sum, i) => sum + (i.selectedCost ?? 0),
               0
             );
             const budget = section.allowance ?? 0;
             const variance = used - budget;
-            return (
-              <tr key={section.id}>
-                <Td className="font-medium">{section.name}</Td>
-                <Td>{section._count.items}</Td>
-                <Td>
+            return {
+              id: section.id,
+              searchText: [section.name, section.status].filter(Boolean).join(" "),
+              sortValues: {
+                category: section.name,
+                items: section._count.items,
+                status: section.status,
+                budget,
+                used,
+                variance,
+                approvals: section._count.approvals,
+              },
+              cells: [
+                <Td key="category" className="font-medium">
+                  {section.name}
+                </Td>,
+                <Td key="items">{section._count.items}</Td>,
+                <Td key="status">
                   <StatusBadge tone={statusTone(section.status)}>
                     {section.status.replace(/_/g, " ")}
                   </StatusBadge>
-                </Td>
-                <Td>{formatCurrency(section.allowance)}</Td>
-                <Td>{formatCurrency(used)}</Td>
+                </Td>,
+                <Td key="budget">{formatCurrency(section.allowance)}</Td>,
+                <Td key="used">{formatCurrency(used)}</Td>,
                 <Td
+                  key="variance"
                   className={
                     variance > 0 ? "font-semibold text-sb-red" : undefined
                   }
@@ -469,20 +496,20 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                   {section.allowance == null
                     ? "—"
                     : `${variance > 0 ? "+" : ""}${formatCurrency(variance)}`}
-                </Td>
-                <Td>{section._count.approvals}</Td>
-                <Td>
+                </Td>,
+                <Td key="approvals">{section._count.approvals}</Td>,
+                <Td key="actions">
                   <Link
                     href={`/pm/selections/${activePackage.id}`}
                     className="text-sm font-medium text-sb-orange"
                   >
                     Review
                   </Link>
-                </Td>
-              </tr>
-            );
+                </Td>,
+              ],
+            };
           })}
-        </DataTable>
+        />
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">

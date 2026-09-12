@@ -8,8 +8,10 @@ import { depositOpenStatuses } from "@/lib/insights";
 export async function GET() {
   try {
     const session = await requireApiSession();
-    const isOwner = session.membership.role === Role.OWNER;
-    const isSales = session.membership.role === Role.SALES_MANAGER;
+    const role = session.membership.role;
+    const isOwner = role === Role.OWNER;
+    const isSales = role === Role.SALES_MANAGER;
+    const isSubcontractor = role === Role.SUBCONTRACTOR;
     const companyIds = isOwner
       ? resolveOwnerCompanies(session).map((c) => c.id)
       : [session.membership.companyId];
@@ -18,58 +20,87 @@ export async function GET() {
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
 
-    const [tasks, rfis, deposits, overdueFollowUps, waitingProposals] =
-      await Promise.all([
-      prisma.task.findMany({
+    // Subcontractors: show tasks assigned to them
+    if (isSubcontractor) {
+      const assignedTasks = await prisma.task.findMany({
         where: {
+          assigneeId: session.user.id,
           projectId: { in: projectIds },
-          priority: Priority.HIGH,
           status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
         },
         include: { project: { select: { id: true, name: true } } },
-        orderBy: { dueDate: "asc" },
-        take: 8,
-      }),
-      prisma.rFI.findMany({
-        where: {
-          projectId: { in: projectIds },
-          status: { in: [RfiStatus.OPEN, RfiStatus.IN_PROGRESS] },
-        },
-        include: { project: { select: { id: true, name: true } } },
-        orderBy: { dueDate: "asc" },
-        take: 5,
-      }),
-      prisma.deposit.findMany({
-        where: {
-          projectId: { in: projectIds },
-          status: { in: depositOpenStatuses() },
-          dueDate: { lte: now },
-        },
-        include: { project: { select: { id: true, name: true } } },
-        orderBy: { dueDate: "asc" },
-        take: 5,
-      }),
-      isOwner || isSales
-        ? prisma.lead.findMany({
-            where: {
-              companyId: { in: companyIds },
-              status: { notIn: ["WON", "LOST"] },
-              followUpAt: { lt: startOfToday },
-            },
-            select: { id: true, firstName: true, lastName: true, followUpAt: true },
-            orderBy: { followUpAt: "asc" },
-            take: 6,
-          })
-        : Promise.resolve([]),
-      isOwner || isSales
-        ? prisma.proposal.count({
-            where: {
-              companyId: { in: companyIds },
-              status: "SENT",
-            },
-          })
-        : Promise.resolve(0),
-    ]);
+        orderBy: [{ updatedAt: "desc" }, { dueDate: "asc" }],
+        take: 15,
+      });
+
+      const items = assignedTasks.map((t) => ({
+        id: `assigned-task-${t.id}`,
+        title: `Task assigned: ${t.title}`,
+        body: t.project.name,
+        href: `/sub/jobs/${t.project.id}`,
+        tone: "info" as const,
+      }));
+
+      return NextResponse.json({ items });
+    }
+
+    const [tasks, rfis, deposits, overdueFollowUps, waitingProposals] =
+      await Promise.all([
+        prisma.task.findMany({
+          where: {
+            projectId: { in: projectIds },
+            priority: Priority.HIGH,
+            status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
+          },
+          include: { project: { select: { id: true, name: true } } },
+          orderBy: { dueDate: "asc" },
+          take: 8,
+        }),
+        prisma.rFI.findMany({
+          where: {
+            projectId: { in: projectIds },
+            status: { in: [RfiStatus.OPEN, RfiStatus.IN_PROGRESS] },
+          },
+          include: { project: { select: { id: true, name: true } } },
+          orderBy: { dueDate: "asc" },
+          take: 5,
+        }),
+        prisma.deposit.findMany({
+          where: {
+            projectId: { in: projectIds },
+            status: { in: depositOpenStatuses() },
+            dueDate: { lte: now },
+          },
+          include: { project: { select: { id: true, name: true } } },
+          orderBy: { dueDate: "asc" },
+          take: 5,
+        }),
+        isOwner || isSales
+          ? prisma.lead.findMany({
+              where: {
+                companyId: { in: companyIds },
+                status: { notIn: ["WON", "LOST"] },
+                followUpAt: { lt: startOfToday },
+              },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                followUpAt: true,
+              },
+              orderBy: { followUpAt: "asc" },
+              take: 6,
+            })
+          : Promise.resolve([]),
+        isOwner || isSales
+          ? prisma.proposal.count({
+              where: {
+                companyId: { in: companyIds },
+                status: "SENT",
+              },
+            })
+          : Promise.resolve(0),
+      ]);
 
     const items = [
       ...overdueFollowUps.map((l) => ({
@@ -115,7 +146,6 @@ export async function GET() {
       })),
     ];
 
-    // Ensure companyIds referenced for multi-company owners (side effect: auth scope)
     void companyIds;
 
     return NextResponse.json({ items: items.slice(0, 15) });

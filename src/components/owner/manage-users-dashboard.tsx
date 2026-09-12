@@ -136,10 +136,17 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
         projectId: data.filters.projectId,
         sort: data.filters.sort,
         page: String(data.pagination.page),
+        pageSize: String(data.pagination.pageSize),
         ...patch,
       };
       for (const [k, v] of Object.entries(next)) {
-        if (v && v !== "ALL" && !(k === "page" && v === "1") && !(k === "sort" && v === "name")) {
+        if (
+          v &&
+          v !== "ALL" &&
+          !(k === "page" && v === "1") &&
+          !(k === "sort" && v === "name") &&
+          !(k === "pageSize" && v === "20")
+        ) {
           params.set(k, v);
         }
       }
@@ -148,7 +155,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
         pushWithProgress(router, qs ? `/owner/users?${qs}` : "/owner/users");
       });
     },
-    [data.filters, data.pagination.page, router]
+    [data.filters, data.pagination.page, data.pagination.pageSize, router]
   );
 
   useEffect(() => {
@@ -541,17 +548,33 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
               ))}
             </ul>
 
-            {data.pagination.totalPages > 1 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] px-4 py-3 text-sm">
-                <p className="text-[#6b7280]">
-                  Showing {(data.pagination.page - 1) * data.pagination.pageSize + 1}
-                  –
-                  {Math.min(
-                    data.pagination.page * data.pagination.pageSize,
-                    data.pagination.total
-                  )}{" "}
-                  of {data.pagination.total}
-                </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e7eb] px-4 py-3 text-sm">
+              <p className="text-[#6b7280]">
+                {data.pagination.total === 0
+                  ? "0 users"
+                  : `Showing ${(data.pagination.page - 1) * data.pagination.pageSize + 1}–${Math.min(
+                      data.pagination.page * data.pagination.pageSize,
+                      data.pagination.total
+                    )} of ${data.pagination.total}`}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-[#6b7280]">
+                  <span className="whitespace-nowrap">Rows per page</span>
+                  <select
+                    value={data.pagination.pageSize}
+                    disabled={pending}
+                    onChange={(e) =>
+                      pushQuery({ pageSize: e.target.value, page: "1" })
+                    }
+                    className="h-9 rounded-[8px] border border-[#e5e7eb] bg-white px-2 text-[#111827] outline-none"
+                  >
+                    {[5, 10, 20, 25, 50].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -565,14 +588,16 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
                     Previous
                   </Button>
                   <span className="text-[#6b7280]">
-                    Page {data.pagination.page} / {data.pagination.totalPages}
+                    Page {data.pagination.page} / {Math.max(1, data.pagination.totalPages)}
                   </span>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     disabled={
-                      data.pagination.page >= data.pagination.totalPages || pending
+                      data.pagination.page >= data.pagination.totalPages ||
+                      data.pagination.total === 0 ||
+                      pending
                     }
                     onClick={() =>
                       pushQuery({ page: String(data.pagination.page + 1) })
@@ -582,11 +607,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
                   </Button>
                 </div>
               </div>
-            ) : (
-              <div className="border-t border-[#e5e7eb] px-4 py-3 text-sm text-[#6b7280]">
-                {data.pagination.total} user{data.pagination.total === 1 ? "" : "s"}
-              </div>
-            )}
+            </div>
           </div>
         )}
       </section>
@@ -656,18 +677,15 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
           onSubmit={async (formData) => {
             if (dialog === "add") {
               const result = await inviteUserAction(formData);
-              if (result?.emailSent) {
-                const msg = result.emailMessage || "Invite email sent.";
-                setNotice(msg);
-                setError(null);
-                toast?.success(msg);
-              } else if (result?.emailMessage) {
-                setError(result.emailMessage);
-                setNotice(null);
-                toast?.error(result.emailMessage);
-              } else {
-                setNotice("User created.");
-                toast?.success("User created");
+              const successMsg = result?.emailSent
+                ? result.emailMessage || "User created. Invite email sent."
+                : "User created successfully.";
+              setNotice(successMsg);
+              setError(null);
+              toast?.success(successMsg);
+              // Email delivery is secondary — still note it without failing the create UX
+              if (!result?.emailSent && result?.emailMessage) {
+                toast?.info(result.emailMessage);
               }
             } else {
               await updateUserAction(formData);

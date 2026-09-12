@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Role } from "@prisma/client";
 import { createDailyLogAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
@@ -35,7 +36,7 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
       },
       include: { project: { select: { id: true, name: true } } },
       orderBy: { logDate: "desc" },
-      take: 50,
+      take: 500,
     }),
   ]);
 
@@ -113,26 +114,58 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
             description="Use the form above to record your site activity."
           />
         ) : (
-          <DataTable headers={["Date", "Project", "Status", "Work Completed", "Notes"]}>
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <Td className="whitespace-nowrap font-medium">{formatDate(log.logDate)}</Td>
-                <Td>
+          <InteractiveDataTable
+            searchPlaceholder="Search logs…"
+            emptyMessage="No logs match your search"
+            columns={[
+              { key: "date", label: "Date" },
+              { key: "project", label: "Project" },
+              { key: "status", label: "Status" },
+              { key: "work", label: "Work Completed" },
+              { key: "notes", label: "Notes" },
+            ]}
+            rows={logs.map((log) => ({
+              id: log.id,
+              searchText: [
+                formatDate(log.logDate),
+                log.project.name,
+                log.status,
+                log.workCompleted,
+                log.siteNotes,
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                date: log.logDate.getTime(),
+                project: log.project.name,
+                status: log.status,
+                work: log.workCompleted ?? "",
+                notes: log.siteNotes ?? "",
+              },
+              cells: [
+                <Td key="date" className="whitespace-nowrap font-medium">
+                  {formatDate(log.logDate)}
+                </Td>,
+                <Td key="project">
                   <Link
                     href={`/sub/jobs/${log.project.id}`}
                     className="hover:underline text-sb-text font-medium"
                   >
                     {log.project.name}
                   </Link>
-                </Td>
-                <Td>
+                </Td>,
+                <Td key="status">
                   <StatusBadge tone="green">{log.status}</StatusBadge>
-                </Td>
-                <Td className="max-w-xs truncate">{log.workCompleted ?? "—"}</Td>
-                <Td className="max-w-xs truncate text-sb-muted">{log.siteNotes ?? "—"}</Td>
-              </tr>
-            ))}
-          </DataTable>
+                </Td>,
+                <Td key="work" className="max-w-xs truncate">
+                  {log.workCompleted ?? "—"}
+                </Td>,
+                <Td key="notes" className="max-w-xs truncate text-sb-muted">
+                  {log.siteNotes ?? "—"}
+                </Td>,
+              ],
+            }))}
+          />
         )}
       </div>
     </div>

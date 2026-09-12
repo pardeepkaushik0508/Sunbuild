@@ -203,6 +203,7 @@ export async function loadJobsDashboardData(input: {
   status?: string | null;
   sort?: string | null;
   page?: string | null;
+  pageSize?: string | null;
   pmId?: string | null;
   clientId?: string | null;
 }): Promise<JobsDashboardData> {
@@ -216,6 +217,12 @@ export async function loadJobsDashboardData(input: {
   const statusFilter = (input.status as JobsStatusFilter) || "all";
   const sort = (input.sort as JobsSortKey) || "updated";
   const page = Math.max(1, Number(input.page) || 1);
+  const rawPageSize = Number(input.pageSize) || JOBS_PAGE_SIZE;
+  const pageSize = ([5, 10, 25, 50] as const).includes(
+    rawPageSize as 5 | 10 | 25 | 50
+  )
+    ? rawPageSize
+    : JOBS_PAGE_SIZE;
   const pmFilter = input.pmId ?? "";
   const clientFilter = input.clientId ?? "";
 
@@ -335,7 +342,7 @@ export async function loadJobsDashboardData(input: {
   };
 
   const totalCount = await prisma.project.count({ where: listWhere });
-  const totalPages = Math.max(1, Math.ceil(totalCount / JOBS_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, totalPages);
 
   // Fetch a larger set when sorting by computed fields (progress/budget)
@@ -370,16 +377,16 @@ export async function loadJobsDashboardData(input: {
     ...(needsComputedSort
       ? {}
       : {
-          skip: (safePage - 1) * JOBS_PAGE_SIZE,
-          take: JOBS_PAGE_SIZE,
+          skip: (safePage - 1) * pageSize,
+          take: pageSize,
         }),
     ...(needsComputedSort ? { take: 500 } : {}),
   });
 
   const pageProjectIds = rawProjects.map((p) => p.id);
-  const [invoiceSums, depositSums, taskGroups, subAccess, nextMilestones] =
+  const [invoiceSums, depositSums, taskGroups, subAccess, nextMilestones, milestoneRows] =
     pageProjectIds.length === 0
-      ? [[], [], [], [], []]
+      ? [[], [], [], [], [], []]
       : await Promise.all([
           prisma.invoice.groupBy({
             by: ["projectId"],
@@ -417,6 +424,10 @@ export async function loadJobsDashboardData(input: {
             orderBy: { endDate: "asc" },
             select: { projectId: true, title: true, endDate: true },
           }),
+          prisma.milestone.findMany({
+            where: { projectId: { in: pageProjectIds } },
+            select: { projectId: true, status: true },
+          }),
         ]);
 
   const invoiceByProject = new Map(
@@ -428,15 +439,19 @@ export async function loadJobsDashboardData(input: {
 
   const tasksByProject = new Map<
     string,
-    { total: number; open: number; completed: number }
+    { total: number; open: number; completed: number; statuses: Array<{ status: string }> }
   >();
   for (const tg of taskGroups) {
     const cur = tasksByProject.get(tg.projectId) ?? {
       total: 0,
       open: 0,
       completed: 0,
+      statuses: [],
     };
     cur.total += tg._count.id;
+    for (let i = 0; i < tg._count.id; i++) {
+      cur.statuses.push({ status: tg.status });
+    }
     if (tg.status === TaskStatus.DONE) {
       cur.completed += tg._count.id;
     } else if (tg.status !== TaskStatus.CANCELLED) {
@@ -465,9 +480,24 @@ export async function loadJobsDashboardData(input: {
     }
   }
 
+  const milestonesByProject = new Map<string, Array<{ status: string }>>();
+  for (const m of milestoneRows) {
+    const list = milestonesByProject.get(m.projectId) ?? [];
+    list.push({ status: m.status });
+    milestonesByProject.set(m.projectId, list);
+  }
+
   let mapped: JobsListItem[] = rawProjects.map((p) => {
+    const taskInfo = tasksByProject.get(p.id) ?? {
+      total: 0,
+      open: 0,
+      completed: 0,
+      statuses: [],
+    };
     const progressPercent = computeProjectProgress({
       progressPercent: p.progressPercent,
+      milestones: milestonesByProject.get(p.id) ?? [],
+      tasks: taskInfo.statuses,
     });
     const paid = invoiceByProject.get(p.id) ?? 0;
     const received = depositByProject.get(p.id) ?? 0;
@@ -477,11 +507,6 @@ export async function loadJobsDashboardData(input: {
       deposits:
         received > 0 ? [{ amount: received, status: "RECEIVED" }] : [],
     });
-    const taskInfo = tasksByProject.get(p.id) ?? {
-      total: 0,
-      open: 0,
-      completed: 0,
-    };
     return {
       id: p.id,
       name: p.name,
@@ -516,7 +541,7 @@ export async function loadJobsDashboardData(input: {
   }
 
   const pageJobs = needsComputedSort
-    ? mapped.slice((safePage - 1) * JOBS_PAGE_SIZE, safePage * JOBS_PAGE_SIZE)
+    ? mapped.slice((safePage - 1) * pageSize, safePage * pageSize)
     : mapped;
 
   // Distinct PM/client options without loading every project row
@@ -637,7 +662,7 @@ export async function loadJobsDashboardData(input: {
     jobs: pageJobs,
     totalCount,
     page: safePage,
-    pageSize: JOBS_PAGE_SIZE,
+    pageSize,
     totalPages,
     search,
     statusFilter,

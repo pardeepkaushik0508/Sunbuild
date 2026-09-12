@@ -3,6 +3,7 @@ import {
   Priority,
   ProjectStatus,
   RfiStatus,
+  Role,
   ScheduleStatus,
   TaskStatus,
 } from "@prisma/client";
@@ -15,7 +16,7 @@ import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 import type { TodoItem } from "@/components/dashboard/todo-widget";
 import type { InsightCard } from "@/components/dashboard/ai-insights";
 import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
-import { buildGanttTree } from "@/lib/dashboard/gantt-tree";
+import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
@@ -104,19 +105,21 @@ export async function loadPmOverviewData(
       include: {
         buyer: { select: { firstName: true, lastName: true } },
         milestones: { select: { status: true } },
+        tasks: { select: { status: true } },
+        scheduleItems: { select: { status: true } },
       },
     }),
     prisma.task.findMany({
       where: {
         projectId: { in: scopeIds },
-        status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
+        status: { not: TaskStatus.CANCELLED },
       },
       include: {
         project: { select: { id: true, name: true } },
         assignee: { select: { name: true } },
       },
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
-      take: 40,
+      take: 120,
     }),
     prisma.scheduleItem.findMany({
       where: { projectId: { in: scopeIds } },
@@ -132,16 +135,10 @@ export async function loadPmOverviewData(
       where: {
         companyId: session.membership.companyId,
         isActive: true,
-        role: {
-          in: [
-            "PROJECT_MANAGER",
-            "OWNER",
-            "OPERATIONS_ADMIN",
-            "SUBCONTRACTOR",
-          ],
-        },
+        role: Role.SUBCONTRACTOR,
       },
       include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: "asc" } },
     }),
     selectedId
       ? prisma.project.findFirst({
@@ -149,6 +146,9 @@ export async function loadPmOverviewData(
           include: {
             buyer: true,
             pm: { select: { name: true } },
+            milestones: { select: { status: true } },
+            tasks: { select: { status: true } },
+            scheduleItems: { select: { status: true } },
           },
         })
       : Promise.resolve(null),
@@ -189,21 +189,26 @@ export async function loadPmOverviewData(
     { id: "team", label: "Team Members", value: teamMembers, accent: "indigo" },
   ];
 
-  const todos: TodoItem[] = tasks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    description: t.description,
-    dueDate: t.dueDate,
-    priority: t.priority,
-    projectName: t.project.name,
-    projectId: t.project.id,
-    assigneeName: t.assignee?.name,
-    href: `/pm/tasks?projectId=${t.projectId}`,
-  }));
+  const todos: TodoItem[] = tasks
+    .filter(
+      (t) =>
+        t.status !== TaskStatus.DONE && t.status !== TaskStatus.CANCELLED
+    )
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      dueDate: t.dueDate,
+      priority: t.priority,
+      projectName: t.project.name,
+      projectId: t.project.id,
+      assigneeName: t.assignee?.name,
+      href: `/pm/tasks?projectId=${t.projectId}`,
+    }));
 
   const localCalendarEvents: CalendarEvent[] = [
     ...tasks
-      .filter((t) => t.dueDate)
+      .filter((t) => t.dueDate && t.status !== TaskStatus.DONE)
       .map((t) => ({
         id: `task-${t.id}`,
         date: (t.dueDate as Date).toISOString(),
@@ -238,8 +243,15 @@ export async function loadPmOverviewData(
   ]);
   const calendarEvents = mergedCalendar.events;
 
-  const ganttTasks = buildGanttTree(
-    scheduleItems.map((s) => ({
+  const scheduleForGantt = selectedId
+    ? scheduleItems.filter((s) => s.projectId === selectedId)
+    : scheduleItems;
+  const tasksForGantt = selectedId
+    ? tasks.filter((t) => t.projectId === selectedId)
+    : tasks;
+
+  const ganttTasks = buildGanttTree([
+    ...scheduleForGantt.map((s) => ({
       id: s.id,
       title: s.title,
       trade: s.trade,
@@ -249,17 +261,30 @@ export async function loadPmOverviewData(
       dependsOnId: s.dependsOnId,
       assigneeName: s.assigneeName,
       projectName: selectedProject?.name ?? null,
-    }))
-  );
+      href: selectedId
+        ? `/pm/schedule?projectId=${selectedId}`
+        : "/pm/schedule",
+    })),
+    ...tasksToScheduleRows(
+      tasksForGantt.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        startDate: t.startDate,
+        dueDate: t.dueDate,
+        createdAt: t.createdAt,
+        assigneeName: t.assignee?.name ?? null,
+        projectName: t.project.name,
+        projectId: t.project.id,
+      }))
+    ),
+  ]);
   const progressPercent = selectedProject
     ? computeProjectProgress({
         progressPercent: selectedProject.progressPercent,
-        milestones: milestonesRows.filter(
-          (m) => m.projectId === selectedProject.id
-        ),
-        scheduleItems: scheduleItems.filter(
-          (s) => s.projectId === selectedProject.id
-        ),
+        milestones: selectedProject.milestones,
+        scheduleItems: selectedProject.scheduleItems,
+        tasks: selectedProject.tasks,
       })
     : 0;
 
@@ -364,7 +389,12 @@ export async function loadPmOverviewData(
       buyerName: p.buyer
         ? fullName(p.buyer.firstName, p.buyer.lastName)
         : null,
-      progressPercent: p.progressPercent,
+      progressPercent: computeProjectProgress({
+        progressPercent: p.progressPercent,
+        milestones: p.milestones,
+        tasks: p.tasks,
+        scheduleItems: p.scheduleItems,
+      }),
       milestonesDone: p.milestones.filter(
         (m) => m.status === ScheduleStatus.COMPLETED
       ).length,

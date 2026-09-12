@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Role } from "@prisma/client";
 import { PageHeader, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
@@ -62,56 +63,82 @@ export default async function PMContractsPage() {
           }
         />
       ) : (
-        <DataTable
-          headers={[
-            "Contract",
-            "Buyer",
-            "Project",
-            "Price",
-            "Status",
-            "Uploaded",
+        <InteractiveDataTable
+          searchPlaceholder="Search contracts…"
+          emptyMessage="No contracts match your search"
+          columns={[
+            { key: "contract", label: "Contract" },
+            { key: "buyer", label: "Buyer" },
+            { key: "project", label: "Project" },
+            { key: "price", label: "Price" },
+            { key: "status", label: "Status" },
+            { key: "uploaded", label: "Uploaded" },
           ]}
-        >
-          {contracts.map((contract) => (
-            <tr key={contract.id}>
-              <Td>
-                <Link
-                  href={`/pm/contracts/${contract.id}`}
-                  className="font-medium hover:underline"
-                >
-                  {contract.contractNumber ?? contract.fileName}
-                </Link>
-              </Td>
-              <Td>
-                {fullName(contract.buyerFirstName, contract.buyerLastName)}
-              </Td>
-              <Td>
-                {contract.project ? (
+          rows={contracts.map((contract) => {
+            const buyer = fullName(
+              contract.buyerFirstName,
+              contract.buyerLastName
+            );
+            const projectName =
+              contract.project?.name ?? contract.projectName ?? "—";
+            return {
+              id: contract.id,
+              searchText: [
+                contract.contractNumber,
+                contract.fileName,
+                buyer,
+                projectName,
+                contract.status,
+                contract.uploadedBy.name,
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                contract: contract.contractNumber ?? contract.fileName,
+                buyer,
+                project: projectName,
+                price: Number(contract.purchasePrice ?? 0),
+                status: contract.status,
+                uploaded: contract.createdAt.getTime(),
+              },
+              cells: [
+                <Td key="contract">
                   <Link
-                    href={`/pm/projects/${contract.project.id}`}
-                    className="hover:underline"
+                    href={`/pm/contracts/${contract.id}`}
+                    className="font-medium hover:underline"
                   >
-                    {contract.project.name}
+                    {contract.contractNumber ?? contract.fileName}
                   </Link>
-                ) : (
-                  contract.projectName ?? "—"
-                )}
-              </Td>
-              <Td>{formatCurrency(contract.purchasePrice)}</Td>
-              <Td>
-                <StatusBadge tone={statusTone(contract.status)}>
-                  {contract.status.replace(/_/g, " ")}
-                </StatusBadge>
-              </Td>
-              <Td>
-                {contract.uploadedBy.name}
-                <p className="text-xs text-sb-muted">
-                  {formatDate(contract.createdAt)}
-                </p>
-              </Td>
-            </tr>
-          ))}
-        </DataTable>
+                </Td>,
+                <Td key="buyer">{buyer}</Td>,
+                <Td key="project">
+                  {contract.project ? (
+                    <Link
+                      href={`/pm/projects/${contract.project.id}`}
+                      className="hover:underline"
+                    >
+                      {contract.project.name}
+                    </Link>
+                  ) : (
+                    contract.projectName ?? "—"
+                  )}
+                </Td>,
+                <Td key="price">{formatCurrency(contract.purchasePrice)}</Td>,
+                <Td key="status">
+                  <StatusBadge tone={statusTone(contract.status)}>
+                    {contract.status.replace(/_/g, " ")}
+                  </StatusBadge>
+                </Td>,
+                <Td key="uploaded">
+                  {contract.uploadedBy.name}
+                  <p className="text-xs text-sb-muted">
+                    {formatDate(contract.createdAt)}
+                  </p>
+                </Td>,
+              ],
+            };
+          })}
+        />
       )}
     </div>
   );

@@ -201,6 +201,20 @@ export function LoginForm() {
           </Link>
         </p>
       ) : null}
+
+      <p className="mt-6 text-center text-xs text-sb-muted">
+        <Link href="/" className="hover:text-sb-ink">
+          Home
+        </Link>
+        {" · "}
+        <Link href="/privacy" className="hover:text-sb-ink">
+          Privacy
+        </Link>
+        {" · "}
+        <Link href="/terms" className="hover:text-sb-ink">
+          Terms
+        </Link>
+      </p>
     </Card>
   );
 }

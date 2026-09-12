@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ProposalStatus, Role } from "@prisma/client";
 import { createProposalAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
@@ -23,7 +24,7 @@ export default async function SalesProposalsPage() {
         createdBy: { select: { name: true } },
       },
       orderBy: { updatedAt: "desc" },
-      take: 100,
+      take: 500,
     }),
     prisma.lead.findMany({
       where: {
@@ -32,7 +33,7 @@ export default async function SalesProposalsPage() {
       },
       select: { id: true, firstName: true, lastName: true },
       orderBy: { updatedAt: "desc" },
-      take: 100,
+      take: 500,
     }),
   ]);
 
@@ -97,30 +98,60 @@ export default async function SalesProposalsPage() {
           description="Create a proposal for an open lead to track active proposals on the overview."
         />
       ) : (
-        <DataTable headers={["Proposal", "Lead", "Amount", "Status", "Updated", ""]}>
-          {proposals.map((p) => (
-            <tr key={p.id} className="hover:bg-[#f9fafb]">
-              <Td>
-                <p className="font-medium">{p.title}</p>
-                <p className="text-xs text-sb-muted">{p.createdBy.name}</p>
-              </Td>
-              <Td>{fullName(p.lead.firstName, p.lead.lastName)}</Td>
-              <Td>{formatCurrency(p.amount)}</Td>
-              <Td>
-                <StatusBadge tone={statusTone(p.status)}>{p.status}</StatusBadge>
-              </Td>
-              <Td>{formatDate(p.updatedAt)}</Td>
-              <Td>
-                <Link
-                  href={`/sales/leads/${p.lead.id}`}
-                  className="text-sm font-medium text-[#f97316]"
-                >
-                  Open lead
-                </Link>
-              </Td>
-            </tr>
-          ))}
-        </DataTable>
+        <InteractiveDataTable
+          searchPlaceholder="Search proposals…"
+          emptyMessage="No proposals match your search"
+          columns={[
+            { key: "proposal", label: "Proposal" },
+            { key: "lead", label: "Lead" },
+            { key: "amount", label: "Amount" },
+            { key: "status", label: "Status" },
+            { key: "updated", label: "Updated" },
+            { key: "actions", label: "", sortable: false },
+          ]}
+          rows={proposals.map((p) => {
+            const leadName = fullName(p.lead.firstName, p.lead.lastName);
+            return {
+              id: p.id,
+              searchText: [
+                p.title,
+                p.createdBy.name,
+                leadName,
+                p.status,
+                formatCurrency(p.amount),
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                proposal: p.title,
+                lead: leadName,
+                amount: Number(p.amount ?? 0),
+                status: p.status,
+                updated: p.updatedAt.getTime(),
+              },
+              cells: [
+                <Td key="proposal">
+                  <p className="font-medium">{p.title}</p>
+                  <p className="text-xs text-sb-muted">{p.createdBy.name}</p>
+                </Td>,
+                <Td key="lead">{leadName}</Td>,
+                <Td key="amount">{formatCurrency(p.amount)}</Td>,
+                <Td key="status">
+                  <StatusBadge tone={statusTone(p.status)}>{p.status}</StatusBadge>
+                </Td>,
+                <Td key="updated">{formatDate(p.updatedAt)}</Td>,
+                <Td key="actions">
+                  <Link
+                    href={`/sales/leads/${p.lead.id}`}
+                    className="text-sm font-medium text-[#f97316]"
+                  >
+                    Open lead
+                  </Link>
+                </Td>,
+              ],
+            };
+          })}
+        />
       )}
     </div>
   );

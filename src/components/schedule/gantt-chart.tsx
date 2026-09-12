@@ -12,6 +12,7 @@ import {
   format,
   max as maxDate,
   min as minDate,
+  parseISO,
   startOfDay,
   startOfWeek,
 } from "date-fns";
@@ -56,6 +57,10 @@ function toDate(value: Date | string) {
   return d;
 }
 
+function toInputDate(d: Date) {
+  return format(d, "yyyy-MM-dd");
+}
+
 function clampPct(n: number) {
   return Math.max(0, Math.min(100, n));
 }
@@ -95,6 +100,19 @@ export function GanttChart({
 }: GanttChartProps) {
   const [view, setView] = useState<ViewMode>(defaultView);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [hover, setHover] = useState<{
+    id: string;
+    title: string;
+    status: string;
+    assignee: string | null;
+    project: string | null;
+    dates: string;
+    progress: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const normalized = useMemo(
     () =>
@@ -118,16 +136,38 @@ export function GanttChart({
     });
   }, [normalized, collapsed]);
 
-  const range = useMemo(() => {
+  const dataRange = useMemo(() => {
     if (normalized.length === 0) {
       const start = startOfDay(new Date());
       return { start, end: addDays(start, 30) };
     }
     const start = minDate(normalized.map((t) => t.start));
     const end = maxDate(normalized.map((t) => t.end));
-    const padEnd = addDays(end, view === "month" ? 14 : 3);
-    return { start, end: padEnd };
+    return { start, end: addDays(end, view === "month" ? 14 : 3) };
   }, [normalized, view]);
+
+  const range = useMemo(() => {
+    const customStart = rangeFrom ? startOfDay(parseISO(rangeFrom)) : null;
+    const customEnd = rangeTo ? endOfDay(parseISO(rangeTo)) : null;
+    if (
+      customStart &&
+      customEnd &&
+      !Number.isNaN(customStart.getTime()) &&
+      !Number.isNaN(customEnd.getTime())
+    ) {
+      if (customEnd.getTime() >= customStart.getTime()) {
+        return { start: customStart, end: customEnd };
+      }
+      return { start: startOfDay(customEnd), end: endOfDay(customStart) };
+    }
+    if (customStart && !Number.isNaN(customStart.getTime())) {
+      return {
+        start: customStart,
+        end: addDays(customStart, view === "month" ? 60 : 30),
+      };
+    }
+    return dataRange;
+  }, [dataRange, rangeFrom, rangeTo, view]);
 
   const columns = useMemo(() => {
     if (view === "month") {
@@ -235,27 +275,75 @@ export function GanttChart({
     });
   }
 
+  function applyDataRange() {
+    setRangeFrom(toInputDate(dataRange.start));
+    setRangeTo(toInputDate(dataRange.end));
+  }
+
+  function clearCustomRange() {
+    setRangeFrom("");
+    setRangeTo("");
+  }
+
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface shadow-[var(--sb-shadow)]",
+        "relative overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface shadow-[var(--sb-shadow)]",
         className
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sb-border px-4 py-3">
-        <div className="sb-pill-toggle" role="tablist" aria-label="Timeline scale">
-          {(["day", "week", "month"] as ViewMode[]).map((mode) => (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="sb-pill-toggle" role="tablist" aria-label="Timeline scale">
+            {(["day", "week", "month"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={view === mode}
+                className={cn(view === mode && "is-active")}
+                onClick={() => setView(mode)}
+              >
+                {mode[0].toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-[11px] text-sb-muted">
+              From
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="mt-0.5 block h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px] text-sb-ink"
+              />
+            </label>
+            <label className="text-[11px] text-sb-muted">
+              To
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="mt-0.5 block h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px] text-sb-ink"
+              />
+            </label>
             <button
-              key={mode}
               type="button"
-              role="tab"
-              aria-selected={view === mode}
-              className={cn(view === mode && "is-active")}
-              onClick={() => setView(mode)}
+              onClick={applyDataRange}
+              className="h-8 rounded-[8px] border border-sb-border bg-white px-2.5 text-[12px] font-medium text-sb-ink hover:bg-sb-canvas"
             >
-              {mode[0].toUpperCase() + mode.slice(1)}
+              Fit tasks
             </button>
-          ))}
+            {rangeFrom || rangeTo ? (
+              <button
+                type="button"
+                onClick={clearCustomRange}
+                className="h-8 rounded-[8px] px-2 text-[12px] font-medium text-sb-muted hover:text-sb-ink"
+              >
+                Reset
+              </button>
+            ) : null}
+          </div>
         </div>
         <p className="text-xs text-sb-muted">
           {projectLabel ? (
@@ -375,7 +463,8 @@ export function GanttChart({
               })}
               {visible.length === 0 ? (
                 <div className="px-4 py-10 text-sm text-sb-muted">
-                  No schedule items yet.
+                  No tasks or schedule items yet. Add a task with start/due dates
+                  to see it here.
                 </div>
               ) : null}
             </div>
@@ -524,14 +613,35 @@ export function GanttChart({
                   return (
                     <div
                       key={task.id}
-                      className="absolute z-[15]"
+                      className="absolute z-[15] cursor-pointer"
                       style={{
                         top: idx * rowH + 14,
                         left: `${left}%`,
                         width: `${width}%`,
                         height: 24,
                       }}
-                      title={`${task.title}${task.assigneeName ? ` · ${task.assigneeName}` : ""} · ${STATUS_LABEL[task.status]} · ${format(task.start, "MMM d")} – ${format(task.end, "MMM d")} · ${Math.round(progress)}%${task.isCritical ? " · Critical" : ""}`}
+                      onMouseEnter={(e) => {
+                        const rect = (
+                          e.currentTarget as HTMLDivElement
+                        ).getBoundingClientRect();
+                        const parent = (
+                          e.currentTarget.closest(
+                            ".relative.overflow-hidden"
+                          ) as HTMLElement | null
+                        )?.getBoundingClientRect();
+                        setHover({
+                          id: task.id,
+                          title: task.title,
+                          status: STATUS_LABEL[task.status],
+                          assignee: task.assigneeName ?? null,
+                          project: task.projectName ?? null,
+                          dates: `${format(task.start, "MMM d, yyyy")} – ${format(task.end, "MMM d, yyyy")} (${days} day${days === 1 ? "" : "s"})`,
+                          progress: Math.round(progress),
+                          x: rect.left - (parent?.left ?? 0) + rect.width / 2,
+                          y: rect.top - (parent?.top ?? 0) - 8,
+                        });
+                      }}
+                      onMouseLeave={() => setHover(null)}
                     >
                       {task.href && !isPhase ? (
                         <Link href={task.href} className="block h-full">
@@ -585,6 +695,36 @@ export function GanttChart({
           ))}
         </div>
       </div>
+
+      {hover ? (
+        <div
+          className="pointer-events-none absolute z-50 w-64 -translate-x-1/2 -translate-y-full rounded-[12px] border border-sb-border bg-white p-3 text-left shadow-lg"
+          style={{ left: hover.x, top: hover.y }}
+          role="tooltip"
+        >
+          <p className="text-sm font-semibold text-sb-ink">{hover.title}</p>
+          <p className="mt-1 text-[12px] text-sb-muted">{hover.dates}</p>
+          <p className="mt-1 text-[12px] text-sb-muted">
+            Status: <span className="font-medium text-sb-ink">{hover.status}</span>
+          </p>
+          {hover.assignee ? (
+            <p className="mt-0.5 text-[12px] text-sb-muted">
+              Assignee:{" "}
+              <span className="font-medium text-sb-ink">{hover.assignee}</span>
+            </p>
+          ) : null}
+          {hover.project ? (
+            <p className="mt-0.5 text-[12px] text-sb-muted">
+              Project:{" "}
+              <span className="font-medium text-sb-ink">{hover.project}</span>
+            </p>
+          ) : null}
+          <p className="mt-0.5 text-[12px] text-sb-muted">
+            Progress:{" "}
+            <span className="font-medium text-sb-ink">{hover.progress}%</span>
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

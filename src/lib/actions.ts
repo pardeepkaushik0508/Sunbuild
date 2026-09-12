@@ -30,6 +30,7 @@ import {
   assertLeadAccess,
   assertContractAccess,
   assertCompanyUser,
+  assertCompanySubcontractor,
 } from "@/lib/session";
 import { deleteUpload, saveCompanyUpload, saveUpload } from "@/lib/storage";
 import {
@@ -59,6 +60,7 @@ import {
   leadFormSchema,
   rfiFormSchema,
   taskFormSchema,
+  taskUpdateFormSchema,
   warrantyFormSchema,
   changeOrderFormSchema,
   configureProjectFormSchema,
@@ -551,11 +553,39 @@ export async function confirmContractAction(contractId: string, form: FormData) 
   }
   if (pmId) await assertCompanyUser(session, pmId);
 
+  const createClientPortal = formString(form, "createClientPortal") === "1";
+  const clientLoginEmail = formString(form, "clientLoginEmail").toLowerCase();
+  const clientPassword = formString(form, "clientPassword");
+  const clientPasswordConfirm = formString(form, "clientPasswordConfirm");
+
+  const resolvedClientEmail = createClientPortal
+    ? (clientLoginEmail || (contract.buyerEmail || "").toLowerCase())
+    : "";
+  if (createClientPortal) {
+    if (!resolvedClientEmail) {
+      throw new AppError("Client email is required to create a client login");
+    }
+    if (!clientPassword) {
+      throw new AppError("Client password is required");
+    }
+    if (clientPassword !== clientPasswordConfirm) {
+      throw new AppError("Client passwords do not match");
+    }
+    const passwordPolicy = await getPasswordPolicy(
+      session.membership.companyId
+    );
+    const policyError = assertPasswordMeetsPolicy(
+      clientPassword,
+      passwordPolicy
+    );
+    if (policyError) throw new AppError(policyError);
+  }
+
   // If contract already linked to a project, verify access (already done) and
   // never allow retargeting to an arbitrary projectId from the client.
   let projectId = contract.projectId;
 
-  const resultProjectId = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const claimed = await tx.purchaseContract.updateMany({
       where: {
         id: contractId,
@@ -575,12 +605,17 @@ export async function confirmContractAction(contractId: string, form: FormData) 
         data: {
           firstName: contract.buyerFirstName,
           lastName: contract.buyerLastName,
-          email: contract.buyerEmail,
+          email: resolvedClientEmail || contract.buyerEmail,
           phone: contract.buyerPhone,
           mailingAddress: contract.buyerMailing,
         },
       });
       buyerId = buyer.id;
+    } else if (buyerId && createClientPortal && resolvedClientEmail) {
+      await tx.buyer.update({
+        where: { id: buyerId },
+        data: { email: resolvedClientEmail },
+      });
     }
 
     async function ensurePmAccess(targetProjectId: string, userId: string) {
@@ -645,6 +680,9 @@ export async function confirmContractAction(contractId: string, form: FormData) 
           pmId: pmId || undefined,
         },
       });
+      if (pmId) {
+        await ensurePmAccess(projectId, pmId);
+      }
     }
 
     for (let i = 1; i <= 3; i++) {
@@ -684,26 +722,178 @@ export async function confirmContractAction(contractId: string, form: FormData) 
       data: {
         projectId,
         buyerId,
+        ...(createClientPortal && resolvedClientEmail
+          ? { buyerEmail: resolvedClientEmail }
+          : {}),
       },
     });
 
-    return projectId!;
+    let clientUserId: string | null = null;
+    if (createClientPortal) {
+      const email = resolvedClientEmail;
+      const name = [contract.buyerFirstName, contract.buyerLastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || email.split("@")[0];
+      const companyId = session.membership.companyId;
+      const { hashPassword } = await import("better-auth/crypto");
+
+      let user = await tx.user.findUnique({ where: { email } });
+      if (!user) {
+        user = await tx.user.create({
+          data: {
+            email,
+            name,
+            phone: contract.buyerPhone || null,
+            emailVerified: true,
+            isActive: true,
+          },
+        });
+        await tx.account.create({
+          data: {
+            userId: user.id,
+            accountId: user.id,
+            providerId: "credential",
+            password: await hashPassword(clientPassword),
+          },
+        });
+      } else {
+        const existingClient = await tx.membership.findFirst({
+          where: {
+            userId: user.id,
+            companyId,
+            role: Role.CLIENT,
+          },
+        });
+        const otherMembership = await tx.membership.findFirst({
+          where: {
+            userId: user.id,
+            companyId,
+            role: { not: Role.CLIENT },
+          },
+        });
+        if (otherMembership && !existingClient) {
+          throw new AppError(
+            "This email already belongs to a non-client user in the company"
+          );
+        }
+        const hashed = await hashPassword(clientPassword);
+        const existingAcct = await tx.account.findFirst({
+          where: { userId: user.id, providerId: "credential" },
+        });
+        if (existingAcct) {
+          await tx.account.update({
+            where: { id: existingAcct.id },
+            data: { password: hashed },
+          });
+        } else {
+          await tx.account.create({
+            data: {
+              userId: user.id,
+              accountId: user.id,
+              providerId: "credential",
+              password: hashed,
+            },
+          });
+        }
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            name,
+            phone: contract.buyerPhone || user.phone,
+            isActive: true,
+          },
+        });
+        await tx.session.deleteMany({ where: { userId: user.id } });
+      }
+
+      const flags = membershipFlagsForRole(Role.CLIENT);
+      await tx.membership.upsert({
+        where: {
+          userId_companyId_role: {
+            userId: user.id,
+            companyId,
+            role: Role.CLIENT,
+          },
+        },
+        update: { isActive: true, ...flags },
+        create: {
+          userId: user.id,
+          companyId,
+          role: Role.CLIENT,
+          isActive: true,
+          ...flags,
+        },
+      });
+
+      await tx.projectAccess.upsert({
+        where: {
+          projectId_userId: { projectId: projectId!, userId: user.id },
+        },
+        update: { role: Role.CLIENT, canEdit: false },
+        create: {
+          projectId: projectId!,
+          userId: user.id,
+          role: Role.CLIENT,
+          canEdit: false,
+        },
+      });
+
+      if (buyerId) {
+        await tx.buyer.update({
+          where: { id: buyerId },
+          data: { userId: user.id, email },
+        });
+      }
+
+      clientUserId = user.id;
+    }
+
+    return {
+      projectId: projectId!,
+      clientUserId,
+      clientEmail: createClientPortal ? resolvedClientEmail || null : null,
+    };
   });
 
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
-    projectId: resultProjectId,
+    projectId: result.projectId,
     action: "CONTRACT_CONFIRMED",
     entityType: "PurchaseContract",
     entityId: contractId,
+    metadata: {
+      clientUserId: result.clientUserId,
+      clientPortal: Boolean(result.clientUserId),
+    },
   });
 
-  revalidateJobsSurfaces(resultProjectId);
-  await redirectWithToast(
-    `/pm/projects/${resultProjectId}`,
-    "Project created successfully"
-  );
+  if (result.clientUserId) {
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      projectId: result.projectId,
+      action: "USER_INVITED",
+      entityType: "User",
+      entityId: result.clientUserId,
+      metadata: {
+        email: result.clientEmail,
+        role: Role.CLIENT,
+        source: "contract_confirm",
+      },
+    });
+  }
+
+  revalidateJobsSurfaces(result.projectId);
+  revalidatePath("/client");
+  revalidatePath("/owner/users");
+
+  const toastMsg = result.clientUserId
+    ? `Project created. Client can log in with ${result.clientEmail}.`
+    : "Project created successfully";
+
+  await redirectWithToast(`/pm/projects/${result.projectId}`, toastMsg);
 }
 
 export async function createTaskAction(form: FormData) {
@@ -716,7 +906,7 @@ export async function createTaskAction(form: FormData) {
   }
   const data = parsed.data;
   await assertProjectAccess(session, data.projectId);
-  if (data.assigneeId) await assertCompanyUser(session, data.assigneeId);
+  if (data.assigneeId) await assertCompanySubcontractor(session, data.assigneeId);
 
   const task = await prisma.task.create({
     data: {
@@ -743,9 +933,79 @@ export async function createTaskAction(form: FormData) {
     });
   }
 
+  await refreshProjectProgress(task.projectId);
   revalidatePath("/pm/tasks");
   revalidatePath("/pm");
   revalidatePath("/owner");
+  return task.id;
+}
+
+export async function updateTaskAction(form: FormData) {
+  const session = await requireSession();
+  requireCapability(session, "manageTasks");
+  await rateLimitAction(session.user.id, "task-update");
+  const parsed = taskUpdateFormSchema.safeParse(formDataToObject(form));
+  if (!parsed.success) {
+    throw new AppError(parsed.error.issues[0]?.message || "Invalid task data");
+  }
+  const data = parsed.data;
+
+  const existing = await prisma.task.findUnique({ where: { id: data.taskId } });
+  if (!existing) throw new AppError("Task not found");
+
+  await assertProjectAccess(session, existing.projectId);
+  await assertProjectAccess(session, data.projectId);
+  if (data.assigneeId) await assertCompanySubcontractor(session, data.assigneeId);
+
+  if (!Object.values(Priority).includes(data.priority as Priority)) {
+    throw new AppError("Invalid priority");
+  }
+  if (!Object.values(TaskStatus).includes(data.status as TaskStatus)) {
+    throw new AppError("Invalid status");
+  }
+
+  const status = data.status as TaskStatus;
+  const nextDue = data.dueDate ? new Date(data.dueDate) : null;
+  const nextAssignee = data.assigneeId || null;
+
+  const task = await prisma.task.update({
+    where: { id: data.taskId },
+    data: {
+      projectId: data.projectId,
+      title: data.title,
+      description: data.description || null,
+      priority: data.priority as Priority,
+      status,
+      dueDate: nextDue,
+      startDate: data.startDate ? new Date(data.startDate) : null,
+      assigneeId: nextAssignee,
+      completedAt:
+        status === TaskStatus.DONE
+          ? existing.completedAt ?? new Date()
+          : null,
+    },
+  });
+
+  if (task.dueDate) {
+    const googleUserId = task.assigneeId || session.user.id;
+    const { syncTaskToGoogle } = await import("@/lib/google/sync");
+    await syncTaskToGoogle({
+      googleUserId,
+      companyId: session.membership.companyId,
+      taskId: task.id,
+    });
+  }
+
+  await refreshProjectProgress(task.projectId);
+  revalidatePath("/pm/tasks");
+  revalidatePath("/pm");
+  revalidatePath("/owner");
+  revalidatePath("/sub");
+  revalidatePath(`/pm/projects/${existing.projectId}`);
+  if (existing.projectId !== task.projectId) {
+    revalidatePath(`/pm/projects/${task.projectId}`);
+    await refreshProjectProgress(existing.projectId);
+  }
   return task.id;
 }
 
@@ -772,6 +1032,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
       completedAt: status === TaskStatus.DONE ? new Date() : null,
     },
   });
+  await refreshProjectProgress(task.projectId);
   revalidatePath("/pm/tasks");
   revalidatePath("/pm");
   revalidatePath("/owner");
@@ -882,7 +1143,7 @@ export async function createScheduleItemAction(form: FormData) {
 }
 
 async function refreshProjectProgress(projectId: string) {
-  const [milestones, scheduleItems] = await Promise.all([
+  const [milestones, scheduleItems, tasks] = await Promise.all([
     prisma.milestone.findMany({
       where: { projectId },
       select: { status: true },
@@ -891,12 +1152,18 @@ async function refreshProjectProgress(projectId: string) {
       where: { projectId },
       select: { status: true },
     }),
+    prisma.task.findMany({
+      where: { projectId },
+      select: { status: true },
+    }),
   ]);
-  const { deriveProgressFromItems } = await import("@/lib/dashboard/progress");
-  const progressPercent = deriveProgressFromItems([
-    ...milestones,
-    ...scheduleItems,
-  ]);
+  const { computeProjectProgress } = await import("@/lib/dashboard/progress");
+  const progressPercent = computeProjectProgress({
+    progressPercent: 0,
+    milestones,
+    scheduleItems,
+    tasks,
+  });
   await prisma.project.update({
     where: { id: projectId },
     data: { progressPercent },

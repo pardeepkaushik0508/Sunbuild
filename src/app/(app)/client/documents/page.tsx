@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { DocumentVisibility, Role } from "@prisma/client";
 import { PageHeader, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
@@ -18,7 +19,7 @@ export default async function ClientDocumentsPage() {
     },
     include: { project: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: 500,
   });
 
   return (
@@ -38,14 +39,35 @@ export default async function ClientDocumentsPage() {
       {documents.length === 0 ? (
         <EmptyState title="No documents shared yet" />
       ) : (
-        <DataTable headers={["Title", "Project", "Category", "Uploaded", "File"]}>
-          {documents.map((doc) => (
-            <tr key={doc.id}>
-              <Td className="font-medium">{doc.title}</Td>
-              <Td>{doc.project.name}</Td>
-              <Td>{doc.category}</Td>
-              <Td>{formatDate(doc.createdAt)}</Td>
-              <Td>
+        <InteractiveDataTable
+          searchPlaceholder="Search documents…"
+          emptyMessage="No documents match your search"
+          columns={[
+            { key: "title", label: "Title" },
+            { key: "project", label: "Project" },
+            { key: "category", label: "Category" },
+            { key: "uploaded", label: "Uploaded" },
+            { key: "file", label: "File", sortable: false },
+          ]}
+          rows={documents.map((doc) => ({
+            id: doc.id,
+            searchText: [doc.title, doc.project.name, doc.category, doc.fileName]
+              .filter(Boolean)
+              .join(" "),
+            sortValues: {
+              title: doc.title,
+              project: doc.project.name,
+              category: doc.category,
+              uploaded: doc.createdAt.getTime(),
+            },
+            cells: [
+              <Td key="title" className="font-medium">
+                {doc.title}
+              </Td>,
+              <Td key="project">{doc.project.name}</Td>,
+              <Td key="category">{doc.category}</Td>,
+              <Td key="uploaded">{formatDate(doc.createdAt)}</Td>,
+              <Td key="file">
                 <a
                   href={`/api/files/${doc.filePath}`}
                   className="text-sm underline hover:text-sb-yellow-dark"
@@ -54,10 +76,10 @@ export default async function ClientDocumentsPage() {
                 >
                   {doc.fileName}
                 </a>
-              </Td>
-            </tr>
-          ))}
-        </DataTable>
+              </Td>,
+            ],
+          }))}
+        />
       )}
     </div>
   );

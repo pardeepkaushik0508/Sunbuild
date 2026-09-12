@@ -8,8 +8,17 @@ const publicPaths = [
   "/forgot-password",
   "/reset-password",
   "/invite",
+  "/privacy",
+  "/terms",
   "/api/auth",
 ];
+
+function isPublicPath(pathname: string) {
+  if (pathname === "/") return true;
+  return publicPaths.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
+}
 
 function applySecurityHeaders(response: NextResponse) {
   response.headers.set("X-Content-Type-Options", "nosniff");
@@ -42,9 +51,7 @@ function applyNoStore(response: NextResponse) {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = publicPaths.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`)
-  );
+  const isPublic = isPublicPath(pathname);
 
   if (
     isPublic ||

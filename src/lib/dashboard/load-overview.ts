@@ -11,7 +11,7 @@ import {
   depositOpenStatuses,
 } from "@/lib/insights";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
-import { buildGanttTree } from "@/lib/dashboard/gantt-tree";
+import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import {
   loadCompanyOverviewStats,
   resolveOwnerCompanies,
@@ -129,7 +129,6 @@ export async function loadOverviewDashboardData(input: {
     projectIds = scoped.map((p) => p.id);
   }
 
-  const weekAhead = new Date(Date.now() + 7 * 86400000);
   const companyId = selectedCompanyId;
 
   const [
@@ -174,6 +173,7 @@ export async function loadOverviewDashboardData(input: {
       include: {
         milestones: { select: { status: true } },
         scheduleItems: { select: { status: true } },
+        tasks: { select: { status: true } },
         buyer: true,
         deposits: {
           where: { status: { in: depositOpenStatuses() } },
@@ -201,21 +201,14 @@ export async function loadOverviewDashboardData(input: {
     prisma.task.findMany({
       where: {
         projectId: { in: projectIds },
-        status: {
-          in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED],
-        },
-        OR: [
-          { priority: Priority.HIGH },
-          { dueDate: { lte: weekAhead } },
-          { dueDate: null },
-        ],
+        status: { not: TaskStatus.CANCELLED },
       },
       include: {
         assignee: { select: { name: true } },
         project: { select: { id: true, name: true } },
       },
-      orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-      take: 40,
+      orderBy: [{ priority: "desc" }, { dueDate: "asc" }, { updatedAt: "desc" }],
+      take: 120,
     }),
     prisma.scheduleItem.findMany({
       where: { projectId: { in: projectIds } },
@@ -265,15 +258,10 @@ export async function loadOverviewDashboardData(input: {
       where: {
         companyId: { in: companyIdsForStats },
         isActive: true,
-        role: {
-          in: [
-            Role.PROJECT_MANAGER,
-            Role.SUBCONTRACTOR,
-            Role.OPERATIONS_ADMIN,
-          ],
-        },
+        role: Role.SUBCONTRACTOR,
       },
       include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: "asc" } },
     }),
     prisma.project.count({
       where: {
@@ -304,6 +292,7 @@ export async function loadOverviewDashboardData(input: {
       progressPercent: p.progressPercent,
       scheduleItems: p.scheduleItems,
       milestones: p.milestones,
+      tasks: p.tasks,
     }),
     href: `/pm/projects/${p.id}`,
     status: p.status,
@@ -320,9 +309,12 @@ export async function loadOverviewDashboardData(input: {
   const scheduleForGantt = scheduleAll.filter((s) =>
     selectedId ? s.projectId === selectedId : true
   );
+  const tasksForGantt = tasks.filter((t) =>
+    selectedId ? t.projectId === selectedId : true
+  );
 
-  const ganttTasks = buildGanttTree(
-    scheduleForGantt.map((item) => ({
+  const ganttTasks = buildGanttTree([
+    ...scheduleForGantt.map((item) => ({
       id: item.id,
       title: item.title,
       trade: item.trade,
@@ -332,7 +324,28 @@ export async function loadOverviewDashboardData(input: {
       dependsOnId: item.dependsOnId,
       assigneeName: item.assigneeName,
       projectName: item.project.name,
-    }))
+      href: `/pm/schedule?projectId=${item.projectId}`,
+    })),
+    ...tasksToScheduleRows(
+      tasksForGantt.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        startDate: t.startDate,
+        dueDate: t.dueDate,
+        createdAt: t.createdAt,
+        assigneeName: t.assignee?.name ?? null,
+        projectName: t.project.name,
+        projectId: t.project.id,
+      }))
+    ),
+  ]);
+
+  const todoTasks = tasks.filter(
+    (t) =>
+      t.status === TaskStatus.TODO ||
+      t.status === TaskStatus.IN_PROGRESS ||
+      t.status === TaskStatus.BLOCKED
   );
 
   const progressPercent = selected
@@ -340,6 +353,7 @@ export async function loadOverviewDashboardData(input: {
         progressPercent: selected.progressPercent,
         scheduleItems: selected.scheduleItems,
         milestones: selected.milestones,
+        tasks: selected.tasks,
       })
     : 0;
 
@@ -439,7 +453,7 @@ export async function loadOverviewDashboardData(input: {
     selectedProjectName: selected?.name ?? null,
     selectedCompanyId,
     highPriority: [],
-    todos: tasks.map(mapTask),
+    todos: todoTasks.map(mapTask),
     calendarEvents: mergedCalendar.events,
     googleCalendarConnected: googleConnection.connected,
     googleReconnectRequired:

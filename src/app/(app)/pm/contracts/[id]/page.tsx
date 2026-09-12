@@ -14,6 +14,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { ClientPortalFields } from "@/components/contracts/client-portal-fields";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -246,6 +247,10 @@ export default async function PMContractDetailPage({ params }: PageProps) {
             <FormField label="Condition due date">
               <Input name="conditionDue" type="date" />
             </FormField>
+            <ClientPortalFields
+              defaultEmail={contract.buyerEmail}
+              defaultChecked={Boolean(contract.buyerEmail)}
+            />
             <div className="md:col-span-2">
               <p className="mb-2 text-sm text-sb-muted">
                 Price: {formatCurrency(contract.purchasePrice)}

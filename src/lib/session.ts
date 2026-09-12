@@ -321,6 +321,25 @@ export async function assertContractAccess(
   return contract;
 }
 
+/** Target user must be an active Subcontractor in the actor's company. */
+export async function assertCompanySubcontractor(
+  session: AppSession,
+  userId: string
+) {
+  const membership = await prisma.membership.findFirst({
+    where: {
+      userId,
+      companyId: session.membership.companyId,
+      isActive: true,
+      role: Role.SUBCONTRACTOR,
+    },
+  });
+  if (!membership) {
+    throw new ForbiddenError("Assignee must be a subcontractor");
+  }
+  return membership;
+}
+
 /** Target user must share an active membership in the actor's company. */
 export async function assertCompanyUser(session: AppSession, userId: string) {
   const membership = await prisma.membership.findFirst({

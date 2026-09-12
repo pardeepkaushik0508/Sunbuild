@@ -112,6 +112,11 @@ export const taskFormSchema = z.object({
   assigneeId: z.string().optional().or(z.literal("")),
 });
 
+export const taskUpdateFormSchema = taskFormSchema.extend({
+  taskId: requiredText("Task"),
+  status: requiredText("Status"),
+});
+
 export const invoiceFormSchema = z.object({
   projectId: requiredText("Project"),
   invoiceNumber: requiredText("Invoice number", 1, 60),

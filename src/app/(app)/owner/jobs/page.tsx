@@ -29,6 +29,7 @@ export default async function OwnerJobsPage({ searchParams }: PageProps) {
     status: param(sp.status),
     sort: param(sp.sort),
     page: param(sp.page),
+    pageSize: param(sp.pageSize),
     pmId: param(sp.pmId),
     clientId: param(sp.clientId),
   });

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Role } from "@prisma/client";
 import { PageHeader, EmptyState, Card } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
@@ -55,7 +56,7 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
         author: { select: { id: true, name: true } },
       },
       orderBy: { logDate: "desc" },
-      take: 100,
+      take: 500,
     }),
     prisma.project.findMany({
       where: { id: { in: projectIds } },
@@ -152,29 +153,64 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
           description="Daily logs submitted by subcontractors for their assigned projects will appear here."
         />
       ) : (
-        <DataTable headers={["Date", "Project", "Subcontractor", "Status", "Work Completed", "Notes"]}>
-          {logs.map((log) => (
-            <tr key={log.id}>
-              <Td className="whitespace-nowrap font-medium">{formatDate(log.logDate)}</Td>
-              <Td>
+        <InteractiveDataTable
+          searchPlaceholder="Search daily logs…"
+          emptyMessage="No daily logs match your search"
+          columns={[
+            { key: "date", label: "Date" },
+            { key: "project", label: "Project" },
+            { key: "sub", label: "Subcontractor" },
+            { key: "status", label: "Status" },
+            { key: "work", label: "Work Completed" },
+            { key: "notes", label: "Notes" },
+          ]}
+          rows={logs.map((log) => ({
+            id: log.id,
+            searchText: [
+              formatDate(log.logDate),
+              log.project.name,
+              log.author.name,
+              log.status,
+              log.workCompleted,
+              log.siteNotes,
+            ]
+              .filter(Boolean)
+              .join(" "),
+            sortValues: {
+              date: log.logDate.getTime(),
+              project: log.project.name,
+              sub: log.author.name,
+              status: log.status,
+              work: log.workCompleted ?? "",
+              notes: log.siteNotes ?? "",
+            },
+            cells: [
+              <Td key="date" className="whitespace-nowrap font-medium">
+                {formatDate(log.logDate)}
+              </Td>,
+              <Td key="project">
                 <Link
                   href={`/pm/projects/${log.project.id}`}
                   className="hover:underline text-sb-text font-medium"
                 >
                   {log.project.name}
                 </Link>
-              </Td>
-              <Td>{log.author.name}</Td>
-              <Td>
+              </Td>,
+              <Td key="sub">{log.author.name}</Td>,
+              <Td key="status">
                 <StatusBadge tone={log.status === "SUBMITTED" ? "green" : "neutral"}>
                   {log.status}
                 </StatusBadge>
-              </Td>
-              <Td className="max-w-xs truncate">{log.workCompleted ?? "—"}</Td>
-              <Td className="max-w-xs truncate text-sb-muted">{log.siteNotes ?? "—"}</Td>
-            </tr>
-          ))}
-        </DataTable>
+              </Td>,
+              <Td key="work" className="max-w-xs truncate">
+                {log.workCompleted ?? "—"}
+              </Td>,
+              <Td key="notes" className="max-w-xs truncate text-sb-muted">
+                {log.siteNotes ?? "—"}
+              </Td>,
+            ],
+          }))}
+        />
       )}
     </div>
   );

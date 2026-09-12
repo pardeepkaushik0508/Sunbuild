@@ -90,6 +90,7 @@ export function JobsManagementDashboard({ data }: { data: JobsDashboardData }) {
             ))}
             <JobsPagination
               page={data.page}
+              pageSize={data.pageSize}
               totalPages={data.totalPages}
               totalCount={data.totalCount}
             />

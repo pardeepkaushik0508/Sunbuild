@@ -12,14 +12,21 @@ type PageProps = {
     projectId?: string;
     sort?: string;
     page?: string;
+    pageSize?: string;
   }>;
 };
+
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 25, 50] as const;
 
 export default async function OwnerUsersPage({ searchParams }: PageProps) {
   const session = await requireRole([Role.OWNER, Role.OPERATIONS_ADMIN]);
   const params = await searchParams;
 
   const page = Number.parseInt(params.page ?? "1", 10);
+  const rawPageSize = Number.parseInt(params.pageSize ?? "20", 10);
+  const pageSize = (PAGE_SIZE_OPTIONS as readonly number[]).includes(rawPageSize)
+    ? rawPageSize
+    : 20;
   const role =
     params.role && (Object.values(Role) as string[]).includes(params.role)
       ? (params.role as Role)
@@ -44,7 +51,7 @@ export default async function OwnerUsersPage({ searchParams }: PageProps) {
       | "created"
       | undefined,
     page: Number.isFinite(page) ? page : 1,
-    pageSize: 20,
+    pageSize,
   });
 
   return <ManageUsersDashboard data={data} />;

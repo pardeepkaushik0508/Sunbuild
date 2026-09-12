@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Priority, Role, RfiStatus } from "@prisma/client";
 import { createRfiAction, answerRfiAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";

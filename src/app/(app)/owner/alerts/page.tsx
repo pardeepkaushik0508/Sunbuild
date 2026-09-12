@@ -8,7 +8,8 @@ import {
 } from "@prisma/client";
 import { OwnerTabs } from "@/components/owner/owner-tabs";
 import { PageHeader, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
@@ -33,7 +34,7 @@ export default async function OwnerAlertsPage() {
         { dueDate: "asc" },
         { createdAt: "desc" },
       ],
-      take: 40,
+      take: 500,
     }),
     prisma.rFI.findMany({
       where: {
@@ -42,7 +43,7 @@ export default async function OwnerAlertsPage() {
       },
       include: { project: { select: { id: true, name: true } } },
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-      take: 20,
+      take: 500,
     }),
     prisma.deposit.findMany({
       where: {
@@ -57,7 +58,7 @@ export default async function OwnerAlertsPage() {
       },
       include: { project: { select: { id: true, name: true } } },
       orderBy: { dueDate: "asc" },
-      take: 20,
+      take: 500,
     }),
   ]);
 
@@ -86,66 +87,115 @@ export default async function OwnerAlertsPage() {
           <h2 className="mb-3 text-lg font-semibold text-sb-ink">
             High priority tasks
           </h2>
-          <DataTable headers={["Task", "Project", "Priority", "Status", "Due"]}>
-            {highPriorityTasks.map((task) => (
-              <tr key={task.id}>
-                <Td>
+          <InteractiveDataTable
+            searchPlaceholder="Search tasks…"
+            emptyMessage="No high priority tasks found"
+            columns={[
+              { key: "task", label: "Task" },
+              { key: "project", label: "Project" },
+              { key: "priority", label: "Priority" },
+              { key: "status", label: "Status" },
+              { key: "due", label: "Due" },
+            ]}
+            rows={highPriorityTasks.map((task) => ({
+              id: task.id,
+              searchText: [
+                task.title,
+                task.project.name,
+                task.priority,
+                task.status,
+                formatDate(task.dueDate),
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                task: task.title,
+                project: task.project.name,
+                priority: task.priority,
+                status: task.status,
+                due: task.dueDate?.getTime() ?? 0,
+              },
+              cells: [
+                <Td key="task">
                   <Link
                     href={`/pm/tasks?projectId=${task.project.id}`}
                     className="font-medium text-sb-ink hover:underline"
                   >
                     {task.title}
                   </Link>
-                </Td>
-                <Td>
+                </Td>,
+                <Td key="project">
                   <Link
                     href={`/pm/projects/${task.project.id}`}
                     className="text-sb-ink hover:underline"
                   >
                     {task.project.name}
                   </Link>
-                </Td>
-                <Td>
+                </Td>,
+                <Td key="priority">
                   <StatusBadge tone={statusTone(task.priority)}>
                     {task.priority}
                   </StatusBadge>
-                </Td>
-                <Td>
+                </Td>,
+                <Td key="status">
                   <StatusBadge tone={statusTone(task.status)}>
                     {task.status.replace(/_/g, " ")}
                   </StatusBadge>
-                </Td>
-                <Td>{formatDate(task.dueDate)}</Td>
-              </tr>
-            ))}
-          </DataTable>
+                </Td>,
+                <Td key="due">{formatDate(task.dueDate)}</Td>,
+              ],
+            }))}
+          />
         </section>
       ) : null}
 
       {openRfis.length > 0 ? (
         <section>
           <h2 className="mb-3 text-lg font-semibold text-sb-ink">Open RFIs</h2>
-          <DataTable headers={["RFI", "Project", "Priority", "Due"]}>
-            {openRfis.map((rfi) => (
-              <tr key={rfi.id}>
-                <Td>{rfi.title}</Td>
-                <Td>
+          <InteractiveDataTable
+            searchPlaceholder="Search RFIs…"
+            emptyMessage="No open RFIs found"
+            columns={[
+              { key: "rfi", label: "RFI" },
+              { key: "project", label: "Project" },
+              { key: "priority", label: "Priority" },
+              { key: "due", label: "Due" },
+            ]}
+            rows={openRfis.map((rfi) => ({
+              id: rfi.id,
+              searchText: [
+                rfi.title,
+                rfi.project.name,
+                rfi.priority,
+                formatDate(rfi.dueDate),
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                rfi: rfi.title,
+                project: rfi.project.name,
+                priority: rfi.priority,
+                due: rfi.dueDate?.getTime() ?? 0,
+              },
+              cells: [
+                <Td key="rfi">{rfi.title}</Td>,
+                <Td key="project">
                   <Link
                     href={`/pm/projects/${rfi.project.id}`}
                     className="text-sb-ink hover:underline"
                   >
                     {rfi.project.name}
                   </Link>
-                </Td>
-                <Td>
+                </Td>,
+                <Td key="priority">
                   <StatusBadge tone={statusTone(rfi.priority)}>
                     {rfi.priority}
                   </StatusBadge>
-                </Td>
-                <Td>{formatDate(rfi.dueDate)}</Td>
-              </tr>
-            ))}
-          </DataTable>
+                </Td>,
+                <Td key="due">{formatDate(rfi.dueDate)}</Td>,
+              ],
+            }))}
+          />
         </section>
       ) : null}
 
@@ -154,11 +204,37 @@ export default async function OwnerAlertsPage() {
           <h2 className="mb-3 text-lg font-semibold text-sb-ink">
             Overdue deposits
           </h2>
-          <DataTable headers={["Label", "Project", "Amount", "Due", "Status"]}>
-            {overdueDeposits.map((deposit) => (
-              <tr key={deposit.id}>
-                <Td>{deposit.label}</Td>
-                <Td>
+          <InteractiveDataTable
+            searchPlaceholder="Search deposits…"
+            emptyMessage="No overdue deposits found"
+            columns={[
+              { key: "label", label: "Label" },
+              { key: "project", label: "Project" },
+              { key: "amount", label: "Amount" },
+              { key: "due", label: "Due" },
+              { key: "status", label: "Status" },
+            ]}
+            rows={overdueDeposits.map((deposit) => ({
+              id: deposit.id,
+              searchText: [
+                deposit.label,
+                deposit.project?.name,
+                deposit.status,
+                formatCurrency(deposit.amount),
+                formatDate(deposit.dueDate),
+              ]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                label: deposit.label,
+                project: deposit.project?.name ?? "",
+                amount: Number(deposit.amount),
+                due: deposit.dueDate?.getTime() ?? 0,
+                status: deposit.status,
+              },
+              cells: [
+                <Td key="label">{deposit.label}</Td>,
+                <Td key="project">
                   {deposit.project ? (
                     <Link
                       href={`/pm/projects/${deposit.project.id}`}
@@ -169,17 +245,17 @@ export default async function OwnerAlertsPage() {
                   ) : (
                     "—"
                   )}
-                </Td>
-                <Td>{formatCurrency(deposit.amount)}</Td>
-                <Td>{formatDate(deposit.dueDate)}</Td>
-                <Td>
+                </Td>,
+                <Td key="amount">{formatCurrency(deposit.amount)}</Td>,
+                <Td key="due">{formatDate(deposit.dueDate)}</Td>,
+                <Td key="status">
                   <StatusBadge tone={statusTone(deposit.status)}>
                     {deposit.status}
                   </StatusBadge>
-                </Td>
-              </tr>
-            ))}
-          </DataTable>
+                </Td>,
+              ],
+            }))}
+          />
         </section>
       ) : null}
     </div>

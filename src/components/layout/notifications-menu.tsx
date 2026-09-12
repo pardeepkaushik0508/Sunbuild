@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,10 +15,16 @@ type NotificationItem = {
 };
 
 export function NotificationsMenu() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const viewAllHref = pathname.startsWith("/sub")
+    ? "/sub"
+    : pathname.startsWith("/pm")
+      ? "/pm/tasks"
+      : "/owner/alerts";
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -79,7 +86,7 @@ export function NotificationsMenu() {
           <div className="flex items-center justify-between border-b border-sb-border px-4 py-3">
             <p className="text-sm font-semibold text-sb-ink">Notifications</p>
             <Link
-              href="/owner/alerts"
+              href={viewAllHref}
               onClick={() => setOpen(false)}
               className="text-[12px] font-medium text-sb-blue hover:underline"
             >

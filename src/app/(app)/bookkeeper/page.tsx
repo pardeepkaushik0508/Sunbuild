@@ -2,7 +2,8 @@ import Link from "next/link";
 import { InvoiceStatus, Role } from "@prisma/client";
 import { PageHeader, MetricCard, Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { MetricBarChart, StatusDonutChart } from "@/components/dashboard/charts-lazy";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
@@ -121,31 +122,53 @@ export default async function BookkeeperOverviewPage() {
               Manage all
             </Link>
           </div>
-          <DataTable
-            headers={["Invoice", "Project", "Amount", "Due", "Status"]}
-            className="border-0 shadow-none"
-          >
-            {invoices.map((inv) => (
-              <tr key={inv.id} className="hover:bg-[#f9fafb]">
-                <Td className="font-medium">{inv.invoiceNumber}</Td>
-                <Td>
+          <InteractiveDataTable
+            searchPlaceholder="Search invoices…"
+            emptyMessage="No invoices found"
+            defaultPageSize={5}
+            pageSizeOptions={[5, 10, 25]}
+            tableClassName="border-0 shadow-none rounded-none"
+            columns={[
+              { key: "invoice", label: "Invoice" },
+              { key: "project", label: "Project" },
+              { key: "amount", label: "Amount" },
+              { key: "due", label: "Due" },
+              { key: "status", label: "Status" },
+            ]}
+            rows={invoices.map((inv) => ({
+              id: inv.id,
+              searchText: [inv.invoiceNumber, inv.project.name, inv.status]
+                .filter(Boolean)
+                .join(" "),
+              sortValues: {
+                invoice: inv.invoiceNumber,
+                project: inv.project.name,
+                amount: Number(inv.amount),
+                due: inv.dueDate?.getTime() ?? 0,
+                status: inv.status,
+              },
+              cells: [
+                <Td key="invoice" className="font-medium">
+                  {inv.invoiceNumber}
+                </Td>,
+                <Td key="project">
                   <Link
                     href={`/pm/projects/${inv.project.id}`}
                     className="hover:text-[#f97316]"
                   >
                     {inv.project.name}
                   </Link>
-                </Td>
-                <Td>{formatCurrency(inv.amount)}</Td>
-                <Td>{formatDate(inv.dueDate)}</Td>
-                <Td>
+                </Td>,
+                <Td key="amount">{formatCurrency(inv.amount)}</Td>,
+                <Td key="due">{formatDate(inv.dueDate)}</Td>,
+                <Td key="status">
                   <StatusBadge tone={statusTone(inv.status)}>
                     {inv.status}
                   </StatusBadge>
-                </Td>
-              </tr>
-            ))}
-          </DataTable>
+                </Td>,
+              ],
+            }))}
+          />
         </Card>
 
         <Card>

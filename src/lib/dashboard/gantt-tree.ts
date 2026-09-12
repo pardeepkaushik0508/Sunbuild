@@ -1,6 +1,8 @@
 import { differenceInCalendarDays, max as maxDate, min as minDate } from "date-fns";
 import {
   mapScheduleStatus,
+  mapTaskStatus,
+  resolveTaskGanttDates,
   type GanttTask,
   type GanttTaskStatus,
 } from "@/lib/schedule/gantt-status";
@@ -15,7 +17,55 @@ export type ScheduleRow = {
   dependsOnId: string | null;
   assigneeName: string | null;
   projectName?: string | null;
+  href?: string | null;
 };
+
+export type TaskGanttSource = {
+  id: string;
+  title: string;
+  status: string;
+  startDate?: Date | null;
+  dueDate?: Date | null;
+  createdAt?: Date | null;
+  assigneeName?: string | null;
+  projectName?: string | null;
+  projectId?: string | null;
+};
+
+/** Convert app Tasks into ScheduleRow entries under a "Tasks" phase. */
+export function tasksToScheduleRows(tasks: TaskGanttSource[]): ScheduleRow[] {
+  const rows: ScheduleRow[] = [];
+  for (const task of tasks) {
+    if (task.status === "CANCELLED") continue;
+    const dates = resolveTaskGanttDates(task);
+    if (!dates) continue;
+    // Use schedule-compatible status labels so buildGanttTree progress counts work
+    const ganttStatus = mapTaskStatus(task.status, dates.end);
+    const scheduleStatus =
+      ganttStatus === "COMPLETED"
+        ? "COMPLETED"
+        : ganttStatus === "IN_PROGRESS"
+          ? "IN_PROGRESS"
+          : ganttStatus === "AT_RISK"
+            ? "DELAYED"
+            : "PLANNED";
+    rows.push({
+      id: `task:${task.id}`,
+      title: task.title,
+      trade: "Tasks",
+      startDate: dates.start,
+      endDate: dates.end,
+      status: scheduleStatus,
+      dependsOnId: null,
+      assigneeName: task.assigneeName ?? null,
+      projectName: task.projectName ?? null,
+      href: task.projectId
+        ? `/pm/tasks?projectId=${task.projectId}`
+        : "/pm/tasks",
+    });
+  }
+  return rows;
+}
 
 /**
  * Build hierarchical Gantt rows: trade groups become expandable phases,
@@ -83,6 +133,7 @@ export function buildGanttTree(items: ScheduleRow[]): GanttTask[] {
         progress: statusProgress(status),
         isCritical: criticalIds.has(row.id),
         isMilestone: false,
+        href: row.href ?? null,
       });
     }
   }

@@ -7,6 +7,8 @@ export const UPCOMING_DEADLINE_DAYS = Number(
 
 export const JOBS_PAGE_SIZE = 10;
 
+export const JOBS_PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+
 /** Active / in-flight operational projects (not planning-only). */
 export const ACTIVE_PROJECT_STATUSES: ProjectStatus[] = [
   ProjectStatus.IN_PROGRESS,

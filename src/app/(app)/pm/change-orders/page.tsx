@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Role } from "@prisma/client";
 import { createChangeOrderAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
@@ -39,7 +40,7 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
         createdBy: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 500,
     }),
     prisma.project.findMany({
       where: { id: { in: projectIds } },
@@ -115,30 +116,61 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
       {changeOrders.length === 0 ? (
         <EmptyState title="No change orders" />
       ) : (
-        <DataTable
-          headers={["Title", "Project", "Amount", "Schedule Impact", "Status", "Created", "Client action"]}
-        >
-          {changeOrders.map((co) => (
-            <tr key={co.id}>
-              <Td>
+        <InteractiveDataTable
+          searchPlaceholder="Search change orders…"
+          emptyMessage="No change orders match your search"
+          columns={[
+            { key: "title", label: "Title" },
+            { key: "project", label: "Project" },
+            { key: "amount", label: "Amount" },
+            { key: "impact", label: "Schedule Impact" },
+            { key: "status", label: "Status" },
+            { key: "created", label: "Created" },
+            { key: "client", label: "Client action" },
+          ]}
+          rows={changeOrders.map((co) => ({
+            id: co.id,
+            searchText: [
+              co.title,
+              co.description,
+              co.project.name,
+              co.status,
+              co.createdBy.name,
+              co.clientComment,
+            ]
+              .filter(Boolean)
+              .join(" "),
+            sortValues: {
+              title: co.title,
+              project: co.project.name,
+              amount: Number(co.amount ?? 0),
+              impact: co.scheduleImpact ?? 0,
+              status: co.status,
+              created: co.createdAt.getTime(),
+              client: co.clientActionAt?.getTime() ?? 0,
+            },
+            cells: [
+              <Td key="title">
                 <p className="font-medium">{co.title}</p>
                 {co.description ? (
                   <p className="mt-0.5 text-xs text-sb-muted">{co.description}</p>
                 ) : null}
-              </Td>
-              <Td>{co.project.name}</Td>
-              <Td>{formatCurrency(co.amount)}</Td>
-              <Td>{co.scheduleImpact ? `+${co.scheduleImpact} days` : "—"}</Td>
-              <Td>
+              </Td>,
+              <Td key="project">{co.project.name}</Td>,
+              <Td key="amount">{formatCurrency(co.amount)}</Td>,
+              <Td key="impact">
+                {co.scheduleImpact ? `+${co.scheduleImpact} days` : "—"}
+              </Td>,
+              <Td key="status">
                 <StatusBadge tone={statusTone(co.status)}>
                   {co.status.replace(/_/g, " ")}
                 </StatusBadge>
-              </Td>
-              <Td>
+              </Td>,
+              <Td key="created">
                 {co.createdBy.name}
                 <p className="text-xs text-sb-muted">{formatDate(co.createdAt)}</p>
-              </Td>
-              <Td>
+              </Td>,
+              <Td key="client">
                 {co.clientActionAt ? (
                   <>
                     {formatDate(co.clientActionAt)}
@@ -149,10 +181,10 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
                 ) : (
                   "—"
                 )}
-              </Td>
-            </tr>
-          ))}
-        </DataTable>
+              </Td>,
+            ],
+          }))}
+        />
       )}
     </div>
   );

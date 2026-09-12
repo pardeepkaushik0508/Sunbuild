@@ -5,7 +5,8 @@ import {
   updateInvoiceStatusAction,
 } from "@/lib/actions";
 import { PageHeader, Card } from "@/components/ui/card";
-import { DataTable, Td } from "@/components/ui/table";
+import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
+import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
@@ -116,37 +117,56 @@ export default async function BookkeeperInvoicesPage() {
         </ActionForm>
       </Card>
 
-      <DataTable
-        headers={[
-          "Invoice",
-          "Project",
-          "Amount",
-          "Issue date",
-          "Due",
-          "Status",
-          "File",
+      <InteractiveDataTable
+        searchPlaceholder="Search invoices…"
+        emptyMessage="No invoices found"
+        columns={[
+          { key: "invoice", label: "Invoice" },
+          { key: "project", label: "Project" },
+          { key: "amount", label: "Amount" },
+          { key: "issue", label: "Issue date" },
+          { key: "due", label: "Due" },
+          { key: "status", label: "Status" },
+          { key: "file", label: "File", sortable: false },
         ]}
-      >
-        {invoices.map((invoice) => (
-          <tr key={invoice.id}>
-            <Td>
+        rows={invoices.map((invoice) => ({
+          id: invoice.id,
+          searchText: [
+            invoice.invoiceNumber,
+            invoice.uploadedBy.name,
+            invoice.project.name,
+            invoice.status,
+            invoice.fileName,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          sortValues: {
+            invoice: invoice.invoiceNumber,
+            project: invoice.project.name,
+            amount: Number(invoice.amount),
+            issue: invoice.issueDate?.getTime() ?? 0,
+            due: invoice.dueDate?.getTime() ?? 0,
+            status: invoice.status,
+          },
+          cells: [
+            <Td key="invoice">
               <p className="font-medium">{invoice.invoiceNumber}</p>
               <p className="text-xs text-sb-muted">
                 by {invoice.uploadedBy.name}
               </p>
-            </Td>
-            <Td>
+            </Td>,
+            <Td key="project">
               <Link
                 href={`/pm/projects/${invoice.project.id}`}
                 className="text-sb-black hover:underline"
               >
                 {invoice.project.name}
               </Link>
-            </Td>
-            <Td>{formatCurrency(invoice.amount)}</Td>
-            <Td>{formatDate(invoice.issueDate)}</Td>
-            <Td>{formatDate(invoice.dueDate)}</Td>
-            <Td>
+            </Td>,
+            <Td key="amount">{formatCurrency(invoice.amount)}</Td>,
+            <Td key="issue">{formatDate(invoice.issueDate)}</Td>,
+            <Td key="due">{formatDate(invoice.dueDate)}</Td>,
+            <Td key="status">
               <ActionForm
                 action={updateInvoiceStatusAction.bind(null, invoice.id)}
                 successMessage="Invoice status updated"
@@ -174,8 +194,8 @@ export default async function BookkeeperInvoicesPage() {
                   {invoice.status.replace(/_/g, " ")}
                 </StatusBadge>
               </div>
-            </Td>
-            <Td>
+            </Td>,
+            <Td key="file">
               {invoice.filePath ? (
                 <a
                   href={`/api/files/${invoice.filePath}`}
@@ -188,10 +208,10 @@ export default async function BookkeeperInvoicesPage() {
               ) : (
                 "—"
               )}
-            </Td>
-          </tr>
-        ))}
-      </DataTable>
+            </Td>,
+          ],
+        }))}
+      />
     </div>
   );
 }
