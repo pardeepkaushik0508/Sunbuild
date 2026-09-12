@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { LeadStatus, Prisma, Role } from "@prisma/client";
-import { PageHeader, Card } from "@/components/ui/card";
+import { ClipboardList } from "lucide-react";
+import { PageHeader } from "@/components/ui/card";
 import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
 import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FormField, Input } from "@/components/ui/form";
-import { LeadCreateForm } from "@/components/sales/lead-create-form";
+import { LeadCreateDialog } from "@/components/sales/lead-create-form";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
@@ -105,11 +104,18 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
           ? `Stage: ${stage.replace(/_/g, " ")}`
           : null;
 
+  const assigneeOptions = assignees.map((m) => ({
+    id: m.user.id,
+    name: m.user.name,
+  }));
+
   return (
     <div>
       <PageHeader
         title="Lead Management"
         description="Manage sales pipeline and new opportunities"
+        icon={<ClipboardList size={18} />}
+        actions={<LeadCreateDialog assignees={assigneeOptions} />}
       />
 
       {filterLabel ? (
@@ -123,43 +129,9 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
         </div>
       ) : null}
 
-      <Card className="mb-6">
-        <form
-          method="get"
-          className="flex flex-col gap-3 sm:flex-row sm:items-end"
-        >
-          {stage ? <input type="hidden" name="stage" value={stage} /> : null}
-          {filter ? <input type="hidden" name="filter" value={filter} /> : null}
-          <FormField label="Search leads" className="flex-1">
-            <Input
-              name="q"
-              defaultValue={query ?? ""}
-              placeholder="Name, email, phone, address, or source"
-            />
-          </FormField>
-          <Button type="submit" variant="outline">
-            Search
-          </Button>
-          {query || stage || filter ? (
-            <Link href="/sales/leads">
-              <Button variant="ghost">Clear</Button>
-            </Link>
-          ) : null}
-        </form>
-      </Card>
-
-      <Card className="mb-6">
-        <h2 className="text-lg font-semibold text-[#111827]">Create lead</h2>
-        <LeadCreateForm
-          assignees={assignees.map((m) => ({
-            id: m.user.id,
-            name: m.user.name,
-          }))}
-        />
-      </Card>
-
       <InteractiveDataTable
         searchPlaceholder="Search leads…"
+        initialQuery={query ?? ""}
         emptyMessage="No leads match this view"
         columns={[
           { key: "lead", label: "Lead" },
@@ -179,6 +151,8 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
               lead.phone,
               lead.status,
               lead.assignee?.name,
+              lead.source,
+              lead.address,
             ]
               .filter(Boolean)
               .join(" "),
@@ -191,8 +165,8 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
             },
             cells: [
               <Td key="lead">
-                <p className="font-medium">{name}</p>
-                <p className="text-xs text-[#6b7280]">
+                <p className="font-medium text-sb-ink">{name}</p>
+                <p className="text-xs text-sb-muted">
                   {lead.email || lead.phone || "—"}
                 </p>
               </Td>,
@@ -207,7 +181,7 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
               <Td key="actions">
                 <Link
                   href={`/sales/leads/${lead.id}`}
-                  className="text-sm font-medium text-[#f97316]"
+                  className="text-sm font-medium text-sb-orange hover:underline"
                 >
                   Open
                 </Link>

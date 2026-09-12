@@ -290,6 +290,7 @@ export async function loadOverviewDashboardData(input: {
     name: p.name,
     progressPercent: computeProjectProgress({
       progressPercent: p.progressPercent,
+      status: p.status,
       scheduleItems: p.scheduleItems,
       milestones: p.milestones,
       tasks: p.tasks,
@@ -351,6 +352,7 @@ export async function loadOverviewDashboardData(input: {
   const progressPercent = selected
     ? computeProjectProgress({
         progressPercent: selected.progressPercent,
+        status: selected.status,
         scheduleItems: selected.scheduleItems,
         milestones: selected.milestones,
         tasks: selected.tasks,

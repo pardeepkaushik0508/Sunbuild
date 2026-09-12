@@ -282,6 +282,7 @@ export async function loadPmOverviewData(
   const progressPercent = selectedProject
     ? computeProjectProgress({
         progressPercent: selectedProject.progressPercent,
+        status: selectedProject.status,
         milestones: selectedProject.milestones,
         scheduleItems: selectedProject.scheduleItems,
         tasks: selectedProject.tasks,
@@ -391,6 +392,7 @@ export async function loadPmOverviewData(
         : null,
       progressPercent: computeProjectProgress({
         progressPercent: p.progressPercent,
+        status: p.status,
         milestones: p.milestones,
         tasks: p.tasks,
         scheduleItems: p.scheduleItems,

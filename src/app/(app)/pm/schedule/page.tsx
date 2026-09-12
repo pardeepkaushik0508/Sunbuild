@@ -97,6 +97,7 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
       select: {
         id: true,
         name: true,
+        status: true,
         progressPercent: true,
         lotInfo: true,
         municipalAddress: true,
@@ -156,6 +157,7 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
               s +
               computeProjectProgress({
                 progressPercent: p.progressPercent,
+                status: p.status,
                 milestones: p.milestones,
                 scheduleItems: p.scheduleItems,
                 tasks: p.tasks,

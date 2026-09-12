@@ -1,13 +1,14 @@
 /**
  * Shared project progress — keep Recent Jobs, Gantt footer, and project detail in sync.
  *
- * Dynamic formula (not the stored static Project.progressPercent when work exists):
- * - Milestone % = completed milestones / total milestones  (e.g. 2/5 → 40%)
+ * Dynamic formula (not manually editable):
+ * - Milestone % = completed milestones / total milestones
  * - Task %      = done tasks / active tasks (excludes CANCELLED)
  * - Schedule %  = completed schedule items / total schedule items
  *
  * Overall = average of whichever of those sources have items.
  * Falls back to stored Project.progressPercent only when none of the above exist.
+ * Completed / handed-over projects always report 100%.
  */
 export type ProgressSourceItem = {
   status: string;
@@ -17,6 +18,7 @@ const MILESTONE_DONE = new Set(["COMPLETED"]);
 const TASK_DONE = new Set(["DONE"]);
 const TASK_IGNORE = new Set(["CANCELLED"]);
 const SCHEDULE_DONE = new Set(["COMPLETED"]);
+const PROJECT_COMPLETE = new Set(["COMPLETED", "HANDED_OVER"]);
 
 function ratioPercent(
   items: ProgressSourceItem[],
@@ -42,10 +44,15 @@ export function deriveProgressFromItems(items: ProgressSourceItem[]): number {
 
 export function computeProjectProgress(input: {
   progressPercent: number;
+  status?: string;
   scheduleItems?: ProgressSourceItem[];
   milestones?: ProgressSourceItem[];
   tasks?: ProgressSourceItem[];
 }): number {
+  if (input.status && PROJECT_COMPLETE.has(input.status)) {
+    return 100;
+  }
+
   const parts: number[] = [];
 
   const milestonePct = ratioPercent(

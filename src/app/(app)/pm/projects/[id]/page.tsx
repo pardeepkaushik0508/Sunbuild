@@ -25,6 +25,7 @@ import {
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, whatsappLink, cn } from "@/lib/utils";
+import { computeProjectProgress } from "@/lib/dashboard/progress";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -61,6 +62,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
     delayedCount,
     docsCount,
     projectTasks,
+    progressSources,
   ] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
@@ -101,9 +103,29 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
       take: 8,
     }),
+    prisma.project.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        progressPercent: true,
+        milestones: { select: { status: true } },
+        scheduleItems: { select: { status: true } },
+        tasks: { select: { status: true } },
+      },
+    }),
   ]);
 
   if (!project) notFound();
+
+  const liveProgress = progressSources
+    ? computeProjectProgress({
+        progressPercent: progressSources.progressPercent,
+        status: progressSources.status,
+        milestones: progressSources.milestones,
+        scheduleItems: progressSources.scheduleItems,
+        tasks: progressSources.tasks,
+      })
+    : project.progressPercent;
 
   const wa = whatsappLink(
     project.buyer?.phone,
@@ -149,7 +171,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           {project.status.replace(/_/g, " ")}
         </StatusBadge>
         <span className="text-sm text-sb-muted">
-          {project.progressPercent}% complete
+          {liveProgress}% complete
         </span>
         {project.targetClosing ? (
           <span className="text-sm text-sb-muted">
@@ -170,7 +192,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             trade: item.trade,
             dependsOnId: item.dependsOnId,
           }))}
-          progressPercent={project.progressPercent}
+          progressPercent={liveProgress}
           addHref={`/pm/schedule?projectId=${project.id}#add-schedule`}
         />
       ) : null}

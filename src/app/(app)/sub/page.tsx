@@ -6,6 +6,7 @@ import { TodoWidget } from "@/components/dashboard/todo-widget";
 import { MetricBarChart } from "@/components/dashboard/charts-lazy";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
+import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
 
 export default async function SubDashboardPage() {
   const session = await requireRole(Role.SUBCONTRACTOR);
@@ -15,6 +16,7 @@ export default async function SubDashboardPage() {
     prisma.project.findMany({
       where: { id: { in: projectIds } },
       orderBy: { updatedAt: "desc" },
+      select: { id: true, name: true, progressPercent: true },
     }),
     prisma.task.findMany({
       where: {
@@ -34,6 +36,8 @@ export default async function SubDashboardPage() {
       },
     }),
   ]);
+
+  const progressById = await loadProgressByProjectIds(projects.map((p) => p.id));
 
   return (
     <div className="space-y-6">
@@ -62,7 +66,7 @@ export default async function SubDashboardPage() {
           jobs={projects.slice(0, 4).map((p) => ({
             id: p.id,
             name: p.name,
-            progressPercent: p.progressPercent,
+            progressPercent: progressById.get(p.id) ?? p.progressPercent,
             href: `/sub/jobs/${p.id}`,
           }))}
         />

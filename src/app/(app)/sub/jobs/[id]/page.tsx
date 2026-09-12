@@ -18,6 +18,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
+import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -70,6 +71,9 @@ export default async function SubJobDetailPage({ params }: PageProps) {
 
   if (!project) notFound();
 
+  const progressById = await loadProgressByProjectIds([id]);
+  const liveProgress = progressById.get(id) ?? project.progressPercent;
+
   return (
     <div>
       <PageHeader
@@ -89,7 +93,7 @@ export default async function SubJobDetailPage({ params }: PageProps) {
           {project.status.replace(/_/g, " ")}
         </StatusBadge>
         <span className="text-sm text-sb-muted">
-          {project.progressPercent}% complete
+          {liveProgress}% complete
         </span>
       </div>
 

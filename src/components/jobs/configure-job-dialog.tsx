@@ -114,24 +114,13 @@ export function ConfigureJobDialog({
             </Select>
           </FormField>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Progress (%)">
-              <Input
-                name="progressPercent"
-                type="number"
-                min={0}
-                max={100}
-                defaultValue={job.progressPercent}
-              />
-            </FormField>
-            <FormField label="Deadline">
-              <Input
-                name="targetClosing"
-                type="date"
-                defaultValue={toInputDate(job.deadline)}
-              />
-            </FormField>
-          </div>
+          <FormField label="Deadline">
+            <Input
+              name="targetClosing"
+              type="date"
+              defaultValue={toInputDate(job.deadline)}
+            />
+          </FormField>
 
           <FormField label="Total budget (CAD)">
             <Input
@@ -143,6 +132,11 @@ export function ConfigureJobDialog({
               placeholder="Purchase / project budget"
             />
           </FormField>
+
+          <p className="text-xs text-sb-muted">
+            Progress updates automatically from tasks, milestones, and schedule.
+            Current: {job.progressPercent}%
+          </p>
 
           {error ? (
             <p className="text-sm text-sb-red" role="alert">

@@ -174,10 +174,6 @@ export const configureProjectFormSchema = z.object({
   name: requiredText("Project name", 1, 160),
   pmId: z.string().optional().or(z.literal("")),
   status: z.nativeEnum(ProjectStatus),
-  progressPercent: z.preprocess(
-    (v) => (v === "" || v == null ? undefined : v),
-    z.coerce.number().int().min(0).max(100).optional()
-  ),
   targetClosing: z.string().optional().or(z.literal("")),
   purchasePrice: z.preprocess((v) => {
     if (v == null || v === "") return undefined;

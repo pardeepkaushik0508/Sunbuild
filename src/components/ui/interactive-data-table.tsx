@@ -57,6 +57,7 @@ export function InteractiveDataTable({
   className,
   tableClassName,
   toolbarExtra,
+  initialQuery = "",
 }: {
   columns: InteractiveColumn[];
   rows: InteractiveRow[];
@@ -67,8 +68,10 @@ export function InteractiveDataTable({
   className?: string;
   tableClassName?: string;
   toolbarExtra?: ReactNode;
+  /** Seed the client search box (e.g. from a URL `q` param). */
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);

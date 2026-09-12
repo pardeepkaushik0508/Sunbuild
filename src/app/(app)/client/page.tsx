@@ -16,6 +16,7 @@ import { prisma } from "@/lib/db";
 import { formatDate, fullName, whatsappLink } from "@/lib/utils";
 import { resolveScheduleDisplayStatus } from "@/lib/schedule/display-status";
 import { resolveClientProject } from "@/lib/client/project";
+import { computeProjectProgress } from "@/lib/dashboard/progress";
 
 export default async function ClientHomePage({
   searchParams,
@@ -42,7 +43,9 @@ export default async function ClientHomePage({
       include: {
         buyer: true,
         pm: true,
-        milestones: { orderBy: { sortOrder: "asc" }, take: 5 },
+        milestones: { orderBy: { sortOrder: "asc" }, take: 8 },
+        scheduleItems: { select: { status: true } },
+        tasks: { select: { status: true } },
         documents: {
           where: { visibility: DocumentVisibility.CLIENT_VISIBLE },
           orderBy: { createdAt: "desc" },
@@ -103,6 +106,14 @@ export default async function ClientHomePage({
 
   const openSelections = full.selectionPackages.flatMap((p) => p.sections);
 
+  const liveProgress = computeProjectProgress({
+    progressPercent: full.progressPercent,
+    status: full.status,
+    milestones: full.milestones,
+    scheduleItems: full.scheduleItems,
+    tasks: full.tasks,
+  });
+
   return (
     <div className="space-y-5">
       <ClientPortalBanner
@@ -159,12 +170,12 @@ export default async function ClientHomePage({
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span>Progress</span>
-                <span className="font-semibold">{full.progressPercent}%</span>
+                <span className="font-semibold">{liveProgress}%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/20">
                 <div
                   className="h-full rounded-full bg-sb-orange"
-                  style={{ width: `${full.progressPercent}%` }}
+                  style={{ width: `${liveProgress}%` }}
                 />
               </div>
             </div>
@@ -444,7 +455,7 @@ export default async function ClientHomePage({
               : "—"}
           </span>
         </div>
-        <ProgressBar value={full.progressPercent} color="orange" />
+        <ProgressBar value={liveProgress} color="orange" />
       </Card>
     </div>
   );

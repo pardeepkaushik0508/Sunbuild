@@ -384,9 +384,17 @@ export async function loadJobsDashboardData(input: {
   });
 
   const pageProjectIds = rawProjects.map((p) => p.id);
-  const [invoiceSums, depositSums, taskGroups, subAccess, nextMilestones, milestoneRows] =
+  const [
+    invoiceSums,
+    depositSums,
+    taskGroups,
+    subAccess,
+    nextMilestones,
+    milestoneRows,
+    scheduleRows,
+  ] =
     pageProjectIds.length === 0
-      ? [[], [], [], [], [], []]
+      ? [[], [], [], [], [], [], []]
       : await Promise.all([
           prisma.invoice.groupBy({
             by: ["projectId"],
@@ -425,6 +433,10 @@ export async function loadJobsDashboardData(input: {
             select: { projectId: true, title: true, endDate: true },
           }),
           prisma.milestone.findMany({
+            where: { projectId: { in: pageProjectIds } },
+            select: { projectId: true, status: true },
+          }),
+          prisma.scheduleItem.findMany({
             where: { projectId: { in: pageProjectIds } },
             select: { projectId: true, status: true },
           }),
@@ -487,6 +499,13 @@ export async function loadJobsDashboardData(input: {
     milestonesByProject.set(m.projectId, list);
   }
 
+  const scheduleByProject = new Map<string, Array<{ status: string }>>();
+  for (const s of scheduleRows) {
+    const list = scheduleByProject.get(s.projectId) ?? [];
+    list.push({ status: s.status });
+    scheduleByProject.set(s.projectId, list);
+  }
+
   let mapped: JobsListItem[] = rawProjects.map((p) => {
     const taskInfo = tasksByProject.get(p.id) ?? {
       total: 0,
@@ -496,8 +515,10 @@ export async function loadJobsDashboardData(input: {
     };
     const progressPercent = computeProjectProgress({
       progressPercent: p.progressPercent,
+      status: p.status,
       milestones: milestonesByProject.get(p.id) ?? [],
       tasks: taskInfo.statuses,
+      scheduleItems: scheduleByProject.get(p.id) ?? [],
     });
     const paid = invoiceByProject.get(p.id) ?? 0;
     const received = depositByProject.get(p.id) ?? 0;

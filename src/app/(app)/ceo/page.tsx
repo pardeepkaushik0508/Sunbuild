@@ -9,6 +9,7 @@ import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
+import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 
 export default async function CeoOverviewPage() {
@@ -45,6 +46,7 @@ export default async function CeoOverviewPage() {
         where: { companyId },
         orderBy: { updatedAt: "desc" },
         take: 4,
+        select: { id: true, name: true, progressPercent: true },
       }),
       prisma.rFI.count({
         where: {
@@ -72,6 +74,8 @@ export default async function CeoOverviewPage() {
         take: 50,
       }),
     ]);
+
+  const progressById = await loadProgressByProjectIds(projects.map((p) => p.id));
 
   const localEvents: CalendarEvent[] = [
     ...scheduleItems.map((s) => ({
@@ -147,7 +151,7 @@ export default async function CeoOverviewPage() {
           jobs={projects.map((p) => ({
             id: p.id,
             name: p.name,
-            progressPercent: p.progressPercent,
+            progressPercent: progressById.get(p.id) ?? p.progressPercent,
             href: `/pm/projects/${p.id}`,
           }))}
         />

@@ -66,6 +66,10 @@ import {
   configureProjectFormSchema,
 } from "@/lib/validation";
 import { revalidateJobsSurfaces } from "@/lib/jobs/revalidate-jobs";
+import {
+  syncProjectProgress,
+  revalidateProjectProgressSurfaces,
+} from "@/lib/dashboard/sync-project-progress";
 
 function formString(form: FormData, key: string) {
   const v = form.get(key);
@@ -933,10 +937,8 @@ export async function createTaskAction(form: FormData) {
     });
   }
 
-  await refreshProjectProgress(task.projectId);
-  revalidatePath("/pm/tasks");
-  revalidatePath("/pm");
-  revalidatePath("/owner");
+  await syncProjectProgress(task.projectId);
+  revalidateProjectProgressSurfaces(task.projectId);
   return task.id;
 }
 
@@ -996,15 +998,11 @@ export async function updateTaskAction(form: FormData) {
     });
   }
 
-  await refreshProjectProgress(task.projectId);
-  revalidatePath("/pm/tasks");
-  revalidatePath("/pm");
-  revalidatePath("/owner");
-  revalidatePath("/sub");
-  revalidatePath(`/pm/projects/${existing.projectId}`);
+  await syncProjectProgress(task.projectId);
+  revalidateProjectProgressSurfaces(task.projectId);
   if (existing.projectId !== task.projectId) {
-    revalidatePath(`/pm/projects/${task.projectId}`);
-    await refreshProjectProgress(existing.projectId);
+    await syncProjectProgress(existing.projectId);
+    revalidateProjectProgressSurfaces(existing.projectId);
   }
   return task.id;
 }
@@ -1032,12 +1030,8 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
       completedAt: status === TaskStatus.DONE ? new Date() : null,
     },
   });
-  await refreshProjectProgress(task.projectId);
-  revalidatePath("/pm/tasks");
-  revalidatePath("/pm");
-  revalidatePath("/owner");
-  revalidatePath("/sub");
-  revalidatePath(`/pm/projects/${task.projectId}`);
+  await syncProjectProgress(task.projectId);
+  revalidateProjectProgressSurfaces(task.projectId);
 }
 
 export async function assignSubcontractorAction(form: FormData) {
@@ -1127,7 +1121,7 @@ export async function createScheduleItemAction(form: FormData) {
       googleSyncStatus: syncToGoogle ? "SYNCING" : "LOCAL_ONLY",
     },
   });
-  await refreshProjectProgress(projectId);
+  await syncProjectProgress(projectId);
 
   if (syncToGoogle) {
     const { syncScheduleItemToGoogle } = await import("@/lib/google/sync");
@@ -1142,43 +1136,8 @@ export async function createScheduleItemAction(form: FormData) {
   revalidateScheduleSurfaces(projectId);
 }
 
-async function refreshProjectProgress(projectId: string) {
-  const [milestones, scheduleItems, tasks] = await Promise.all([
-    prisma.milestone.findMany({
-      where: { projectId },
-      select: { status: true },
-    }),
-    prisma.scheduleItem.findMany({
-      where: { projectId },
-      select: { status: true },
-    }),
-    prisma.task.findMany({
-      where: { projectId },
-      select: { status: true },
-    }),
-  ]);
-  const { computeProjectProgress } = await import("@/lib/dashboard/progress");
-  const progressPercent = computeProjectProgress({
-    progressPercent: 0,
-    milestones,
-    scheduleItems,
-    tasks,
-  });
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { progressPercent },
-  });
-}
-
 function revalidateScheduleSurfaces(projectId: string) {
-  revalidatePath("/pm/schedule");
-  revalidatePath("/client/schedule");
-  revalidatePath("/pm");
-  revalidatePath("/owner");
-  revalidatePath("/client");
-  revalidatePath(`/pm/projects/${projectId}`);
-  revalidatePath("/pm/projects");
-  revalidatePath("/owner/jobs");
+  revalidateProjectProgressSurfaces(projectId);
 }
 
 export async function updateMilestoneStatusAction(
@@ -1203,7 +1162,7 @@ export async function updateMilestoneStatusAction(
     where: { id: milestoneId },
     data: { status },
   });
-  await refreshProjectProgress(milestone.projectId);
+  await syncProjectProgress(milestone.projectId);
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
@@ -1238,7 +1197,7 @@ export async function updateScheduleItemStatusAction(
     where: { id: scheduleItemId },
     data: { status },
   });
-  await refreshProjectProgress(item.projectId);
+  await syncProjectProgress(item.projectId);
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
@@ -2933,15 +2892,6 @@ export async function configureProjectAction(form: FormData) {
   if (data.status !== existing.status) {
     changes.status = { from: existing.status, to: data.status };
   }
-  if (
-    data.progressPercent != null &&
-    data.progressPercent !== existing.progressPercent
-  ) {
-    changes.progressPercent = {
-      from: existing.progressPercent,
-      to: data.progressPercent,
-    };
-  }
   const nextClosing = targetClosing;
   const prevClosing = existing.targetClosing?.toISOString() ?? null;
   const nextClosingIso = nextClosing?.toISOString() ?? null;
@@ -2965,7 +2915,6 @@ export async function configureProjectAction(form: FormData) {
         name: data.name,
         pmId,
         status: data.status,
-        progressPercent: data.progressPercent ?? existing.progressPercent,
         targetClosing: nextClosing,
         ...(data.purchasePrice !== undefined
           ? { purchasePrice: data.purchasePrice }
@@ -3000,6 +2949,8 @@ export async function configureProjectAction(form: FormData) {
   });
 
   revalidateJobsSurfaces(data.projectId);
+  await syncProjectProgress(data.projectId);
+  revalidateProjectProgressSurfaces(data.projectId);
 }
 
 const PROFILE_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
