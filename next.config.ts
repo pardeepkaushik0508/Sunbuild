@@ -48,6 +48,12 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   experimental: {
     optimizePackageImports: ["lucide-react", "date-fns", "recharts"],
+    // Render (and similar hosts) report many CPUs; default worker count can OOM
+    // during "Generating static pages". Cap concurrency for reliable deploys.
+    cpus: 2,
+    workerThreads: false,
+    staticGenerationMaxConcurrency: 4,
+    staticGenerationMinPagesPerWorker: 25,
   },
   async headers() {
     return [

@@ -79,7 +79,7 @@ async function sendResetPasswordEmail({
  */
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: "sqlite",
+    provider: "postgresql",
   }),
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
