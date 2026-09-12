@@ -1,9 +1,15 @@
-import { mkdir, writeFile, readFile, unlink } from "fs/promises";
+import { mkdir, writeFile, readFile, unlink, access } from "fs/promises";
 import path from "path";
 import { nanoid } from "nanoid";
 import { AppError } from "@/lib/errors";
 import { DEFAULT_FILE_STORAGE } from "@/lib/settings/defaults";
 import type { FileStorageSettings } from "@/lib/settings/types";
+import {
+  destroyCloudinaryAsset,
+  isCloudinaryConfigured,
+  isCloudinaryUrl,
+  uploadBufferToCloudinary,
+} from "@/lib/cloudinary";
 
 /** Fallback when company settings are not yet loaded. */
 const MAX_UPLOAD_BYTES = DEFAULT_FILE_STORAGE.maxUploadBytes;
@@ -19,6 +25,21 @@ const ALLOWED_MIME_PREFIXES = [
   "text/plain",
   "text/csv",
 ];
+
+export type StorageProviderName = "CLOUDINARY" | "LOCAL";
+
+export type SavedUpload = {
+  /** Render/download URL: Cloudinary secure_url, or legacy relative path. */
+  filePath: string;
+  fileName: string;
+  size: number;
+  provider: StorageProviderName;
+  publicId: string | null;
+  resourceType: string | null;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+};
 
 function getUploadRoot() {
   return path.join(process.cwd(), "uploads");
@@ -47,7 +68,8 @@ function assertSafeRelativePath(filePath: string) {
     normalized.includes("..") ||
     normalized.includes("\0") ||
     path.isAbsolute(filePath) ||
-    /^[a-zA-Z]:/.test(normalized)
+    /^[a-zA-Z]:/.test(normalized) ||
+    /^https?:\/\//i.test(normalized)
   ) {
     throw new AppError("Invalid file path", 400, "INVALID_PATH");
   }
@@ -73,7 +95,12 @@ export function validateUploadFile(
     throw new AppError("File required");
   }
   if (file.size > max) {
-    throw new AppError(`File too large (max ${Math.floor(max / (1024 * 1024))}MB)`);
+    const mb = Math.floor(max / (1024 * 1024));
+    throw new AppError(
+      `File is too large. Maximum size is ${mb} MB.`,
+      400,
+      "FILE_TOO_LARGE"
+    );
   }
   const ext = path.extname(file.name).toLowerCase();
   if (!allowed.has(ext)) {
@@ -89,6 +116,21 @@ export function validateUploadFile(
   return { ext, mime };
 }
 
+/** Prisma-ready media metadata from a successful upload. */
+export function storageMeta(saved: SavedUpload) {
+  return {
+    filePath: saved.filePath,
+    fileName: saved.fileName,
+    storageProvider: saved.provider,
+    storagePublicId: saved.publicId,
+    mediaWidth: saved.width,
+    mediaHeight: saved.height,
+    mediaFormat: saved.format,
+    mediaBytes: saved.size,
+    mediaResourceType: saved.resourceType,
+  };
+}
+
 export async function ensureUploadDir(...segments: string[]) {
   const safe = segments.map((s) =>
     s.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/\.\./g, "")
@@ -98,27 +140,49 @@ export async function ensureUploadDir(...segments: string[]) {
   return dir;
 }
 
+/**
+ * Persist an upload to Cloudinary (required when CLOUDINARY_URL is set).
+ * Does NOT write persistent user assets to the Render/local filesystem.
+ */
 export async function saveUpload(
   file: File,
   folder: string,
   storage?: Pick<FileStorageSettings, "maxUploadBytes" | "allowedExtensions">
-): Promise<{ filePath: string; fileName: string; size: number }> {
-  validateUploadFile(file, {
+): Promise<SavedUpload> {
+  const { mime } = validateUploadFile(file, {
     maxBytes: storage?.maxUploadBytes,
     allowedExtensions: storage?.allowedExtensions,
   });
   const bytes = Buffer.from(await file.arrayBuffer());
   const safeFolder = sanitizeFolder(folder);
   const safeName = sanitizeOriginalName(file.name);
-  const storedName = `${nanoid(16)}_${safeName}`;
-  const dir = await ensureUploadDir(...safeFolder.split("/"));
-  const absolute = path.join(dir, storedName);
-  assertSafeRelativePath(path.join(safeFolder, storedName));
-  await writeFile(absolute, bytes);
+  const displayName = path.basename(file.name).slice(0, 200);
+
+  if (!isCloudinaryConfigured()) {
+    throw new AppError(
+      "File storage is not configured. Set CLOUDINARY_URL on the server.",
+      503,
+      "STORAGE_NOT_CONFIGURED"
+    );
+  }
+
+  const asset = await uploadBufferToCloudinary({
+    buffer: bytes,
+    folder: safeFolder,
+    originalFilename: safeName,
+    mimeType: mime || file.type,
+  });
+
   return {
-    filePath: path.join(safeFolder, storedName).replace(/\\/g, "/"),
-    fileName: path.basename(file.name).slice(0, 200),
-    size: bytes.length,
+    filePath: asset.secureUrl,
+    fileName: displayName,
+    size: asset.bytes ?? bytes.length,
+    provider: "CLOUDINARY",
+    publicId: asset.publicId,
+    resourceType: asset.resourceType,
+    format: asset.format,
+    width: asset.width,
+    height: asset.height,
   };
 }
 
@@ -133,12 +197,60 @@ export async function saveCompanyUpload(
   return saveUpload(file, folder, storage);
 }
 
+/**
+ * Read legacy local files only. Cloudinary assets are served via secure_url.
+ */
 export async function readUpload(filePath: string) {
+  if (isCloudinaryUrl(filePath)) {
+    const res = await fetch(filePath);
+    if (!res.ok) {
+      throw new AppError("File not found", 404, "NOT_FOUND");
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
   const { absolute } = assertSafeRelativePath(filePath);
+  try {
+    await access(/*turbopackIgnore: true*/ absolute);
+  } catch {
+    throw new AppError("File not found", 404, "NOT_FOUND");
+  }
   return readFile(/*turbopackIgnore: true*/ absolute);
 }
 
-export async function deleteUpload(filePath: string) {
+/**
+ * Delete a stored asset. Prefer publicId for Cloudinary destroys.
+ * Falls back to legacy local unlink for relative paths.
+ */
+export async function deleteUpload(
+  filePath: string | null | undefined,
+  opts?: { publicId?: string | null; resourceType?: string | null }
+) {
+  if (!filePath && !opts?.publicId) return;
+
+  const publicId = opts?.publicId?.trim() || null;
+  if (publicId && isCloudinaryConfigured()) {
+    try {
+      await destroyCloudinaryAsset(
+        publicId,
+        opts?.resourceType || guessResourceType(filePath)
+      );
+      return;
+    } catch (err) {
+      // Log and continue — caller may still clear DB row
+      console.error("[storage] Cloudinary delete failed", {
+        publicId,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
+
+  if (filePath && isCloudinaryUrl(filePath)) {
+    // Without publicId we cannot safely destroy; leave orphan for cleanup tooling.
+    console.error("[storage] Cloudinary delete skipped — missing publicId");
+    return;
+  }
+
+  if (!filePath) return;
   try {
     const { absolute } = assertSafeRelativePath(filePath);
     await unlink(absolute);
@@ -147,9 +259,40 @@ export async function deleteUpload(filePath: string) {
   }
 }
 
+function guessResourceType(filePath?: string | null) {
+  if (!filePath) return "image";
+  const lower = filePath.toLowerCase();
+  if (/\.(pdf|doc|docx|xls|xlsx|csv|txt)(\?|$)/.test(lower)) return "raw";
+  if (/\.(mp4|mov|webm)(\?|$)/.test(lower)) return "video";
+  return "image";
+}
+
 export function absoluteUploadPath(filePath: string) {
   const { absolute } = assertSafeRelativePath(filePath);
   return absolute;
+}
+
+/** Dev-only / migration helper: write a file to local uploads (not for new product uploads). */
+export async function saveLocalUploadForMigration(
+  file: File | Buffer,
+  folder: string,
+  originalName: string
+): Promise<{ filePath: string; fileName: string; size: number }> {
+  const bytes = Buffer.isBuffer(file)
+    ? file
+    : Buffer.from(await file.arrayBuffer());
+  const safeFolder = sanitizeFolder(folder);
+  const safeName = sanitizeOriginalName(originalName);
+  const storedName = `${nanoid(16)}_${safeName}`;
+  const dir = await ensureUploadDir(...safeFolder.split("/"));
+  const absolute = path.join(dir, storedName);
+  assertSafeRelativePath(path.join(safeFolder, storedName));
+  await writeFile(absolute, bytes);
+  return {
+    filePath: path.join(safeFolder, storedName).replace(/\\/g, "/"),
+    fileName: path.basename(originalName).slice(0, 200),
+    size: bytes.length,
+  };
 }
 
 export { MAX_UPLOAD_BYTES, DEFAULT_ALLOWED_EXTENSIONS as ALLOWED_EXTENSIONS };

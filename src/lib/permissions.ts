@@ -75,6 +75,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Permissions", href: "/owner/permissions", roles: [Role.OWNER] },
   { label: "Settings", href: "/owner/settings", roles: [Role.OWNER] },
   {
+    label: "Site content",
+    href: "/content",
+    roles: [Role.OWNER, Role.CEO, Role.OPERATIONS_ADMIN],
+  },
+  {
     label: "Settings",
     href: "/settings",
     roles: [

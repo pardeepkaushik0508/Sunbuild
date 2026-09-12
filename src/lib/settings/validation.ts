@@ -30,7 +30,7 @@ export const sessionTimeoutSchema = z
   );
 
 export const fileStorageSchema = z.object({
-  provider: z.enum(["local", "s3", "r2", "supabase"]),
+  provider: z.enum(["local", "cloudinary", "s3", "r2", "supabase"]),
   maxUploadBytes: z
     .number()
     .int()

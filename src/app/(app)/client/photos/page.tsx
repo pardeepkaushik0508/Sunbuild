@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { ClientPortalBanner } from "@/components/client/portal-banner";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
+import { MediaImage } from "@/components/ui/media-image";
 import { resolveClientProject } from "@/lib/client/project";
 
 export default async function ClientPhotosPage({
@@ -76,16 +77,16 @@ export default async function ClientPhotosPage({
           {photos.map((photo) => (
             <Card key={photo.id} className="overflow-hidden p-0">
               <a
-                href={`/api/files/${photo.filePath}`}
+                href={mediaUrl(photo.filePath) ?? "#"}
                 target="_blank"
                 rel="noreferrer"
-                className="block aspect-video bg-sb-canvas"
+                className="block"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/files/${photo.filePath}`}
+                <MediaImage
+                  src={photo.filePath}
                   alt={photo.caption ?? photo.fileName}
-                  className="h-full w-full object-cover"
+                  width={photo.mediaWidth ?? 480}
+                  height={photo.mediaHeight ?? 320}
                 />
               </a>
               <div className="p-4">

@@ -15,6 +15,7 @@ model User {
   email             String   @unique
   emailVerified     Boolean  @default(false)
   image             String?
+  imagePublicId     String?
   phone             String?
   isActive          Boolean  @default(true)
   twoFactorEnabled  Boolean  @default(false)
@@ -52,6 +53,7 @@ model User {
   microsoftTodoConnections  MicrosoftTodoConnection[]
   microsoftTodoProjectLinks MicrosoftTodoProjectLink[]
   whatsappMessagesSent      WhatsAppMessage[]           @relation("WhatsAppSender")
+  sitePagesUpdated          SitePage[]                  @relation("SitePageUpdater")
 }
 
 /// Better Auth two-factor secrets (never expose to the browser).
@@ -375,8 +377,9 @@ model Project {
   warrantyStart   DateTime?
   warrantyEnd     DateTime?
   heroImageUrl    String?
-  /// Uploaded material / selection spreadsheet (relative under uploads/).
+  /// Uploaded material / selection spreadsheet (Cloudinary URL or legacy path).
   materialListPath String?
+  materialListPublicId String?
   materialListName String?
   materialListAt   DateTime?
   createdAt       DateTime      @default(now())
@@ -423,6 +426,13 @@ model PurchaseContract {
   buyerId         String?
   filePath        String
   fileName        String
+  storageProvider String?
+  storagePublicId String?
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaFormat     String?
+  mediaBytes      Int?
+  mediaResourceType String?
   version         Int            @default(1)
   status          ContractStatus @default(UPLOADED)
   uploadedById    String
@@ -833,9 +843,29 @@ model DailyLog {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author  User    @relation(fields: [authorId], references: [id])
+  photos  DailyLogPhoto[]
 
   @@index([projectId, logDate])
   @@index([authorId])
+}
+
+model DailyLogPhoto {
+  id                String   @id @default(cuid())
+  dailyLogId        String
+  filePath          String
+  fileName          String
+  storageProvider   String?
+  storagePublicId   String?
+  mediaWidth        Int?
+  mediaHeight       Int?
+  mediaFormat       String?
+  mediaBytes        Int?
+  mediaResourceType String?
+  createdAt         DateTime @default(now())
+
+  dailyLog DailyLog @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
+
+  @@index([dailyLogId])
 }
 
 enum DocumentVisibility {
@@ -850,6 +880,13 @@ model Document {
   category    String              @default("GENERAL")
   filePath    String
   fileName    String
+  storageProvider String?
+  storagePublicId String?
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaFormat     String?
+  mediaBytes      Int?
+  mediaResourceType String?
   version     Int                 @default(1)
   visibility  DocumentVisibility  @default(INTERNAL)
   uploadedById String
@@ -875,6 +912,13 @@ model Photo {
   projectId    String
   filePath     String
   fileName     String
+  storageProvider String?
+  storagePublicId String?
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaFormat     String?
+  mediaBytes      Int?
+  mediaResourceType String?
   caption      String?
   visibility   PhotoVisibility @default(INTERNAL)
   uploadedById String
@@ -887,6 +931,7 @@ model Photo {
   uploadedBy User    @relation(fields: [uploadedById], references: [id])
 
   @@index([projectId, visibility])
+  @@index([storagePublicId])
 }
 
 // ─── Finance / Completion / Warranty ─────────────────────────────────────────
@@ -910,6 +955,13 @@ model Invoice {
   status       InvoiceStatus @default(SENT)
   filePath     String?
   fileName     String?
+  storageProvider String?
+  storagePublicId String?
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaFormat     String?
+  mediaBytes      Int?
+  mediaResourceType String?
   notes        String?
   uploadedById String
   createdAt    DateTime      @default(now())
@@ -933,6 +985,13 @@ model CompletionDocument {
   projectId   String              @unique
   filePath    String
   fileName    String
+  storageProvider String?
+  storagePublicId String?
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaFormat     String?
+  mediaBytes      Int?
+  mediaResourceType String?
   status      CompletionDocStatus @default(PENDING_CEO_APPROVAL)
   uploadedById String
   reviewedById String?
@@ -992,6 +1051,13 @@ model WarrantyPhoto {
   ticketId  String
   filePath  String
   fileName  String
+  storageProvider String?
+  storagePublicId String?
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaFormat     String?
+  mediaBytes      Int?
+  mediaResourceType String?
   createdAt DateTime @default(now())
 
   ticket WarrantyTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
@@ -1065,5 +1131,25 @@ model WhatsAppMessage {
 
   @@index([conversationId, sentAt])
   @@index([whatsappMessageId])
+}
+
+// ─── Public site content (Privacy, Terms, …) ─────────────────────────────────
+
+enum SitePageKey {
+  PRIVACY
+  TERMS
+}
+
+/// Global legal / content pages editable by Owner, CEO, and Ops Admin.
+model SitePage {
+  id          String      @id @default(cuid())
+  key         SitePageKey @unique
+  title       String
+  bodyHtml    String
+  updatedById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  updatedBy   User?       @relation("SitePageUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 

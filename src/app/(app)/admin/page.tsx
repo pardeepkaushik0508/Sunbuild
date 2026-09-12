@@ -94,6 +94,17 @@ export default async function AdminOverviewPage() {
             <Button size="sm">Open</Button>
           </Link>
         </Card>
+        <Card className="flex items-center justify-between md:col-span-2 lg:col-span-1">
+          <div>
+            <p className="text-sm font-semibold">Site content</p>
+            <p className="text-xs text-[#6b7280]">Privacy &amp; Terms editor</p>
+          </div>
+          <Link href="/content">
+            <Button size="sm" variant="outline">
+              Edit
+            </Button>
+          </Link>
+        </Card>
       </div>
     </div>
   );

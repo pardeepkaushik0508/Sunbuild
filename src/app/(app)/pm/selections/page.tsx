@@ -17,7 +17,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
-import { formatCurrency, formatDate, fullName } from "@/lib/utils";
+import { formatCurrency, formatDate, fullName, mediaUrl } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { PmProjectPicker } from "@/components/pm/project-picker";
 import { Role, SelectionSectionStatus } from "@prisma/client";
@@ -198,7 +198,7 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
           <div className="flex flex-wrap gap-2">
             {project?.materialListPath ? (
               <>
-                <a href={`/api/files/${project.materialListPath}`}>
+                <a href={mediaUrl(project.materialListPath) ?? "#"}>
                   <Button type="button" variant="outline" size="sm">
                     Download
                   </Button>

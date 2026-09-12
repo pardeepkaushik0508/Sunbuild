@@ -9,7 +9,7 @@ import { Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { FormField, Textarea } from "@/components/ui/form";
 import { useOptionalToast } from "@/components/ui/toast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { clientChangeOrderDecisionAction } from "@/lib/client/actions";
 import { toSafeErrorMessage } from "@/lib/errors";
 
@@ -138,7 +138,7 @@ export function ClientPaymentsBoard({
                   </Button>
                   {inv.filePath ? (
                     <a
-                      href={`/api/files/${inv.filePath}`}
+                      href={mediaUrl(inv.filePath) ?? "#"}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -238,7 +238,7 @@ export function ClientPaymentsBoard({
                   )}
                   {co.attachmentPath ? (
                     <a
-                      href={`/api/files/${co.attachmentPath}`}
+                      href={mediaUrl(co.attachmentPath) ?? "#"}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -284,7 +284,7 @@ export function ClientPaymentsBoard({
           <div className="mt-5 flex flex-wrap gap-2">
             {payInfo.filePath ? (
               <a
-                href={`/api/files/${payInfo.filePath}`}
+                href={mediaUrl(payInfo.filePath) ?? "#"}
                 target="_blank"
                 rel="noreferrer"
               >

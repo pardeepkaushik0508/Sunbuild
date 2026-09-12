@@ -6,7 +6,8 @@ import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
+import { MediaImage } from "@/components/ui/media-image";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -86,16 +87,17 @@ export default async function ClientWarrantyDetailPage({ params }: PageProps) {
               {ticket.photos.map((photo) => (
                 <a
                   key={photo.id}
-                  href={`/api/files/${photo.filePath}`}
+                  href={mediaUrl(photo.filePath) ?? "#"}
                   target="_blank"
                   rel="noreferrer"
-                  className="block aspect-square overflow-hidden rounded-[10px] bg-sb-canvas"
+                  className="block overflow-hidden rounded-[10px]"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/files/${photo.filePath}`}
+                  <MediaImage
+                    src={photo.filePath}
                     alt={photo.fileName}
-                    className="h-full w-full object-cover"
+                    aspectClassName="aspect-square"
+                    width={320}
+                    height={320}
                   />
                 </a>
               ))}

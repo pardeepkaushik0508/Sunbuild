@@ -30,7 +30,7 @@ export const SESSION_TIMEOUT_OPTIONS = [
 export type SessionTimeoutMinutes =
   (typeof SESSION_TIMEOUT_OPTIONS)[number];
 
-export type StorageProvider = "local" | "s3" | "r2" | "supabase";
+export type StorageProvider = "local" | "cloudinary" | "s3" | "r2" | "supabase";
 
 export type FileStorageSettings = {
   provider: StorageProvider;

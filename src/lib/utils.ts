@@ -46,7 +46,7 @@ export function initials(name?: string | null) {
     .toUpperCase();
 }
 
-/** Resolve a stored upload path or absolute URL for use in <img src>. */
+/** Resolve a stored upload path or absolute URL for use in <img src> / downloads. */
 export function mediaUrl(path?: string | null) {
   if (!path) return null;
   if (
@@ -55,9 +55,39 @@ export function mediaUrl(path?: string | null) {
     path.startsWith("data:") ||
     path.startsWith("/")
   ) {
+    // Prefer HTTPS for Cloudinary (and reject insecure http image hosts in UI).
+    if (path.startsWith("http://res.cloudinary.com/")) {
+      return `https://${path.slice("http://".length)}`;
+    }
     return path;
   }
-  return `/api/files/${path}`;
+  return `/api/files/${path
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/")}`;
+}
+
+/** Thumbnail delivery URL — Cloudinary f_auto/q_auto when applicable. */
+export function mediaThumbnailUrl(
+  path?: string | null,
+  opts?: { width?: number; height?: number }
+) {
+  const url = mediaUrl(path);
+  if (!url) return null;
+  const width = opts?.width ?? 480;
+  const height = opts?.height ?? 320;
+  if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+    return url.replace(
+      "/upload/",
+      `/upload/c_fill,f_auto,q_auto,w_${width},h_${height}/`
+    );
+  }
+  return url;
+}
+
+export function isImageFileName(name?: string | null) {
+  if (!name) return false;
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
 }
 
 /** Relative activity labels for user list (e.g. "2 hours ago", "Yesterday"). */

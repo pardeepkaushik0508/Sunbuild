@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { PhotoVisibility, Role } from "@prisma/client";
-import { uploadPhotoAction, publishPhotoAction } from "@/lib/actions";
+import { uploadPhotoAction, publishPhotoAction, deletePhotoAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { MediaImage } from "@/components/ui/media-image";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -103,9 +105,9 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
               </option>
             </Select>
           </FormField>
-          <FormField label="Image">
-            <Input name="file" type="file" accept="image/*" required />
-          </FormField>
+          <div className="md:col-span-2">
+            <ImageUploadField name="file" required label="Image" />
+          </div>
           <div className="md:col-span-2">
             <SubmitButton pendingLabel="Uploading…">Upload</SubmitButton>
           </div>
@@ -116,53 +118,68 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
         <EmptyState title="No photos" />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {photos.map((photo) => (
-            <Card key={photo.id} className="overflow-hidden p-0">
-              <a
-                href={`/api/files/${photo.filePath}`}
-                target="_blank"
-                rel="noreferrer"
-                className="block aspect-video bg-sb-canvas"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/files/${photo.filePath}`}
-                  alt={photo.caption ?? photo.fileName}
-                  className="h-full w-full object-cover"
-                />
-              </a>
-              <div className="p-4">
-                <p className="font-medium">{photo.caption ?? photo.fileName}</p>
-                <p className="mt-1 text-xs text-sb-muted">
-                  {photo.project.name} · {photo.uploadedBy.name} ·{" "}
-                  {formatDate(photo.createdAt)}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <StatusBadge tone={statusTone(photo.visibility)}>
-                    {photo.visibility.replace(/_/g, " ")}
-                  </StatusBadge>
-                  {photo.visibility === PhotoVisibility.INTERNAL ? (
+          {photos.map((photo) => {
+            const href = mediaUrl(photo.filePath);
+            return (
+              <Card key={photo.id} className="overflow-hidden p-0">
+                <a
+                  href={href ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block"
+                >
+                  <MediaImage
+                    src={photo.filePath}
+                    alt={photo.caption ?? photo.fileName}
+                    width={photo.mediaWidth ?? 480}
+                    height={photo.mediaHeight ?? 320}
+                  />
+                </a>
+                <div className="p-4">
+                  <p className="font-medium">{photo.caption ?? photo.fileName}</p>
+                  <p className="mt-1 text-xs text-sb-muted">
+                    {photo.project.name} · {photo.uploadedBy.name} ·{" "}
+                    {formatDate(photo.createdAt)}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <StatusBadge tone={statusTone(photo.visibility)}>
+                      {photo.visibility.replace(/_/g, " ")}
+                    </StatusBadge>
+                    {photo.visibility === PhotoVisibility.INTERNAL ? (
+                      <ActionForm
+                        action={publishPhotoAction.bind(null, photo.id)}
+                        successMessage="Photo published"
+                      >
+                        <SubmitButton
+                          size="sm"
+                          variant="outline"
+                          pendingLabel="Publishing…"
+                        >
+                          Publish to client
+                        </SubmitButton>
+                      </ActionForm>
+                    ) : photo.publishedAt ? (
+                      <span className="text-xs text-sb-muted">
+                        Published {formatDate(photo.publishedAt)}
+                      </span>
+                    ) : null}
                     <ActionForm
-                      action={publishPhotoAction.bind(null, photo.id)}
-                      successMessage="Photo published"
+                      action={deletePhotoAction.bind(null, photo.id)}
+                      successMessage="Photo deleted"
                     >
                       <SubmitButton
                         size="sm"
                         variant="outline"
-                        pendingLabel="Publishing…"
+                        pendingLabel="Deleting…"
                       >
-                        Publish to client
+                        Delete
                       </SubmitButton>
                     </ActionForm>
-                  ) : photo.publishedAt ? (
-                    <span className="text-xs text-sb-muted">
-                      Published {formatDate(photo.publishedAt)}
-                    </span>
-                  ) : null}
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

@@ -24,7 +24,7 @@ import {
   getAccessibleProjectIds,
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, fullName, whatsappLink, cn } from "@/lib/utils";
+import { formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 
 type PageProps = {
@@ -409,7 +409,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
                 </StatusBadge>
               </p>
               <a
-                href={`/api/files/${completionDoc.filePath}`}
+                href={mediaUrl(completionDoc.filePath) ?? "#"}
                 className="text-sb-ink underline hover:text-sb-orange"
                 target="_blank"
                 rel="noreferrer"

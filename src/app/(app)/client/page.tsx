@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { ClientPortalBanner } from "@/components/client/portal-banner";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, fullName, whatsappLink } from "@/lib/utils";
+import { formatDate, fullName, mediaUrl, whatsappLink } from "@/lib/utils";
+import { MediaImage } from "@/components/ui/media-image";
 import { resolveScheduleDisplayStatus } from "@/lib/schedule/display-status";
 import { resolveClientProject } from "@/lib/client/project";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
@@ -131,13 +132,15 @@ export default async function ClientHomePage({
                 <Link
                   key={ph.id}
                   href={`/client/photos?projectId=${full.id}`}
-                  className="block"
+                  className="block overflow-hidden rounded-xl"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/files/${ph.filePath}`}
+                  <MediaImage
+                    src={ph.filePath}
                     alt={ph.caption || ph.fileName}
-                    className="h-40 w-full rounded-xl object-cover"
+                    aspectClassName="h-40"
+                    className="rounded-xl"
+                    width={320}
+                    height={160}
                   />
                 </Link>
               ))
@@ -297,7 +300,7 @@ export default async function ClientHomePage({
                       </p>
                     </div>
                     <a
-                      href={`/api/files/${doc.filePath}`}
+                      href={mediaUrl(doc.filePath) ?? "#"}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -331,13 +334,14 @@ export default async function ClientHomePage({
                   <Link
                     key={ph.id}
                     href={`/client/photos?projectId=${full.id}`}
-                    className="block"
+                    className="block overflow-hidden rounded-lg"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`/api/files/${ph.filePath}`}
+                    <MediaImage
+                      src={ph.filePath}
                       alt={ph.caption || ""}
-                      className="aspect-square rounded-lg object-cover"
+                      aspectClassName="aspect-square"
+                      width={200}
+                      height={200}
                     />
                   </Link>
                 ))}

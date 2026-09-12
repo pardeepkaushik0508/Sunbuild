@@ -159,7 +159,7 @@ export async function getCompanySettings(
     SETTING_KEYS.SESSION_TIMEOUT,
     DEFAULT_SESSION_TIMEOUT_MINUTES
   );
-  const fileStorage = valueOf(SETTING_KEYS.FILE_STORAGE, DEFAULT_FILE_STORAGE);
+  const fileStorageRaw = valueOf(SETTING_KEYS.FILE_STORAGE, DEFAULT_FILE_STORAGE);
   const whatsapp = valueOf(SETTING_KEYS.WHATSAPP, DEFAULT_WHATSAPP);
   const quickbooks = valueOf(SETTING_KEYS.QUICKBOOKS, DEFAULT_QUICKBOOKS);
   const emailNotifications = valueOf(
@@ -177,19 +177,25 @@ export async function getCompanySettings(
     transactionalAuthEmails: true,
   };
 
+  const cloudinaryReady = Boolean(process.env.CLOUDINARY_URL?.trim());
+  const fileStorage = fileStorageSchema.parse({
+    ...fileStorageRaw,
+    provider: cloudinaryReady ? "cloudinary" : (fileStorageRaw as FileStorageSettings).provider,
+  }) as FileStorageSettings;
+
   return {
     mfa: mfaPolicySchema.parse(mfa) as MfaPolicy,
     passwordPolicy: passwordPolicySchema.parse(passwordPolicy) as PasswordPolicy,
     sessionTimeoutMinutes: sessionTimeoutSchema.parse(
       sessionTimeoutMinutes
     ) as SessionTimeoutMinutes,
-    fileStorage: fileStorageSchema.parse(fileStorage) as FileStorageSettings,
+    fileStorage,
     whatsapp: whatsapp as WhatsAppIntegrationSettings,
     quickbooks: quickbooks as QuickBooksIntegrationSettings,
     emailNotifications: email,
     meta: {
       mfaPluginEnabled: true,
-      storageStatus: "active",
+      storageStatus: cloudinaryReady ? "active" : "error",
       storageUsageBytes: usage,
     },
   };
@@ -238,7 +244,11 @@ export async function getFileStorageSettings(
     SETTING_KEYS.FILE_STORAGE,
     DEFAULT_FILE_STORAGE
   );
-  return fileStorageSchema.parse(value) as FileStorageSettings;
+  const parsed = fileStorageSchema.parse(value) as FileStorageSettings;
+  if (process.env.CLOUDINARY_URL?.trim()) {
+    return { ...parsed, provider: "cloudinary" };
+  }
+  return parsed;
 }
 
 export async function getUserTwoFactorEnabled(userId: string): Promise<boolean> {

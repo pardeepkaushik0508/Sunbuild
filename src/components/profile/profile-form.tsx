@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, UserRound } from "lucide-react";
 import { ActionForm } from "@/components/ui/action-form";
 import { Card } from "@/components/ui/card";
@@ -18,11 +18,18 @@ export function ProfileForm({
   const [preview, setPreview] = useState<string | null>(null);
   const currentSrc = preview || mediaUrl(user.image);
 
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
   return (
     <Card className="max-w-xl">
       <ActionForm
         action={updateOwnProfileAction}
         successMessage="Profile updated"
+        encType="multipart/form-data"
         className="space-y-6"
       >
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
@@ -74,7 +81,10 @@ export function ProfileForm({
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) {
-                  setPreview(null);
+                  setPreview((prev) => {
+                    if (prev) URL.revokeObjectURL(prev);
+                    return null;
+                  });
                   return;
                 }
                 const url = URL.createObjectURL(file);

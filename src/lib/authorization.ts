@@ -98,6 +98,11 @@ export const CAPABILITIES = {
     Role.PROJECT_MANAGER,
   ] as Role[],
   manageUsers: [Role.OWNER, Role.OPERATIONS_ADMIN] as Role[],
+  manageSiteContent: [
+    Role.OWNER,
+    Role.CEO,
+    Role.OPERATIONS_ADMIN,
+  ] as Role[],
   companyWideProjects: [
     Role.OWNER,
     Role.CEO,

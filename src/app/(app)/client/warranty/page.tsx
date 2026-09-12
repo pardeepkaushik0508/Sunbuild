@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
@@ -85,8 +86,8 @@ export default async function ClientWarrantyPage() {
             <FormField label="Title">
               <Input name="title" required />
             </FormField>
-            <FormField label="Photo (optional)">
-              <Input name="file" type="file" accept="image/*" />
+            <FormField label="Photo (optional)" className="md:col-span-2">
+              <ImageUploadField name="file" />
             </FormField>
             <FormField label="Description" className="md:col-span-2">
               <Textarea name="description" required />

@@ -17,8 +17,9 @@ import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
 import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -187,6 +188,7 @@ export default async function SubJobDetailPage({ params }: PageProps) {
           <ActionForm
             action={createDailyLogAction}
             successMessage="Daily log saved"
+            encType="multipart/form-data"
             className="mt-4 space-y-3"
           >
             <input type="hidden" name="projectId" value={project.id} />
@@ -199,6 +201,12 @@ export default async function SubJobDetailPage({ params }: PageProps) {
             <FormField label="Notes">
               <Textarea name="siteNotes" placeholder="Site observations, access notes, or comments..." />
             </FormField>
+            <ImageUploadField
+              name="photos"
+              multiple
+              label="Photos (optional)"
+              maxFiles={10}
+            />
             <SubmitButton size="sm" pendingLabel="Saving…">
               Save log
             </SubmitButton>
@@ -219,9 +227,7 @@ export default async function SubJobDetailPage({ params }: PageProps) {
             <FormField label="Caption">
               <Input name="caption" />
             </FormField>
-            <FormField label="Photo">
-              <Input name="file" type="file" accept="image/*" required />
-            </FormField>
+            <ImageUploadField name="file" required label="Photo" />
             <SubmitButton size="sm" pendingLabel="Uploading…">
               Upload (internal only)
             </SubmitButton>
@@ -273,7 +279,7 @@ export default async function SubJobDetailPage({ params }: PageProps) {
                 </Td>,
                 <Td key="file">
                   <a
-                    href={`/api/files/${doc.filePath}`}
+                    href={mediaUrl(doc.filePath) ?? "#"}
                     className="text-sm underline"
                     target="_blank"
                     rel="noreferrer"

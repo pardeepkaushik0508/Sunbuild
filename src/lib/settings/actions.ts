@@ -136,17 +136,22 @@ export async function updateFileStorageAction(input: {
     const session = await requireSession();
     assertOperationalEditor(session);
     const current = await getCompanySettings(session.membership.companyId);
+    const cloudinaryReady = Boolean(process.env.CLOUDINARY_URL?.trim());
     const parsed = fileStorageSchema.parse({
-      provider: current.fileStorage.provider,
+      provider: cloudinaryReady ? "cloudinary" : current.fileStorage.provider,
       visibility: "private" as const,
       maxUploadBytes: input.maxUploadBytes,
       allowedExtensions: input.allowedExtensions,
       categories: input.categories,
     });
-    // Provider changes require infra — do not allow elevating to cloud without env.
-    if (parsed.provider !== "local" && parsed.provider !== current.fileStorage.provider) {
+    // Provider is driven by CLOUDINARY_URL — UI cannot switch to S3/R2/Supabase here.
+    if (
+      parsed.provider !== "local" &&
+      parsed.provider !== "cloudinary" &&
+      parsed.provider !== current.fileStorage.provider
+    ) {
       throw new AppError(
-        "Cloud storage providers are configured via environment in a later phase"
+        "Additional cloud storage providers are configured via environment"
       );
     }
     await setCompanySetting({

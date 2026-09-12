@@ -13,7 +13,7 @@ import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { ClientPortalFields } from "@/components/contracts/client-portal-fields";
 
 type PageProps = {
@@ -88,7 +88,7 @@ export default async function PMContractDetailPage({ params }: PageProps) {
               </Button>
             </Link>
             <a
-              href={`/api/files/${contract.filePath}`}
+              href={mediaUrl(contract.filePath) ?? "#"}
               target="_blank"
               rel="noreferrer"
             >

@@ -76,10 +76,13 @@ export function LegalDoc({
   title,
   updated,
   children,
+  html,
 }: {
   title: string;
   updated: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  /** Sanitized HTML from CMS (takes precedence when set). */
+  html?: string;
 }) {
   return (
     <PublicShell>
@@ -91,9 +94,16 @@ export function LegalDoc({
           {title}
         </h1>
         <p className="mt-2 text-sm text-sb-muted">Last updated: {updated}</p>
-        <div className="prose-legal mt-8 space-y-6 text-[15px] leading-relaxed text-sb-body">
-          {children}
-        </div>
+        {html ? (
+          <div
+            className="prose-legal mt-8 space-y-6 text-[15px] leading-relaxed text-sb-body [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-sb-ink [&_h3]:mt-4 [&_h3]:text-base [&_h3]:font-semibold [&_section]:space-y-2 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:font-medium [&_a]:text-sb-orange [&_a]:underline"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        ) : (
+          <div className="prose-legal mt-8 space-y-6 text-[15px] leading-relaxed text-sb-body">
+            {children}
+          </div>
+        )}
       </article>
     </PublicShell>
   );

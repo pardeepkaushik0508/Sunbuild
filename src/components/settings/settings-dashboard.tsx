@@ -644,7 +644,11 @@ function StorageModal({
           <div>
             <p className="text-xs uppercase tracking-wide text-sb-muted">Provider</p>
             <p className="mt-1 font-medium text-sb-ink">
-              {fs.provider === "local" ? "Local private storage" : fs.provider}
+              {fs.provider === "cloudinary"
+                ? "Cloudinary"
+                : fs.provider === "local"
+                  ? "Local private storage"
+                  : fs.provider}
             </p>
           </div>
           <div>
@@ -661,12 +665,14 @@ function StorageModal({
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-sb-muted">Access policy</p>
-            <p className="mt-1 font-medium text-sb-ink">Private · signed downloads</p>
+            <p className="mt-1 font-medium text-sb-ink">
+              Private · Cloudinary delivery
+            </p>
           </div>
         </div>
         <p className="text-xs text-sb-muted">
-          Secrets and service-role keys are never shown. Sensitive files use
-          authorization checks and private object paths.
+          Uploads are stored in Cloudinary (CLOUDINARY_URL). Secrets are never
+          shown in the browser. Authorization still gates which assets each role can see.
         </p>
         <FormField label="Maximum upload size (MB)" required>
           <Input

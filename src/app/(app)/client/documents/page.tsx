@@ -6,7 +6,7 @@ import { Td } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
 
 export default async function ClientDocumentsPage() {
   const session = await requireRole(Role.CLIENT);
@@ -69,7 +69,7 @@ export default async function ClientDocumentsPage() {
               <Td key="uploaded">{formatDate(doc.createdAt)}</Td>,
               <Td key="file">
                 <a
-                  href={`/api/files/${doc.filePath}`}
+                  href={mediaUrl(doc.filePath) ?? "#"}
                   className="text-sm underline hover:text-sb-yellow-dark"
                   target="_blank"
                   rel="noreferrer"

@@ -13,6 +13,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "migrate:uploads-cloudinary": "tsx scripts/migrate-uploads-to-cloudinary.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
@@ -20,8 +21,13 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.7.3",
+    "cloudinary": "^2.11.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "googleapis": "^178.1.1",

@@ -10,7 +10,7 @@ import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -160,7 +160,7 @@ export default async function SalesDocumentsPage({ searchParams }: PageProps) {
               </Td>,
               <Td key="file">
                 <a
-                  href={`/api/files/${doc.filePath}`}
+                  href={mediaUrl(doc.filePath) ?? "#"}
                   className="text-sm underline hover:text-sb-yellow-dark"
                   target="_blank"
                   rel="noreferrer"

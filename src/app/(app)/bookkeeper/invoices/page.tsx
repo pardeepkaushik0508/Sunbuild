@@ -14,7 +14,7 @@ import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 
 export default async function BookkeeperInvoicesPage() {
   const session = await requireRole([Role.BOOKKEEPER, Role.OWNER]);
@@ -198,7 +198,7 @@ export default async function BookkeeperInvoicesPage() {
             <Td key="file">
               {invoice.filePath ? (
                 <a
-                  href={`/api/files/${invoice.filePath}`}
+                  href={mediaUrl(invoice.filePath) ?? "#"}
                   className="text-sm text-sb-black underline hover:text-sb-yellow-dark"
                   target="_blank"
                   rel="noreferrer"

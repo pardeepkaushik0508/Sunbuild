@@ -9,7 +9,7 @@ import { Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { FormField, Textarea } from "@/components/ui/form";
 import { useOptionalToast } from "@/components/ui/toast";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { clientChangeOrderDecisionAction } from "@/lib/client/actions";
 import type { ClientCoCardData } from "@/components/client/payments-board";
 import { toSafeErrorMessage } from "@/lib/errors";
@@ -216,7 +216,7 @@ export function ClientChangeOrdersBoard({
                 )}
                 {co.attachmentPath ? (
                   <a
-                    href={`/api/files/${co.attachmentPath}`}
+                    href={mediaUrl(co.attachmentPath) ?? "#"}
                     target="_blank"
                     rel="noreferrer"
                   >

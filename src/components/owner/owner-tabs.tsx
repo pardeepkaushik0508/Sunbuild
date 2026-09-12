@@ -26,6 +26,11 @@ const OWNER_TABS = [
     href: "/owner/settings",
     match: (p: string) => p.startsWith("/owner/settings"),
   },
+  {
+    label: "Site content",
+    href: "/content",
+    match: (p: string) => p.startsWith("/content") || p.startsWith("/owner/content"),
+  },
 ] as const;
 
 export function OwnerTabs({ className }: { className?: string }) {

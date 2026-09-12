@@ -8,7 +8,7 @@ import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, fullName } from "@/lib/utils";
+import { formatDate, fullName, mediaUrl } from "@/lib/utils";
 
 export default async function CeoApprovalsPage() {
   const session = await requireRole([Role.CEO, Role.OWNER]);
@@ -92,7 +92,7 @@ export default async function CeoApprovalsPage() {
                         <dd>
                           {doc.fileName ? (
                             <a
-                              href={`/api/files/${doc.filePath}`}
+                              href={mediaUrl(doc.filePath) ?? "#"}
                               className="text-sb-black underline hover:text-sb-yellow-dark"
                               target="_blank"
                               rel="noreferrer"

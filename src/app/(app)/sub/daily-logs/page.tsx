@@ -1,16 +1,15 @@
-import Link from "next/link";
 import { Role } from "@prisma/client";
 import { createDailyLogAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
-import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
-import { Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { MediaImage } from "@/components/ui/media-image";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -34,7 +33,10 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
           ? { projectId: paramProjectId }
           : { projectId: { in: projectIds } }),
       },
-      include: { project: { select: { id: true, name: true } } },
+      include: {
+        project: { select: { id: true, name: true } },
+        photos: { orderBy: { createdAt: "asc" } },
+      },
       orderBy: { logDate: "desc" },
       take: 500,
     }),
@@ -66,6 +68,7 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
           <ActionForm
             action={createDailyLogAction}
             successMessage="Daily log submitted successfully"
+            encType="multipart/form-data"
             className="mt-4 grid gap-4 md:grid-cols-2"
           >
             <FormField label="Assigned project">
@@ -98,6 +101,14 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
               />
             </FormField>
             <div className="md:col-span-2">
+              <ImageUploadField
+                name="photos"
+                multiple
+                label="Photos (optional)"
+                maxFiles={10}
+              />
+            </div>
+            <div className="md:col-span-2">
               <SubmitButton pendingLabel="Submitting…">Submit log</SubmitButton>
             </div>
           </ActionForm>
@@ -114,58 +125,47 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
             description="Use the form above to record your site activity."
           />
         ) : (
-          <InteractiveDataTable
-            searchPlaceholder="Search logs…"
-            emptyMessage="No logs match your search"
-            columns={[
-              { key: "date", label: "Date" },
-              { key: "project", label: "Project" },
-              { key: "status", label: "Status" },
-              { key: "work", label: "Work Completed" },
-              { key: "notes", label: "Notes" },
-            ]}
-            rows={logs.map((log) => ({
-              id: log.id,
-              searchText: [
-                formatDate(log.logDate),
-                log.project.name,
-                log.status,
-                log.workCompleted,
-                log.siteNotes,
-              ]
-                .filter(Boolean)
-                .join(" "),
-              sortValues: {
-                date: log.logDate.getTime(),
-                project: log.project.name,
-                status: log.status,
-                work: log.workCompleted ?? "",
-                notes: log.siteNotes ?? "",
-              },
-              cells: [
-                <Td key="date" className="whitespace-nowrap font-medium">
-                  {formatDate(log.logDate)}
-                </Td>,
-                <Td key="project">
-                  <Link
-                    href={`/sub/jobs/${log.project.id}`}
-                    className="hover:underline text-sb-text font-medium"
-                  >
-                    {log.project.name}
-                  </Link>
-                </Td>,
-                <Td key="status">
+          <div className="space-y-4">
+            {logs.map((log) => (
+              <Card key={log.id}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">
+                      {formatDate(log.logDate)} · {log.project.name}
+                    </p>
+                    <p className="mt-1 text-sm text-sb-text">
+                      {log.workCompleted ?? "—"}
+                    </p>
+                    {log.siteNotes ? (
+                      <p className="mt-1 text-sm text-sb-muted">{log.siteNotes}</p>
+                    ) : null}
+                  </div>
                   <StatusBadge tone="green">{log.status}</StatusBadge>
-                </Td>,
-                <Td key="work" className="max-w-xs truncate">
-                  {log.workCompleted ?? "—"}
-                </Td>,
-                <Td key="notes" className="max-w-xs truncate text-sb-muted">
-                  {log.siteNotes ?? "—"}
-                </Td>,
-              ],
-            }))}
-          />
+                </div>
+                {log.photos.length > 0 ? (
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {log.photos.map((photo) => (
+                      <a
+                        key={photo.id}
+                        href={mediaUrl(photo.filePath) ?? "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-[8px]"
+                      >
+                        <MediaImage
+                          src={photo.filePath}
+                          alt={photo.fileName}
+                          aspectClassName="aspect-square"
+                          width={240}
+                          height={240}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </Card>
+            ))}
+          </div>
         )}
       </div>
     </div>

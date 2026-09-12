@@ -33,7 +33,7 @@ export const DEFAULT_MFA_POLICY: MfaPolicy = {
 export const DEFAULT_SESSION_TIMEOUT_MINUTES: SessionTimeoutMinutes = 240;
 
 export const DEFAULT_FILE_STORAGE: FileStorageSettings = {
-  provider: "local",
+  provider: "cloudinary",
   maxUploadBytes: 20 * 1024 * 1024,
   allowedExtensions: [
     ".pdf",

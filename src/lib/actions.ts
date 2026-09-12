@@ -32,7 +32,12 @@ import {
   assertCompanyUser,
   assertCompanySubcontractor,
 } from "@/lib/session";
-import { deleteUpload, saveCompanyUpload, saveUpload } from "@/lib/storage";
+import {
+  deleteUpload,
+  saveCompanyUpload,
+  saveUpload,
+  storageMeta,
+} from "@/lib/storage";
 import {
   assertPasswordMeetsPolicy,
   getPasswordPolicy,
@@ -446,34 +451,42 @@ export async function uploadContractAction(form: FormData) {
 
   if (projectId) await assertProjectAccess(session, projectId);
 
-  const contract = await prisma.purchaseContract.create({
-    data: {
-      projectId,
-      filePath: saved.filePath,
-      fileName: saved.fileName,
-      status: ContractStatus.IN_REVIEW,
-      uploadedById: session.user.id,
-      projectName: formString(form, "projectName") || null,
-      municipalAddress: formString(form, "municipalAddress") || null,
-      legalAddress: formString(form, "legalAddress") || null,
-      lotBlockPlan: formString(form, "lotBlockPlan") || null,
-      buyerFirstName: formString(form, "buyerFirstName") || null,
-      buyerLastName: formString(form, "buyerLastName") || null,
-      buyerEmail: formString(form, "buyerEmail") || null,
-      buyerPhone: formString(form, "buyerPhone") || null,
-      buyerMailing: formString(form, "buyerMailing") || null,
-      contractNumber: formString(form, "contractNumber") || null,
-      purchasePrice: Number(formString(form, "purchasePrice") || 0) || null,
-      contractDate: formString(form, "contractDate")
-        ? new Date(formString(form, "contractDate"))
-        : null,
-      targetClosing: formString(form, "targetClosing")
-        ? new Date(formString(form, "targetClosing"))
-        : null,
-      builderName: formString(form, "builderName") || "Sunview Custom Homes",
-      reviewNotes: formString(form, "reviewNotes") || null,
-    },
-  });
+  let contract;
+  try {
+    contract = await prisma.purchaseContract.create({
+      data: {
+        projectId,
+        ...storageMeta(saved),
+        status: ContractStatus.IN_REVIEW,
+        uploadedById: session.user.id,
+        projectName: formString(form, "projectName") || null,
+        municipalAddress: formString(form, "municipalAddress") || null,
+        legalAddress: formString(form, "legalAddress") || null,
+        lotBlockPlan: formString(form, "lotBlockPlan") || null,
+        buyerFirstName: formString(form, "buyerFirstName") || null,
+        buyerLastName: formString(form, "buyerLastName") || null,
+        buyerEmail: formString(form, "buyerEmail") || null,
+        buyerPhone: formString(form, "buyerPhone") || null,
+        buyerMailing: formString(form, "buyerMailing") || null,
+        contractNumber: formString(form, "contractNumber") || null,
+        purchasePrice: Number(formString(form, "purchasePrice") || 0) || null,
+        contractDate: formString(form, "contractDate")
+          ? new Date(formString(form, "contractDate"))
+          : null,
+        targetClosing: formString(form, "targetClosing")
+          ? new Date(formString(form, "targetClosing"))
+          : null,
+        builderName: formString(form, "builderName") || "Sunview Custom Homes",
+        reviewNotes: formString(form, "reviewNotes") || null,
+      },
+    });
+  } catch (err) {
+    await deleteUpload(saved.filePath, {
+      publicId: saved.publicId,
+      resourceType: saved.resourceType,
+    });
+    throw err;
+  }
 
   await writeAudit({
     userId: session.user.id,
@@ -1280,17 +1293,46 @@ export async function createDailyLogAction(form: FormData) {
     throw new AppError("Work completed description is required");
   }
 
-  await prisma.dailyLog.create({
-    data: {
-      projectId,
-      authorId: session.user.id,
-      logDate,
-      workCompleted,
-      siteNotes,
-      status: "SUBMITTED",
-      submittedAt: new Date(),
-    },
-  });
+  const photoFiles = form
+    .getAll("photos")
+    .filter((f): f is File => f instanceof File && f.size > 0)
+    .slice(0, 10);
+
+  const uploaded: Awaited<ReturnType<typeof saveCompanyUpload>>[] = [];
+  try {
+    for (const file of photoFiles) {
+      const saved = await saveCompanyUpload(
+        session.membership.companyId,
+        file,
+        `daily-logs/${projectId}`
+      );
+      uploaded.push(saved);
+    }
+
+    await prisma.dailyLog.create({
+      data: {
+        projectId,
+        authorId: session.user.id,
+        logDate,
+        workCompleted,
+        siteNotes,
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        photos: {
+          create: uploaded.map((saved) => storageMeta(saved)),
+        },
+      },
+    });
+  } catch (err) {
+    for (const saved of uploaded) {
+      await deleteUpload(saved.filePath, {
+        publicId: saved.publicId,
+        resourceType: saved.resourceType,
+      });
+    }
+    throw err;
+  }
+
   revalidatePath("/pm/daily-logs");
   revalidatePath("/sub");
   revalidatePath("/sub/daily-logs");
@@ -1324,18 +1366,25 @@ export async function uploadDocumentAction(form: FormData) {
     visibility = DocumentVisibility.INTERNAL;
   }
 
-  await prisma.document.create({
-    data: {
-      projectId,
-      title: formString(form, "title") || saved.fileName,
-      category: formString(form, "category") || "GENERAL",
-      filePath: saved.filePath,
-      fileName: saved.fileName,
-      visibility,
-      uploadedById: session.user.id,
-      notes: formString(form, "notes") || null,
-    },
-  });
+  try {
+    await prisma.document.create({
+      data: {
+        projectId,
+        title: formString(form, "title") || saved.fileName,
+        category: formString(form, "category") || "GENERAL",
+        ...storageMeta(saved),
+        visibility,
+        uploadedById: session.user.id,
+        notes: formString(form, "notes") || null,
+      },
+    });
+  } catch (err) {
+    await deleteUpload(saved.filePath, {
+      publicId: saved.publicId,
+      resourceType: saved.resourceType,
+    });
+    throw err;
+  }
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
@@ -1381,22 +1430,29 @@ export async function uploadPhotoAction(form: FormData) {
     }
   }
 
-  await prisma.photo.create({
-    data: {
-      projectId,
-      filePath: saved.filePath,
-      fileName: saved.fileName,
-      caption: formString(form, "caption") || null,
-      visibility,
-      uploadedById: session.user.id,
-      publishedAt:
-        visibility === PhotoVisibility.CLIENT_VISIBLE ? new Date() : null,
-      publishedById:
-        visibility === PhotoVisibility.CLIENT_VISIBLE
-          ? session.user.id
-          : null,
-    },
-  });
+  try {
+    await prisma.photo.create({
+      data: {
+        projectId,
+        ...storageMeta(saved),
+        caption: formString(form, "caption") || null,
+        visibility,
+        uploadedById: session.user.id,
+        publishedAt:
+          visibility === PhotoVisibility.CLIENT_VISIBLE ? new Date() : null,
+        publishedById:
+          visibility === PhotoVisibility.CLIENT_VISIBLE
+            ? session.user.id
+            : null,
+      },
+    });
+  } catch (err) {
+    await deleteUpload(saved.filePath, {
+      publicId: saved.publicId,
+      resourceType: saved.resourceType,
+    });
+    throw err;
+  }
   revalidatePath("/pm/photos");
   revalidatePath("/sub");
   revalidatePath("/client");
@@ -1427,6 +1483,42 @@ export async function publishPhotoAction(photoId: string) {
     entityId: photoId,
   });
   revalidatePath("/pm/photos");
+  revalidatePath("/client");
+  revalidatePath("/client/photos");
+}
+
+export async function deletePhotoAction(photoId: string) {
+  const session = await requireSession();
+  requireCapability(session, "uploadPhotos");
+  await rateLimitAction(session.user.id, "photo-delete", true);
+  const photo = await prisma.photo.findUnique({ where: { id: photoId } });
+  if (!photo) throw new AppError("Not found");
+  await assertProjectAccess(session, photo.projectId);
+
+  // Subs may only delete their own internal uploads
+  if (
+    session.membership.role === Role.SUBCONTRACTOR &&
+    photo.uploadedById !== session.user.id
+  ) {
+    throw new AppError("Forbidden", 403, "FORBIDDEN");
+  }
+
+  await prisma.photo.delete({ where: { id: photo.id } });
+  await deleteUpload(photo.filePath, {
+    publicId: photo.storagePublicId,
+    resourceType: photo.mediaResourceType || "image",
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: photo.projectId,
+    action: "PHOTO_DELETED",
+    entityType: "Photo",
+    entityId: photoId,
+  });
+  revalidatePath("/pm/photos");
+  revalidatePath("/sub");
   revalidatePath("/client");
   revalidatePath("/client/photos");
 }
@@ -1777,31 +1869,39 @@ export async function uploadInvoiceAction(form: FormData) {
       ? InvoiceStatus.SENT
       : requestedStatus;
   const file = form.get("file");
-  let filePath: string | null = null;
-  let fileName: string | null = null;
+  let fileMeta: ReturnType<typeof storageMeta> | null = null;
   if (file instanceof File && file.size) {
     const saved = await saveCompanyUpload(
       session.membership.companyId,
       file,
       `invoices/${data.projectId}`
     );
-    filePath = saved.filePath;
-    fileName = saved.fileName;
+    fileMeta = storageMeta(saved);
   }
-  const invoice = await prisma.invoice.create({
-    data: {
-      projectId: data.projectId,
-      invoiceNumber: data.invoiceNumber,
-      amount: data.amount,
-      issueDate: new Date(data.issueDate),
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      status,
-      notes: data.notes || null,
-      filePath,
-      fileName,
-      uploadedById: session.user.id,
-    },
-  });
+  let invoice;
+  try {
+    invoice = await prisma.invoice.create({
+      data: {
+        projectId: data.projectId,
+        invoiceNumber: data.invoiceNumber,
+        amount: data.amount,
+        issueDate: new Date(data.issueDate),
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        status,
+        notes: data.notes || null,
+        ...(fileMeta ?? { filePath: null, fileName: null }),
+        uploadedById: session.user.id,
+      },
+    });
+  } catch (err) {
+    if (fileMeta?.storagePublicId) {
+      await deleteUpload(fileMeta.filePath, {
+        publicId: fileMeta.storagePublicId,
+        resourceType: fileMeta.mediaResourceType,
+      });
+    }
+    throw err;
+  }
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
@@ -1867,30 +1967,50 @@ export async function uploadCompletionDocumentAction(form: FormData) {
     file,
     `completion/${projectId}`
   );
-  await prisma.$transaction(async (tx) => {
-    await tx.completionDocument.upsert({
-      where: { projectId },
-      update: {
-        filePath: saved.filePath,
-        fileName: saved.fileName,
-        status: CompletionDocStatus.PENDING_CEO_APPROVAL,
-        uploadedById: session.user.id,
-        reviewedAt: null,
-        reviewedById: null,
-        comments: null,
-      },
-      create: {
-        projectId,
-        filePath: saved.filePath,
-        fileName: saved.fileName,
-        uploadedById: session.user.id,
-      },
-    });
-    await tx.project.update({
-      where: { id: projectId },
-      data: { status: ProjectStatus.PENDING_CEO_APPROVAL },
-    });
+  const previous = await prisma.completionDocument.findUnique({
+    where: { projectId },
+    select: {
+      filePath: true,
+      storagePublicId: true,
+      mediaResourceType: true,
+    },
   });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.completionDocument.upsert({
+        where: { projectId },
+        update: {
+          ...storageMeta(saved),
+          status: CompletionDocStatus.PENDING_CEO_APPROVAL,
+          uploadedById: session.user.id,
+          reviewedAt: null,
+          reviewedById: null,
+          comments: null,
+        },
+        create: {
+          projectId,
+          ...storageMeta(saved),
+          uploadedById: session.user.id,
+        },
+      });
+      await tx.project.update({
+        where: { id: projectId },
+        data: { status: ProjectStatus.PENDING_CEO_APPROVAL },
+      });
+    });
+  } catch (err) {
+    await deleteUpload(saved.filePath, {
+      publicId: saved.publicId,
+      resourceType: saved.resourceType,
+    });
+    throw err;
+  }
+  if (previous?.storagePublicId || previous?.filePath) {
+    await deleteUpload(previous.filePath, {
+      publicId: previous.storagePublicId,
+      resourceType: previous.mediaResourceType,
+    });
+  }
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
@@ -2024,13 +2144,20 @@ export async function createWarrantyTicketAction(form: FormData) {
       file,
       `warranty/${ticket.id}`
     );
-    await prisma.warrantyPhoto.create({
-      data: {
-        ticketId: ticket.id,
-        filePath: saved.filePath,
-        fileName: saved.fileName,
-      },
-    });
+    try {
+      await prisma.warrantyPhoto.create({
+        data: {
+          ticketId: ticket.id,
+          ...storageMeta(saved),
+        },
+      });
+    } catch (err) {
+      await deleteUpload(saved.filePath, {
+        publicId: saved.publicId,
+        resourceType: saved.resourceType,
+      });
+      throw err;
+    }
   }
 
   await writeAudit({
@@ -2970,6 +3097,7 @@ export async function updateOwnProfileAction(form: FormData) {
 
   const file = form.get("image");
   let nextImage: string | undefined;
+  let nextPublicId: string | null | undefined;
 
   if (file instanceof File && file.size > 0) {
     const uploaded = await saveUpload(file, `avatars/${session.user.id}`, {
@@ -2977,25 +3105,42 @@ export async function updateOwnProfileAction(form: FormData) {
       allowedExtensions: PROFILE_IMAGE_EXTENSIONS,
     });
     nextImage = uploaded.filePath;
+    nextPublicId = uploaded.publicId;
 
-    const previous = session.user.image;
-    if (
-      previous &&
-      !previous.startsWith("http") &&
-      !previous.startsWith("/") &&
-      previous.startsWith(`avatars/${session.user.id}/`)
-    ) {
-      await deleteUpload(previous);
+    const previous = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { image: true, imagePublicId: true },
+    });
+
+    try {
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: {
+          name,
+          image: nextImage,
+          imagePublicId: nextPublicId,
+        },
+      });
+    } catch (err) {
+      await deleteUpload(uploaded.filePath, {
+        publicId: uploaded.publicId,
+        resourceType: uploaded.resourceType,
+      });
+      throw err;
     }
-  }
 
-  await prisma.user.update({
-    where: { id: session.user.id },
-    data: {
-      name,
-      ...(nextImage ? { image: nextImage } : {}),
-    },
-  });
+    if (previous?.image || previous?.imagePublicId) {
+      await deleteUpload(previous.image, {
+        publicId: previous.imagePublicId,
+        resourceType: "image",
+      });
+    }
+  } else {
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { name },
+    });
+  }
 
   await writeAudit({
     userId: session.user.id,

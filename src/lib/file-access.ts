@@ -154,6 +154,44 @@ export async function assertFileDownloadAccess(
     return;
   }
 
+  // Daily log photos — staff + author; never client
+  const dailyLogPhoto = await prisma.dailyLogPhoto.findFirst({
+    where: { filePath },
+    include: {
+      dailyLog: { select: { projectId: true, authorId: true } },
+    },
+  });
+  if (dailyLogPhoto) {
+    if (isClient) throw new ForbiddenError();
+    await assertProjectAccess(session, dailyLogPhoto.dailyLog.projectId);
+    if (
+      isSub &&
+      dailyLogPhoto.dailyLog.authorId !== session.user.id
+    ) {
+      throw new ForbiddenError();
+    }
+    return;
+  }
+
+  // Profile image stored as absolute Cloudinary URL
+  const avatarUser = await prisma.user.findFirst({
+    where: { image: filePath },
+    select: { id: true },
+  });
+  if (avatarUser) {
+    if (avatarUser.id === session.user.id) return;
+    const shared = await prisma.membership.findFirst({
+      where: {
+        userId: avatarUser.id,
+        companyId: session.membership.companyId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!shared) throw new ForbiddenError();
+    return;
+  }
+
   // Selection material lists — staff with project access only (never client/sub)
   const materialProject = await prisma.project.findFirst({
     where: { materialListPath: filePath },

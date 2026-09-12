@@ -400,14 +400,27 @@ export async function uploadMaterialListAction(form: FormData) {
     );
   }
 
+  const previous = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { materialListPath: true, materialListPublicId: true },
+  });
+
   await prisma.project.update({
     where: { id: projectId },
     data: {
       materialListPath: saved.filePath,
+      materialListPublicId: saved.publicId,
       materialListName: saved.fileName,
       materialListAt: new Date(),
     },
   });
+
+  if (previous?.materialListPath || previous?.materialListPublicId) {
+    await deleteUpload(previous.materialListPath, {
+      publicId: previous.materialListPublicId,
+      resourceType: "raw",
+    });
+  }
 
   await writeAudit({
     userId: session.user.id,
@@ -436,9 +449,12 @@ export async function removeMaterialListAction(form: FormData) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new AppError("Project not found");
 
-  if (project.materialListPath) {
+  if (project.materialListPath || project.materialListPublicId) {
     try {
-      await deleteUpload(project.materialListPath);
+      await deleteUpload(project.materialListPath, {
+        publicId: project.materialListPublicId,
+        resourceType: "raw",
+      });
     } catch {
       // file may already be gone
     }
@@ -448,6 +464,7 @@ export async function removeMaterialListAction(form: FormData) {
     where: { id: projectId },
     data: {
       materialListPath: null,
+      materialListPublicId: null,
       materialListName: null,
       materialListAt: null,
     },

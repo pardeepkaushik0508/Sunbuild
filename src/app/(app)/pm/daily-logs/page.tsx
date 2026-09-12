@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { formatDate, mediaUrl } from "@/lib/utils";
+import { MediaImage } from "@/components/ui/media-image";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string; authorId?: string; date?: string }>;
@@ -54,6 +55,7 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
       include: {
         project: { select: { id: true, name: true } },
         author: { select: { id: true, name: true } },
+        photos: { orderBy: { createdAt: "asc" }, take: 6 },
       },
       orderBy: { logDate: "desc" },
       take: 500,
@@ -163,6 +165,7 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
             { key: "status", label: "Status" },
             { key: "work", label: "Work Completed" },
             { key: "notes", label: "Notes" },
+            { key: "photos", label: "Photos", sortable: false },
           ]}
           rows={logs.map((log) => ({
             id: log.id,
@@ -207,6 +210,31 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
               </Td>,
               <Td key="notes" className="max-w-xs truncate text-sb-muted">
                 {log.siteNotes ?? "—"}
+              </Td>,
+              <Td key="photos">
+                {log.photos.length === 0 ? (
+                  <span className="text-xs text-sb-muted">—</span>
+                ) : (
+                  <div className="flex gap-1">
+                    {log.photos.map((photo) => (
+                      <a
+                        key={photo.id}
+                        href={mediaUrl(photo.filePath) ?? "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block h-10 w-10 overflow-hidden rounded"
+                      >
+                        <MediaImage
+                          src={photo.filePath}
+                          alt={photo.fileName}
+                          aspectClassName="h-10 w-10"
+                          width={40}
+                          height={40}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </Td>,
             ],
           }))}

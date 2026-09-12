@@ -308,23 +308,23 @@ export function GanttChart({
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="text-[11px] text-sb-muted">
-              From
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-sb-muted">
+              <span className="shrink-0">From</span>
               <input
                 type="date"
                 value={rangeFrom}
                 onChange={(e) => setRangeFrom(e.target.value)}
-                className="mt-0.5 block h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px] text-sb-ink"
+                className="h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px] text-sb-ink"
               />
             </label>
-            <label className="text-[11px] text-sb-muted">
-              To
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-sb-muted">
+              <span className="shrink-0">To</span>
               <input
                 type="date"
                 value={rangeTo}
                 onChange={(e) => setRangeTo(e.target.value)}
-                className="mt-0.5 block h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px] text-sb-ink"
+                className="h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px] text-sb-ink"
               />
             </label>
             <button
