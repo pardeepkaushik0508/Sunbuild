@@ -2525,11 +2525,8 @@ export async function inviteUserAction(form: FormData): Promise<
         where: { id: companyId },
         select: { name: true },
       });
-      const appUrl = (
-        process.env.NEXT_PUBLIC_APP_URL ||
-        process.env.BETTER_AUTH_URL ||
-        "http://localhost:3000"
-      ).replace(/\/$/, "");
+      const { getAppOrigin } = await import("@/lib/app-url");
+      const appUrl = getAppOrigin();
 
       let setupPasswordUrl: string | null = null;
       try {

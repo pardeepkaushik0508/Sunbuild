@@ -5,6 +5,7 @@ import { disconnectGoogleCalendar } from "@/lib/google/calendar";
 import { ForbiddenError, UnauthorizedError, AppError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
+import { appAbsoluteUrl } from "@/lib/app-url";
 
 const ALLOWED: Role[] = [
   Role.OWNER,
@@ -51,9 +52,9 @@ export async function POST(request: Request) {
 
     const accept = request.headers.get("accept") || "";
     if (accept.includes("text/html")) {
-      return NextResponse.redirect(
-        new URL(`${safeReturn}?google=disconnected`, request.url)
-      );
+      const dest = appAbsoluteUrl(safeReturn, request);
+      dest.searchParams.set("google", "disconnected");
+      return NextResponse.redirect(dest);
     }
     return NextResponse.json({ ok: true, status: "NOT_CONNECTED" });
   } catch (err) {

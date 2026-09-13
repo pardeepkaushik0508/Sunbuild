@@ -5,6 +5,7 @@ import { disconnectMicrosoftTodo } from "@/lib/microsoft/todo";
 import { safeReturnPath } from "@/lib/google/oauth-state";
 import { UnauthorizedError, ForbiddenError, AppError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
+import { appAbsoluteUrl } from "@/lib/app-url";
 
 const ALLOWED: Role[] = [
   Role.OWNER,
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       url.searchParams.get("returnTo") || undefined,
       session.membership.role === Role.OWNER ? "/owner/settings" : "/settings"
     );
-    const dest = new URL(returnTo, url.origin);
+    const dest = appAbsoluteUrl(returnTo, request);
     dest.searchParams.set("microsoft", "disconnected");
     return NextResponse.redirect(dest);
   } catch (err) {

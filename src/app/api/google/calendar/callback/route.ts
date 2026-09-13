@@ -11,6 +11,7 @@ import {
 import { requireApiSession } from "@/lib/session";
 import { AppError, UnauthorizedError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
+import { appAbsoluteUrl } from "@/lib/app-url";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
     returnTo = safeReturnPath(payload.returnTo, returnTo);
 
     if (oauthError) {
-      const dest = new URL(returnTo, url.origin);
+      const dest = appAbsoluteUrl(returnTo, request);
       dest.searchParams.set("google", "error");
       dest.searchParams.set(
         "message",
@@ -75,19 +76,19 @@ export async function GET(request: Request) {
       metadata: { email: email ?? null },
     });
 
-    const dest = new URL(returnTo, url.origin);
+    const dest = appAbsoluteUrl(returnTo, request);
     dest.searchParams.set("google", "connected");
     return NextResponse.redirect(dest);
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(appAbsoluteUrl("/login", request));
     }
     const message =
       err instanceof AppError
         ? err.message
         : "Could not connect Google Calendar";
     // Never include tokens/codes in redirect.
-    const dest = new URL(returnTo, url.origin);
+    const dest = appAbsoluteUrl(returnTo, request);
     dest.searchParams.set("google", "error");
     dest.searchParams.set("message", message.slice(0, 180));
     return NextResponse.redirect(dest);

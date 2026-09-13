@@ -11,13 +11,10 @@ import {
 import { requireApiSession } from "@/lib/session";
 import { AppError, UnauthorizedError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
+import { appAbsoluteUrl } from "@/lib/app-url";
 
-function errorRedirect(
-  requestUrl: string,
-  returnTo: string,
-  message: string
-) {
-  const dest = new URL(returnTo, requestUrl);
+function errorRedirect(request: Request, returnTo: string, message: string) {
+  const dest = appAbsoluteUrl(returnTo, request);
   dest.searchParams.set("microsoft", "error");
   dest.searchParams.set("message", message.slice(0, 180));
   return NextResponse.redirect(dest);
@@ -36,7 +33,7 @@ export async function GET(request: Request) {
 
     if (!state) {
       return errorRedirect(
-        url.origin,
+        request,
         returnTo,
         "Missing OAuth state. Please try connecting again."
       );
@@ -50,7 +47,7 @@ export async function GET(request: Request) {
         err instanceof AppError
           ? err.message
           : "Invalid OAuth state. Please try connecting again.";
-      return errorRedirect(url.origin, returnTo, message);
+      return errorRedirect(request, returnTo, message);
     }
 
     if (
@@ -58,7 +55,7 @@ export async function GET(request: Request) {
       payload.companyId !== session.membership.companyId
     ) {
       return errorRedirect(
-        url.origin,
+        request,
         returnTo,
         "OAuth state does not match your session. Please try connecting again."
       );
@@ -79,12 +76,12 @@ export async function GET(request: Request) {
       } else if (desc) {
         message = desc.slice(0, 180);
       }
-      return errorRedirect(url.origin, returnTo, message);
+      return errorRedirect(request, returnTo, message);
     }
 
     if (!code) {
       return errorRedirect(
-        url.origin,
+        request,
         returnTo,
         "Missing authorization code. Please try connecting again."
       );
@@ -113,12 +110,12 @@ export async function GET(request: Request) {
       metadata: { email: profile.email ?? null },
     }).catch(() => undefined);
 
-    const dest = new URL(returnTo, url.origin);
+    const dest = appAbsoluteUrl(returnTo, request);
     dest.searchParams.set("microsoft", "connected");
     return NextResponse.redirect(dest);
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(appAbsoluteUrl("/login", request));
     }
     const message =
       err instanceof AppError
@@ -126,6 +123,6 @@ export async function GET(request: Request) {
         : "Could not connect Microsoft To Do";
     // Never log tokens/codes. Safe operational signal only.
     console.error("[microsoft-todo] callback failed:", message);
-    return errorRedirect(url.origin, returnTo, message);
+    return errorRedirect(request, returnTo, message);
   }
 }

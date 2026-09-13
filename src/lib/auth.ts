@@ -7,14 +7,11 @@ import {
   passwordResetEmail,
   trySendEmail,
 } from "@/lib/email";
+import { getAppOrigin } from "@/lib/app-url";
 
 const isProd = process.env.NODE_ENV === "production";
 
-const baseURL = (
-  process.env.BETTER_AUTH_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  "http://localhost:3000"
-).replace(/\/$/, "");
+const baseURL = getAppOrigin();
 
 /**
  * Password reset email delivery via Better Auth token URL.

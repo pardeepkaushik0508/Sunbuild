@@ -6,6 +6,7 @@ import { createOAuthState, safeReturnPath } from "@/lib/google/oauth-state";
 import { isMicrosoftTodoConfigured } from "@/lib/microsoft/config";
 import { UnauthorizedError, ForbiddenError, AppError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
+import { appAbsoluteUrl } from "@/lib/app-url";
 
 const ALLOWED: Role[] = [
   Role.OWNER,
@@ -55,13 +56,13 @@ export async function GET(request: Request) {
     return NextResponse.redirect(authUrl);
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(appAbsoluteUrl("/login", request));
     }
     const message =
       err instanceof AppError
         ? err.message
         : "Could not start Microsoft To Do connection";
-    const returnTo = new URL("/owner/settings", request.url);
+    const returnTo = appAbsoluteUrl("/owner/settings", request);
     returnTo.searchParams.set("microsoft", "error");
     returnTo.searchParams.set("message", message);
     return NextResponse.redirect(returnTo);

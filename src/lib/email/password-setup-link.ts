@@ -2,14 +2,7 @@ import "server-only";
 
 import { nanoid } from "nanoid";
 import { prisma } from "@/lib/db";
-
-function appOrigin(): string {
-  return (
-    process.env.BETTER_AUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
-}
+import { getAppOrigin } from "@/lib/app-url";
 
 /**
  * Create a Better Auth–compatible password reset token and return the
@@ -32,7 +25,7 @@ export async function createPasswordSetupLink(
     },
   });
 
-  const origin = appOrigin();
+  const origin = getAppOrigin();
   const callbackURL = encodeURIComponent(`${origin}${callbackPath}`);
   // Better Auth serves reset-password under /api/auth
   return `${origin}/api/auth/reset-password/${token}?callbackURL=${callbackURL}`;

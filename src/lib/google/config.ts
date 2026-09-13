@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AppError } from "@/lib/errors";
+import { getAppOrigin } from "@/lib/app-url";
 
 export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
@@ -19,7 +20,7 @@ export function getGoogleOAuthConfig() {
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
   const redirectUri =
     process.env.GOOGLE_REDIRECT_URI?.trim() ||
-    `${(process.env.NEXT_PUBLIC_APP_URL || process.env.BETTER_AUTH_URL || "http://localhost:3000").replace(/\/$/, "")}/api/google/calendar/callback`;
+    `${getAppOrigin()}/api/google/calendar/callback`;
 
   if (!clientId || !clientSecret) {
     throw new AppError(
