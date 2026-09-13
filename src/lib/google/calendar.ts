@@ -152,6 +152,8 @@ export async function saveGoogleConnection(input: {
       },
     });
   }
+
+  invalidateGoogleCacheForUser(input.userId);
 }
 
 export async function disconnectGoogleCalendar(
@@ -263,31 +265,45 @@ export async function getAuthedCalendarClient(
       }
     });
 
-    // Only refresh when token is missing expiry or already expired.
-    // Avoids an extra Google round-trip on every calendar fetch.
+    // Refresh when expiry is missing OR token is near expiry.
+    // Missing expiry previously skipped refresh and caused silent empty calendars.
     const expiresAt = row.tokenExpiry?.getTime() ?? 0;
-    if (expiresAt && expiresAt < Date.now() + 30_000) {
-      const refreshed = await client.refreshAccessToken();
-      const creds = refreshed.credentials;
-      if (creds.access_token) {
-        await prisma.googleCalendarConnection.update({
-          where: { id: row.id },
-          data: {
-            accessTokenEncrypted: await encryptSecret(creds.access_token),
-            tokenExpiry: creds.expiry_date
-              ? new Date(creds.expiry_date)
-              : null,
-            status: "CONNECTED",
-            ...(creds.refresh_token
-              ? {
-                  refreshTokenEncrypted: await encryptSecret(
-                    creds.refresh_token
-                  ),
-                }
-              : {}),
-          },
+    const needsRefresh = !expiresAt || expiresAt < Date.now() + 60_000;
+    if (needsRefresh) {
+      try {
+        const refreshed = await client.refreshAccessToken();
+        const creds = refreshed.credentials;
+        if (creds.access_token) {
+          await prisma.googleCalendarConnection.update({
+            where: { id: row.id },
+            data: {
+              accessTokenEncrypted: await encryptSecret(creds.access_token),
+              tokenExpiry: creds.expiry_date
+                ? new Date(creds.expiry_date)
+                : null,
+              status: "CONNECTED",
+              ...(creds.refresh_token
+                ? {
+                    refreshTokenEncrypted: await encryptSecret(
+                      creds.refresh_token
+                    ),
+                  }
+                : {}),
+            },
+          });
+          client.setCredentials({
+            access_token: creds.access_token,
+            refresh_token: creds.refresh_token || refreshToken,
+            expiry_date: creds.expiry_date,
+          });
+        }
+      } catch (refreshErr) {
+        console.error("[google-calendar] token refresh failed:", {
+          message:
+            refreshErr instanceof Error ? refreshErr.message : "unknown",
         });
-        client.setCredentials(creds);
+        await markReconnectRequired(row.id);
+        return null;
       }
     }
 
@@ -296,7 +312,10 @@ export async function getAuthedCalendarClient(
       connectionId: row.id,
       calendarId: row.googleCalendarId || "primary",
     };
-  } catch {
+  } catch (err) {
+    console.error("[google-calendar] auth client failed:", {
+      message: err instanceof Error ? err.message : "unknown",
+    });
     await markReconnectRequired(row.id);
     return null;
   }
@@ -532,10 +551,7 @@ export async function listGoogleEventsInRange(
       timeMax: timeMax.toISOString(),
       singleEvents: true,
       orderBy: "startTime",
-      maxResults: 100,
-      // Smaller payload = faster response
-      fields:
-        "items(id,status,summary,start,end,location,hangoutLink,conferenceData/entryPoints)",
+      maxResults: 250,
     });
 
     const events: ListedGoogleEvent[] = [];
@@ -545,11 +561,20 @@ export async function listGoogleEventsInRange(
       const endRaw = item.end?.dateTime || item.end?.date;
       if (!startRaw) continue;
       const allDay = Boolean(item.start?.date && !item.start?.dateTime);
+      // All-day: parse as noon UTC on that date to keep calendar day stable.
+      const start = allDay
+        ? new Date(`${startRaw.slice(0, 10)}T12:00:00.000Z`)
+        : new Date(startRaw);
+      const end = endRaw
+        ? allDay
+          ? new Date(`${endRaw.slice(0, 10)}T12:00:00.000Z`)
+          : new Date(endRaw)
+        : start;
       events.push({
         googleEventId: item.id,
         title: item.summary || "(No title)",
-        start: new Date(startRaw),
-        end: endRaw ? new Date(endRaw) : new Date(startRaw),
+        start,
+        end,
         allDay,
         location: item.location ?? null,
         meetUrl:
@@ -566,6 +591,10 @@ export async function listGoogleEventsInRange(
     return result;
   } catch (err) {
     const status = (err as { code?: number })?.code;
+    console.error("[google-calendar] list events failed:", {
+      status,
+      message: err instanceof Error ? err.message : "unknown",
+    });
     if (status === 401 || status === 403) {
       await markReconnectRequired(authed.connectionId);
       return { events: [], reconnectRequired: true, error: true };

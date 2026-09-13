@@ -4,6 +4,7 @@ import { endOfMonth, startOfMonth } from "date-fns";
 import { requireApiSession, getAccessibleProjectIds } from "@/lib/session";
 import { listGoogleEventsInRange } from "@/lib/google/calendar";
 import { collectSyncedGoogleEventIds } from "@/lib/google/sync";
+import { mapGoogleEventToCalendarEvent } from "@/lib/google/event-display";
 import { UnauthorizedError, ForbiddenError } from "@/lib/errors";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 
@@ -14,6 +15,8 @@ const ALLOWED: Role[] = [
   Role.SALES_MANAGER,
   Role.PROJECT_MANAGER,
   Role.BOOKKEEPER,
+  Role.SUBCONTRACTOR,
+  Role.CLIENT,
 ];
 
 /**
@@ -34,7 +37,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
     }
 
-    // Visible month only + 7-day pad (not ±1–2 months)
     const timeMin = new Date(startOfMonth(around));
     timeMin.setDate(timeMin.getDate() - 7);
     const timeMax = new Date(endOfMonth(around));
@@ -55,9 +57,11 @@ export async function GET(request: Request) {
         events: [] as CalendarEvent[],
         reconnectRequired: true,
         error: listed.error,
+        count: 0,
       });
     }
 
+    // Skip events already mirrored as CRM rows (avoid duplicate list items).
     const syncedIds = listed.events.length
       ? await collectSyncedGoogleEventIds(
           session.membership.companyId,
@@ -68,21 +72,14 @@ export async function GET(request: Request) {
     const events: CalendarEvent[] = [];
     for (const g of listed.events) {
       if (syncedIds.has(g.googleEventId)) continue;
-      events.push({
-        id: `google-${g.googleEventId}`,
-        date: g.start.toISOString(),
-        title: g.title,
-        type: "google",
-        meta: g.meetUrl ? "Google Meet" : "Google Calendar",
-        source: "google",
-        googleEventId: g.googleEventId,
-      });
+      events.push(mapGoogleEventToCalendarEvent(g));
     }
 
     return NextResponse.json({
       events,
       reconnectRequired: false,
       error: listed.error,
+      count: events.length,
     });
   } catch (err) {
     if (err instanceof UnauthorizedError) {
@@ -91,10 +88,14 @@ export async function GET(request: Request) {
     if (err instanceof ForbiddenError) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    console.error("[google-calendar] events route failed:", {
+      message: err instanceof Error ? err.message : "unknown",
+    });
     return NextResponse.json({
       events: [] as CalendarEvent[],
       reconnectRequired: false,
       error: true,
+      count: 0,
     });
   }
 }

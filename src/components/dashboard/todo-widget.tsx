@@ -8,6 +8,7 @@ import { cn, initials } from "@/lib/utils";
 import { AddTaskDialog } from "@/components/dashboard/add-task-dialog";
 import type { PersonOption } from "@/lib/users/person-label";
 import dynamic from "next/dynamic";
+import { DASHBOARD_WIDGET_SHELL } from "@/components/dashboard/dashboard-widget-row";
 
 const AddSalesFollowUpDialog = dynamic(
   () =>
@@ -175,7 +176,7 @@ export function TodoWidget({
   }, [items, tab, debounced]);
 
   return (
-    <section className="flex h-full min-h-[280px] max-h-[70vh] flex-col rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)] sm:min-h-[320px] sm:max-h-[420px] xl:max-h-none xl:h-[420px]">
+    <section className={DASHBOARD_WIDGET_SHELL}>
       <div className="mb-2 flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div className="flex items-start gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-500">

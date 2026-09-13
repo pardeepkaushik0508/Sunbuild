@@ -12,6 +12,8 @@ const STAFF_GOOGLE_ROLES: Role[] = [
   Role.SALES_MANAGER,
   Role.PROJECT_MANAGER,
   Role.BOOKKEEPER,
+  Role.SUBCONTRACTOR,
+  Role.CLIENT,
 ];
 
 /**

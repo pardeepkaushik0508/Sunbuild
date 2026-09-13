@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/ui/card";
 import { PmSelectProjectLink } from "@/components/pm/select-project-link";
+import { DASHBOARD_WIDGET_SHELL } from "@/components/dashboard/dashboard-widget-row";
 
 const JOB_VISUALS = [
   {
@@ -40,9 +41,12 @@ const JOB_VISUALS = [
 export type RecentJob = {
   id: string;
   name: string;
-  progressPercent: number;
-  /** Optional deep-link; ignored for card selection (stays on dashboard). */
+  /** When omitted (or variant=simple), progress UI is hidden. */
+  progressPercent?: number;
+  /** Optional deep-link; used when linkMode="href". */
   href?: string;
+  /** Secondary line (e.g. "2 open tasks") for assignee/simple variant. */
+  meta?: string;
 };
 
 export function RecentJobsCard({
@@ -53,14 +57,24 @@ export function RecentJobsCard({
   isLoading,
   error,
   onRetry,
+  variant = "progress",
+  linkMode = "select",
+  title = "Recent Jobs",
+  subtitle = "Track project progress",
 }: {
   jobs: RecentJob[];
   selectedProjectId?: string | null;
-  selectHrefBase: string;
+  selectHrefBase?: string;
   viewAllHref?: string;
   isLoading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  /** progress = % bars; simple = name + meta only (Subcontractor). */
+  variant?: "progress" | "simple";
+  /** select = PM dashboard focus; href = plain navigation. */
+  linkMode?: "select" | "href";
+  title?: string;
+  subtitle?: string;
 }) {
   const dateLabel = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -68,22 +82,23 @@ export function RecentJobsCard({
   }).format(new Date());
 
   function selectHrefFor(projectId: string) {
-    const [path, query] = selectHrefBase.split("?");
+    const base = selectHrefBase || "/pm";
+    const [path, query] = base.split("?");
     const params = new URLSearchParams(query || "");
     params.set("projectId", projectId);
     return `${path}?${params.toString()}`;
   }
 
   return (
-    <section className="flex h-full min-h-[320px] max-h-[420px] flex-col overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)]">
+    <section className={DASHBOARD_WIDGET_SHELL}>
       <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#ede9fe] text-[#8b5cf6]">
             <FolderKanban size={18} />
           </div>
           <div>
-            <h3 className="text-[16px] font-semibold text-sb-ink">Recent Jobs</h3>
-            <p className="text-[12px] text-sb-muted">Track project progress</p>
+            <h3 className="text-[16px] font-semibold text-sb-ink">{title}</h3>
+            <p className="text-[12px] text-sb-muted">{subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -134,21 +149,10 @@ export function RecentJobsCard({
             const visual = JOB_VISUALS[idx % JOB_VISUALS.length];
             const Icon = visual.icon;
             const selected = selectedProjectId === job.id;
-            const selectHref = selectHrefFor(job.id);
-            return (
-              <PmSelectProjectLink
-                key={job.id}
-                projectId={job.id}
-                href={selectHref}
-                aria-label={`Focus ${job.name} on dashboard`}
-                title="Update dashboard for this project"
-                className={cn(
-                  "block rounded-[14px] border bg-sb-canvas p-3.5 text-left transition",
-                  selected
-                    ? "border-sb-orange/60 ring-1 ring-sb-orange/30"
-                    : "border-sb-border hover:border-sb-orange/40"
-                )}
-              >
+            const showProgress =
+              variant === "progress" && typeof job.progressPercent === "number";
+            const body = (
+              <>
                 <div className="mb-2.5 flex items-center gap-2.5">
                   <span
                     className={cn(
@@ -161,11 +165,53 @@ export function RecentJobsCard({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-sb-ink">
                     {job.name}
                   </span>
-                  <span className={cn("text-sm font-semibold", visual.pct)}>
-                    {job.progressPercent}%
-                  </span>
+                  {showProgress ? (
+                    <span className={cn("text-sm font-semibold", visual.pct)}>
+                      {job.progressPercent}%
+                    </span>
+                  ) : null}
                 </div>
-                <ProgressBar value={job.progressPercent} color={visual.bar} />
+                {showProgress ? (
+                  <ProgressBar
+                    value={job.progressPercent ?? 0}
+                    color={visual.bar}
+                  />
+                ) : job.meta ? (
+                  <p className="pl-[46px] text-[12px] text-sb-muted">{job.meta}</p>
+                ) : null}
+              </>
+            );
+
+            const className = cn(
+              "block rounded-[14px] border bg-sb-canvas p-3.5 text-left transition",
+              selected
+                ? "border-sb-orange/60 ring-1 ring-sb-orange/30"
+                : "border-sb-border hover:border-sb-orange/40"
+            );
+
+            if (linkMode === "href" && job.href) {
+              return (
+                <Link
+                  key={job.id}
+                  href={job.href}
+                  className={className}
+                  aria-label={`Open ${job.name}`}
+                >
+                  {body}
+                </Link>
+              );
+            }
+
+            return (
+              <PmSelectProjectLink
+                key={job.id}
+                projectId={job.id}
+                href={selectHrefFor(job.id)}
+                aria-label={`Focus ${job.name} on dashboard`}
+                title="Update dashboard for this project"
+                className={className}
+              >
+                {body}
               </PmSelectProjectLink>
             );
           })

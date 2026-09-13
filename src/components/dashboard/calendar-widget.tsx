@@ -15,6 +15,8 @@ import {
 } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { calendarDayKey, crmEventMeta } from "@/lib/google/event-display";
+import { DASHBOARD_WIDGET_SHELL } from "@/components/dashboard/dashboard-widget-row";
 
 export type CalendarEvent = {
   id: string;
@@ -55,11 +57,13 @@ function GoogleCalIcon({ className }: { className?: string }) {
   );
 }
 
-/** Stable local calendar day key (avoids UTC day-shift for date-only values). */
-function dayKey(isoOrDate: string | Date): string {
-  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
-  if (Number.isNaN(d.getTime())) return "";
-  return format(d, "yyyy-MM-dd");
+function eventSourceLabel(ev: CalendarEvent): string {
+  if (ev.source === "google" || ev.type === "google") {
+    return ev.meta && /google calendar/i.test(ev.meta)
+      ? ev.meta
+      : "Google Calendar";
+  }
+  return crmEventMeta(ev.meta);
 }
 
 export function CalendarWidget({
@@ -84,20 +88,25 @@ export function CalendarWidget({
   const [selected, setSelected] = useState(() => new Date());
   const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [reconnectNeeded, setReconnectNeeded] = useState(
     googleReconnectRequired
   );
 
   const fetchGoogleEvents = useCallback(
     async (around: Date, opts?: { silent?: boolean }) => {
-      if (!googleConnected || reconnectNeeded) {
+      if (!googleConnected) {
+        setGoogleEvents([]);
+        setSyncError(null);
+        return;
+      }
+      if (reconnectNeeded) {
         setGoogleEvents([]);
         return;
       }
       if (!opts?.silent) setSyncing(true);
       const ac = new AbortController();
-      // Soft timeout so UI never waits forever
-      const timeout = window.setTimeout(() => ac.abort(), 12_000);
+      const timeout = window.setTimeout(() => ac.abort(), 20_000);
       try {
         const res = await fetch(
           `/api/google/calendar/events?around=${encodeURIComponent(around.toISOString())}`,
@@ -107,22 +116,37 @@ export function CalendarWidget({
             signal: ac.signal,
           }
         );
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) {
           setGoogleEvents([]);
+          setSyncError("Sign in again to sync Google Calendar.");
+          return;
+        }
+        if (res.status === 403) {
+          setGoogleEvents([]);
+          setSyncError("Google Calendar is not available for this role.");
           return;
         }
         const data = (await res.json()) as {
           events?: CalendarEvent[];
           reconnectRequired?: boolean;
+          error?: boolean;
+          count?: number;
         };
         if (data.reconnectRequired) {
           setReconnectNeeded(true);
           setGoogleEvents([]);
+          setSyncError("Reconnect Google Calendar in Settings.");
           return;
         }
+        if (data.error && (!data.events || data.events.length === 0)) {
+          setSyncError("Could not load Google Calendar events. Try again.");
+          setGoogleEvents([]);
+          return;
+        }
+        setSyncError(null);
         setGoogleEvents(Array.isArray(data.events) ? data.events : []);
       } catch {
-        // Keep local SUNBUILD events; Google sync is best-effort.
+        setSyncError("Google Calendar sync timed out. Retrying…");
       } finally {
         window.clearTimeout(timeout);
         if (!opts?.silent) setSyncing(false);
@@ -131,22 +155,21 @@ export function CalendarWidget({
     [googleConnected, reconnectNeeded]
   );
 
-  // Live Google → SUNBUILD: load on mount + whenever visible month changes.
   useEffect(() => {
     void fetchGoogleEvents(cursor);
   }, [cursor, fetchGoogleEvents]);
 
-  // Background poll (quiet) — every 2 min so new Google events appear.
   useEffect(() => {
     if (!googleConnected || reconnectNeeded) return;
     const id = window.setInterval(() => {
       void fetchGoogleEvents(cursor, { silent: true });
-    }, 120_000);
+    }, 60_000);
     return () => window.clearInterval(id);
   }, [googleConnected, reconnectNeeded, cursor, fetchGoogleEvents]);
 
   useEffect(() => {
     setReconnectNeeded(googleReconnectRequired);
+    if (!googleReconnectRequired) setSyncError(null);
   }, [googleReconnectRequired]);
 
   const days = useMemo(() => {
@@ -160,13 +183,22 @@ export function CalendarWidget({
     const byGoogleId = new Set<string>();
 
     for (const ev of events) {
-      byId.set(ev.id, ev);
+      byId.set(ev.id, {
+        ...ev,
+        source: ev.source ?? "sunbuild",
+        meta: ev.source === "google" ? ev.meta : crmEventMeta(ev.meta),
+      });
       if (ev.googleEventId) byGoogleId.add(ev.googleEventId);
     }
     for (const ev of googleEvents) {
       if (ev.googleEventId && byGoogleId.has(ev.googleEventId)) continue;
       if (byId.has(ev.id)) continue;
-      byId.set(ev.id, ev);
+      byId.set(ev.id, {
+        ...ev,
+        source: "google",
+        type: "google",
+        meta: eventSourceLabel(ev),
+      });
     }
     return Array.from(byId.values());
   }, [events, googleEvents]);
@@ -174,7 +206,9 @@ export function CalendarWidget({
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const ev of mergedEvents) {
-      const key = dayKey(ev.date);
+      const key = calendarDayKey(ev.date, {
+        allDay: ev.type === "google" && /^\d{4}-\d{2}-\d{2}$/.test(ev.date),
+      });
       if (!key) continue;
       const list = map.get(key) ?? [];
       list.push(ev);
@@ -183,7 +217,7 @@ export function CalendarWidget({
     return map;
   }, [mergedEvents]);
 
-  const selectedKey = dayKey(selected);
+  const selectedKey = calendarDayKey(selected);
   const selectedEvents = eventsByDay.get(selectedKey) ?? [];
 
   const legacyHighlights = new Set(highlightDays ?? []);
@@ -201,8 +235,10 @@ export function CalendarWidget({
         : "Open in Google Calendar"
       : "Connect Google Calendar";
 
+  const googleCount = googleEvents.length;
+
   return (
-    <section className="flex h-full min-h-[280px] max-h-[70vh] flex-col overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)] sm:min-h-[320px] sm:max-h-[420px] xl:max-h-none xl:h-[420px]">
+    <section className={DASHBOARD_WIDGET_SHELL}>
       <div className="mb-4 flex shrink-0 items-start justify-between gap-2">
         <div className="flex items-start gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#ede9fe] text-[#8b5cf6]">
@@ -212,7 +248,13 @@ export function CalendarWidget({
             <h3 className="text-[16px] font-semibold text-sb-ink">
               {format(cursor, "MMMM yyyy")}
             </h3>
-            <p className="text-[12px] text-sb-muted">{subtitle}</p>
+            <p className="text-[12px] text-sb-muted">
+              {syncing
+                ? "Syncing Google Calendar…"
+                : googleConnected && !reconnectNeeded
+                  ? `${subtitle} · ${googleCount} from Google`
+                  : subtitle}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -245,6 +287,23 @@ export function CalendarWidget({
         </div>
       </div>
 
+      {syncError ? (
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+          <span className="min-w-0 truncate">{syncError}</span>
+          <button
+            type="button"
+            className="shrink-0 font-medium underline"
+            onClick={() => {
+              setReconnectNeeded(false);
+              setSyncError(null);
+              void fetchGoogleEvents(cursor);
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       <div className="grid shrink-0 grid-cols-7 gap-1 text-center text-[11px] text-[#9ca3af]">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="py-1 font-medium">
@@ -252,7 +311,7 @@ export function CalendarWidget({
           </div>
         ))}
         {days.map((day) => {
-          const key = dayKey(day);
+          const key = calendarDayKey(day);
           const inMonth = isSameMonth(day, cursor);
           const isSelected = isSameDay(day, selected);
           const hasEvents =
@@ -295,15 +354,35 @@ export function CalendarWidget({
         {selectedEvents.length === 0 ? (
           <p className="text-[12px] text-sb-muted">No events this day.</p>
         ) : (
-          <ul className="min-h-0 max-h-36 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
-            {selectedEvents.map((ev) => (
-              <li key={ev.id} className="truncate text-[12px] text-sb-ink">
-                <span className="font-medium">{ev.title}</span>
-                {ev.meta ? (
-                  <span className="text-sb-muted"> · {ev.meta}</span>
-                ) : null}
-              </li>
-            ))}
+          <ul className="min-h-0 max-h-36 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-1">
+            {selectedEvents.map((ev) => {
+              const fromGoogle =
+                ev.source === "google" || ev.type === "google";
+              return (
+                <li key={ev.id} className="text-[12px] text-sb-ink">
+                  <div className="flex items-start gap-1.5">
+                    {fromGoogle ? (
+                      <span className="mt-0.5 shrink-0">
+                        <GoogleCalIcon className="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium">{ev.title}</span>
+                      <span
+                        className={cn(
+                          "mt-0.5 block text-[11px]",
+                          fromGoogle ? "text-[#4285F4]" : "text-sb-muted"
+                        )}
+                      >
+                        {fromGoogle
+                          ? "(Google Calendar)"
+                          : `(${eventSourceLabel(ev)})`}
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

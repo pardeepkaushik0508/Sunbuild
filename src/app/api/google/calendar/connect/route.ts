@@ -15,6 +15,8 @@ const ALLOWED: Role[] = [
   Role.SALES_MANAGER,
   Role.PROJECT_MANAGER,
   Role.BOOKKEEPER,
+  Role.SUBCONTRACTOR,
+  Role.CLIENT,
 ];
 
 export async function GET(request: Request) {
@@ -82,6 +84,10 @@ function roleHome(role: Role): string {
     case Role.OPERATIONS_ADMIN:
       return "/settings";
     case Role.BOOKKEEPER:
+      return "/settings";
+    case Role.SUBCONTRACTOR:
+      return "/settings";
+    case Role.CLIENT:
       return "/settings";
     default:
       return "/settings";

@@ -14,6 +14,8 @@ const ALLOWED: Role[] = [
   Role.SALES_MANAGER,
   Role.PROJECT_MANAGER,
   Role.BOOKKEEPER,
+  Role.SUBCONTRACTOR,
+  Role.CLIENT,
 ];
 
 export async function POST(request: Request) {
