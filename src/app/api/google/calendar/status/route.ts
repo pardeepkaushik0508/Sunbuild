@@ -11,6 +11,24 @@ export async function GET() {
       session.user.id,
       session.membership.companyId
     );
+
+    // When already connected, quietly push any pending local calendar items
+    // (e.g. tasks created before Google was linked, or schedule without checkbox).
+    if (connection.connected) {
+      void import("@/lib/google/sync")
+        .then(({ backfillGoogleCalendarForUser }) =>
+          backfillGoogleCalendarForUser({
+            userId: session.user.id,
+            companyId: session.membership.companyId,
+          })
+        )
+        .catch((err) => {
+          console.error("[google-sync] status backfill failed:", {
+            message: err instanceof Error ? err.message : "unknown",
+          });
+        });
+    }
+
     return NextResponse.json({
       ...connection,
       configured: isGoogleCalendarConfigured(),

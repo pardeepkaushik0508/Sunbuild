@@ -76,6 +76,22 @@ export async function GET(request: Request) {
       metadata: { email: email ?? null },
     });
 
+    // Push any pending local tasks/schedule that never reached Google.
+    try {
+      const { backfillGoogleCalendarForUser } = await import(
+        "@/lib/google/sync"
+      );
+      await backfillGoogleCalendarForUser({
+        userId: session.user.id,
+        companyId: session.membership.companyId,
+      });
+    } catch (backfillErr) {
+      console.error("[google-sync] backfill after connect failed:", {
+        message:
+          backfillErr instanceof Error ? backfillErr.message : "unknown",
+      });
+    }
+
     const dest = appAbsoluteUrl(returnTo, request);
     dest.searchParams.set("google", "connected");
     return NextResponse.redirect(dest);

@@ -952,14 +952,13 @@ export async function createTaskAction(form: FormData) {
     },
   });
 
-  // Push dated tasks to the assignee's Google Calendar (else creator's).
+  // Push dated tasks to Google: assignee → creator → session (first with connection).
   if (task.dueDate) {
-    const googleUserId = task.assigneeId || session.user.id;
     const { syncTaskToGoogle } = await import("@/lib/google/sync");
     await syncTaskToGoogle({
-      googleUserId,
       companyId: session.membership.companyId,
       taskId: task.id,
+      preferredUserIds: [task.assigneeId, session.user.id],
     });
   }
 
@@ -1017,12 +1016,15 @@ export async function updateTaskAction(form: FormData) {
   });
 
   if (task.dueDate) {
-    const googleUserId = task.assigneeId || session.user.id;
     const { syncTaskToGoogle } = await import("@/lib/google/sync");
     await syncTaskToGoogle({
-      googleUserId,
       companyId: session.membership.companyId,
       taskId: task.id,
+      preferredUserIds: [
+        task.assigneeId,
+        task.createdById,
+        session.user.id,
+      ],
     });
   }
 
@@ -1132,8 +1134,22 @@ export async function createScheduleItemAction(form: FormData) {
     ? (statusRaw as ScheduleStatus)
     : ScheduleStatus.PLANNED;
   const location = formString(form, "location") || null;
-  const syncToGoogle = formString(form, "syncToGoogle") === "on" || formString(form, "syncToGoogle") === "true";
-  const createMeet = formString(form, "createMeet") === "on" || formString(form, "createMeet") === "true";
+  const syncFlag =
+    formString(form, "syncToGoogle") === "on" ||
+    formString(form, "syncToGoogle") === "true";
+  const createMeet =
+    formString(form, "createMeet") === "on" ||
+    formString(form, "createMeet") === "true";
+
+  const { userHasGoogleConnection, syncScheduleItemToGoogle } = await import(
+    "@/lib/google/sync"
+  );
+  const googleConnected = await userHasGoogleConnection(
+    session.user.id,
+    session.membership.companyId
+  );
+  // Auto-sync when Google is connected; checkbox still forces an attempt.
+  const syncToGoogle = syncFlag || googleConnected;
 
   const item = await prisma.scheduleItem.create({
     data: {
@@ -1152,7 +1168,6 @@ export async function createScheduleItemAction(form: FormData) {
   await syncProjectProgress(projectId);
 
   if (syncToGoogle) {
-    const { syncScheduleItemToGoogle } = await import("@/lib/google/sync");
     await syncScheduleItemToGoogle({
       userId: session.user.id,
       companyId: session.membership.companyId,

@@ -61,12 +61,21 @@ export async function createSalesFollowUpAction(form: FormData) {
   const description =
     formString(form, "description") || `Follow-up scheduled for ${title}`;
   const location = formString(form, "location") || null;
-  const syncToGoogle =
+  const syncFlag =
     formString(form, "syncToGoogle") === "on" ||
     formString(form, "syncToGoogle") === "true";
   const createMeet =
     formString(form, "createMeet") === "on" ||
     formString(form, "createMeet") === "true";
+
+  const { userHasGoogleConnection, syncLeadActivityToGoogle } = await import(
+    "@/lib/google/sync"
+  );
+  const googleConnected = await userHasGoogleConnection(
+    session.user.id,
+    session.membership.companyId
+  );
+  const syncToGoogle = syncFlag || googleConnected;
 
   const activity = await prisma.$transaction(async (tx) => {
     const created = await tx.leadActivity.create({
@@ -95,7 +104,6 @@ export async function createSalesFollowUpAction(form: FormData) {
   });
 
   if (syncToGoogle) {
-    const { syncLeadActivityToGoogle } = await import("@/lib/google/sync");
     await syncLeadActivityToGoogle({
       userId: session.user.id,
       companyId: session.membership.companyId,

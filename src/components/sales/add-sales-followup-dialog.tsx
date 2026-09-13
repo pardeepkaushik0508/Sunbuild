@@ -140,6 +140,7 @@ export function AddSalesFollowUpDialog({
               type="checkbox"
               name="syncToGoogle"
               value="true"
+              defaultChecked
               className="rounded border-sb-border"
             />
             Sync to Google Calendar (if connected)
