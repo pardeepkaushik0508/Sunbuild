@@ -10,6 +10,8 @@ export type GoogleListedEventLike = {
   end: Date;
   allDay: boolean;
   meetUrl?: string | null;
+  calendarId?: string;
+  calendarName?: string | null;
 };
 
 export type MappedCalendarEvent = {
@@ -28,12 +30,10 @@ export function calendarDayKey(
   opts?: { allDay?: boolean }
 ): string {
   if (typeof isoOrDate === "string") {
-    // All-day Google dates often arrive as YYYY-MM-DD — keep as-is.
     if (/^\d{4}-\d{2}-\d{2}$/.test(isoOrDate)) return isoOrDate;
     const d = new Date(isoOrDate);
     if (Number.isNaN(d.getTime())) return "";
     if (opts?.allDay) return isoOrDate.slice(0, 10);
-    // Local calendar day (avoids UTC shift for timed events in the UI).
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
@@ -49,6 +49,15 @@ export function calendarDayKey(
   return `${y}-${m}-${day}`;
 }
 
+function googleMetaLabel(g: GoogleListedEventLike): string {
+  const parts = ["Google Calendar"];
+  if (g.calendarName && !/^primary$/i.test(g.calendarName)) {
+    parts.push(g.calendarName);
+  }
+  if (g.meetUrl) parts.push("Meet");
+  return parts.join(" · ");
+}
+
 /**
  * Map a Google Calendar API event into a SUNBUILD CalendarEvent.
  * Always labels the source as Google Calendar for the UI.
@@ -59,13 +68,16 @@ export function mapGoogleEventToCalendarEvent(
   const date = g.allDay
     ? g.start.toISOString().slice(0, 10)
     : g.start.toISOString();
+  const calPart = g.calendarId
+    ? g.calendarId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 48)
+    : "cal";
 
   return {
-    id: `google-${g.googleEventId}`,
+    id: `google-${calPart}-${g.googleEventId}`,
     date,
     title: g.title,
     type: "google",
-    meta: g.meetUrl ? "Google Calendar · Meet" : "Google Calendar",
+    meta: googleMetaLabel(g),
     source: "google",
     googleEventId: g.googleEventId,
   };

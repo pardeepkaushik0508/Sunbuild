@@ -4,7 +4,10 @@ import { AppError } from "@/lib/errors";
 import { getAppOrigin } from "@/lib/app-url";
 
 export const GOOGLE_CALENDAR_SCOPES = [
+  // Events read/write on calendars the user can access
   "https://www.googleapis.com/auth/calendar.events",
+  // Needed to list Birthdays / Holidays / other selected calendars
+  "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
   "openid",
 ] as const;

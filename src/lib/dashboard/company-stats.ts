@@ -1,10 +1,14 @@
-import { ChangeOrderStatus, ProjectStatus, Role } from "@prisma/client";
+import {
+  ChangeOrderStatus,
+  ProjectStatus,
+  Role,
+  TaskStatus,
+} from "@prisma/client";
 import { prisma } from "@/lib/db";
 import {
   ACTIVE_PROJECT_STATUSES,
   COMPLETED_PROJECT_STATUSES,
   PLANNING_PROJECT_STATUSES,
-  UPCOMING_DEADLINE_DAYS,
 } from "@/lib/jobs/constants";
 import type { AppSession } from "@/lib/session";
 
@@ -110,9 +114,10 @@ export async function loadCompanyOverviewStats(
   const jobsHrefBase = options?.jobsHrefBase ?? "/owner/jobs";
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const deadlineEnd = new Date(
-    now.getTime() + UPCOMING_DEADLINE_DAYS * 86400000
-  );
+  /** Exclusive end of today — dueDate < endOfToday ⇒ overdue or due today. */
+  const endOfToday = new Date(now);
+  endOfToday.setDate(endOfToday.getDate() + 1);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
   // Calendar MoM: previous month vs second-last month (complete months).
   const thisMonthStart = startOfMonth(now);
   const lastMonthStart = new Date(
@@ -159,29 +164,30 @@ export async function loadCompanyOverviewStats(
       where: { companyId: ids },
       _count: { _all: true },
     }),
-    prisma.project.groupBy({
-      by: ["companyId"],
+    // Deadline Today: open tasks overdue or due today (by company via project).
+    prisma.task.findMany({
       where: {
-        companyId: ids,
-        targetClosing: { gte: now, lte: deadlineEnd },
-        status: {
-          notIn: [ProjectStatus.CANCELLED, ProjectStatus.HANDED_OVER],
-        },
+        dueDate: { not: null, lt: endOfToday },
+        status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
+        project: { companyId: ids },
       },
-      _count: { _all: true },
+      select: { project: { select: { companyId: true } } },
     }),
+    // YTD Revenue: purchase prices for projects created this calendar year.
     prisma.project.groupBy({
       by: ["companyId"],
       where: {
         companyId: ids,
         status: { not: ProjectStatus.CANCELLED },
         purchasePrice: { not: null },
+        createdAt: { gte: yearStart },
       },
       _sum: { purchasePrice: true },
     }),
     prisma.changeOrder.findMany({
       where: {
         status: ChangeOrderStatus.APPROVED,
+        createdAt: { gte: yearStart },
         project: {
           companyId: ids,
           status: { not: ProjectStatus.CANCELLED },
@@ -213,7 +219,14 @@ export async function loadCompanyOverviewStats(
   ]);
 
   const usersByCompany = countMap(userGroups);
-  const deadlinesByCompany = countMap(deadlineGroups);
+  const deadlinesByCompany = new Map<string, number>();
+  for (const row of deadlineGroups) {
+    const companyId = row.project.companyId;
+    deadlinesByCompany.set(
+      companyId,
+      (deadlinesByCompany.get(companyId) ?? 0) + 1
+    );
+  }
   const lastMonthByCompany = countMap(createdLastMonthGroups);
   const secondLastMonthByCompany = countMap(createdSecondLastMonthGroups);
 

@@ -59,13 +59,13 @@ const metricDefs = [
   },
   {
     key: "deadlines" as const,
-    label: "Deadlines",
+    label: "Deadline Today",
     wrap: "bg-[#fee2e2] text-[#dc2626]",
     Icon: Timer,
   },
   {
     key: "revenue" as const,
-    label: "Revenue",
+    label: "YTD Revenue",
     wrap: "bg-[#ede9fe] text-[#7c3aed]",
     Icon: CircleDollarSign,
   },

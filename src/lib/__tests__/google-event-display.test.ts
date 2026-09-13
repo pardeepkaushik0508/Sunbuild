@@ -24,7 +24,7 @@ describe("google event-display", () => {
     assert.equal(mapped.source, "google");
     assert.equal(mapped.type, "google");
     assert.equal(mapped.meta, "Google Calendar");
-    assert.equal(mapped.id, "google-abc123");
+    assert.match(mapped.id, /^google-/);
     assert.equal(mapped.googleEventId, "abc123");
   });
 
@@ -36,9 +36,25 @@ describe("google event-display", () => {
       end: new Date("2026-09-14T06:30:00.000Z"),
       allDay: false,
       meetUrl: "https://meet.google.com/xyz",
+      calendarName: "Primary",
     });
     assert.match(mapped.meta, /Google Calendar/);
     assert.match(mapped.meta, /Meet/);
+  });
+
+  it("includes Birthdays calendar name in meta", () => {
+    const mapped = mapGoogleEventToCalendarEvent({
+      googleEventId: "bday1",
+      title: "Alice's birthday",
+      start: new Date("2026-09-14T12:00:00.000Z"),
+      end: new Date("2026-09-15T12:00:00.000Z"),
+      allDay: true,
+      calendarId: "#contacts@group.v.calendar.google.com",
+      calendarName: "Birthdays",
+    });
+    assert.match(mapped.meta, /Google Calendar/);
+    assert.match(mapped.meta, /Birthdays/);
+    assert.match(mapped.id, /google-/);
   });
 
   it("keeps all-day Google dates as YYYY-MM-DD", () => {

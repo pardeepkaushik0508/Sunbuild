@@ -506,13 +506,57 @@ export type ListedGoogleEvent = {
   location: string | null;
   meetUrl: string | null;
   description: string | null;
+  calendarId: string;
+  calendarName: string | null;
 };
 
+function parseGoogleEventItem(
+  item: calendar_v3.Schema$Event,
+  calendarId: string,
+  calendarName: string | null
+): ListedGoogleEvent | null {
+  if (!item.id || item.status === "cancelled") return null;
+  const startRaw = item.start?.dateTime || item.start?.date;
+  const endRaw = item.end?.dateTime || item.end?.date;
+  if (!startRaw) return null;
+  const allDay = Boolean(item.start?.date && !item.start?.dateTime);
+  const start = allDay
+    ? new Date(`${startRaw.slice(0, 10)}T12:00:00.000Z`)
+    : new Date(startRaw);
+  const end = endRaw
+    ? allDay
+      ? new Date(`${endRaw.slice(0, 10)}T12:00:00.000Z`)
+      : new Date(endRaw)
+    : start;
+  return {
+    googleEventId: item.id,
+    title: item.summary || "(No title)",
+    start,
+    end,
+    allDay,
+    location: item.location ?? null,
+    meetUrl:
+      item.hangoutLink ||
+      item.conferenceData?.entryPoints?.find(
+        (e) => e.entryPointType === "video"
+      )?.uri ||
+      null,
+    description: null,
+    calendarId,
+    calendarName,
+  };
+}
+
+/**
+ * Pull events from every Google calendar the user has selected
+ * (primary, Birthdays, Holidays in India, Tasks, Family, etc.).
+ */
 export async function listGoogleEventsInRange(
   userId: string,
   companyId: string,
   timeMin: Date,
-  timeMax: Date
+  timeMax: Date,
+  opts?: { force?: boolean }
 ): Promise<{
   events: ListedGoogleEvent[];
   reconnectRequired: boolean;
@@ -524,12 +568,16 @@ export async function listGoogleEventsInRange(
     timeMin.toISOString(),
     timeMax.toISOString()
   );
-  const cached = getGoogleCache<{
-    events: ListedGoogleEvent[];
-    reconnectRequired: boolean;
-    error: boolean;
-  }>(cacheKey);
-  if (cached) return cached;
+  if (!opts?.force) {
+    const cached = getGoogleCache<{
+      events: ListedGoogleEvent[];
+      reconnectRequired: boolean;
+      error: boolean;
+    }>(cacheKey);
+    if (cached) return cached;
+  } else {
+    invalidateGoogleCacheForUser(userId);
+  }
 
   const authed = await getAuthedCalendarClient(userId, companyId);
   if (!authed) {
@@ -537,55 +585,97 @@ export async function listGoogleEventsInRange(
       where: { userId_companyId: { userId, companyId } },
       select: { status: true },
     });
+    // CONNECTED-but-unusable (expired/decrypt) must surface as reconnect,
+    // otherwise the UI shows "Connected" with an empty calendar forever.
+    if (
+      row?.status === "RECONNECT_REQUIRED" ||
+      row?.status === "CONNECTED"
+    ) {
+      return { events: [], reconnectRequired: true, error: true };
+    }
     return {
       events: [],
-      reconnectRequired: row?.status === "RECONNECT_REQUIRED",
+      reconnectRequired: false,
       error: false,
     };
   }
 
   try {
-    const res = await authed.calendar.events.list({
-      calendarId: authed.calendarId,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-      singleEvents: true,
-      orderBy: "startTime",
-      maxResults: 250,
-    });
+    const calendarTargets: Array<{ id: string; name: string | null }> = [];
 
-    const events: ListedGoogleEvent[] = [];
-    for (const item of res.data.items ?? []) {
-      if (!item.id || item.status === "cancelled") continue;
-      const startRaw = item.start?.dateTime || item.start?.date;
-      const endRaw = item.end?.dateTime || item.end?.date;
-      if (!startRaw) continue;
-      const allDay = Boolean(item.start?.date && !item.start?.dateTime);
-      // All-day: parse as noon UTC on that date to keep calendar day stable.
-      const start = allDay
-        ? new Date(`${startRaw.slice(0, 10)}T12:00:00.000Z`)
-        : new Date(startRaw);
-      const end = endRaw
-        ? allDay
-          ? new Date(`${endRaw.slice(0, 10)}T12:00:00.000Z`)
-          : new Date(endRaw)
-        : start;
-      events.push({
-        googleEventId: item.id,
-        title: item.summary || "(No title)",
-        start,
-        end,
-        allDay,
-        location: item.location ?? null,
-        meetUrl:
-          item.hangoutLink ||
-          item.conferenceData?.entryPoints?.find(
-            (e) => e.entryPointType === "video"
-          )?.uri ||
-          null,
-        description: null,
+    try {
+      const listRes = await authed.calendar.calendarList.list({
+        maxResults: 250,
+        showHidden: false,
+        showDeleted: false,
+      });
+      for (const cal of listRes.data.items ?? []) {
+        if (!cal.id) continue;
+        // Only calendars the user has toggled on in Google Calendar UI
+        if (cal.selected === false) continue;
+        calendarTargets.push({
+          id: cal.id,
+          name: cal.summaryOverride || cal.summary || null,
+        });
+      }
+    } catch (listErr) {
+      console.error("[google-calendar] calendarList failed; using fallbacks:", {
+        message: listErr instanceof Error ? listErr.message : "unknown",
       });
     }
+
+    if (calendarTargets.length === 0) {
+      calendarTargets.push(
+        { id: authed.calendarId || "primary", name: "Primary" },
+        // Common Google system calendars (best-effort)
+        { id: "#contacts@group.v.calendar.google.com", name: "Birthdays" },
+        {
+          id: "en.indian#holiday@group.v.calendar.google.com",
+          name: "Holidays in India",
+        },
+        {
+          id: "en.usa#holiday@group.v.calendar.google.com",
+          name: "Holidays in United States",
+        }
+      );
+    }
+
+    const events: ListedGoogleEvent[] = [];
+    const seen = new Set<string>();
+
+    await Promise.all(
+      calendarTargets.map(async (cal) => {
+        try {
+          const res = await authed.calendar.events.list({
+            calendarId: cal.id,
+            timeMin: timeMin.toISOString(),
+            timeMax: timeMax.toISOString(),
+            singleEvents: true,
+            orderBy: "startTime",
+            maxResults: 250,
+          });
+          for (const item of res.data.items ?? []) {
+            const parsed = parseGoogleEventItem(item, cal.id, cal.name);
+            if (!parsed) continue;
+            const key = `${cal.id}:${parsed.googleEventId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            events.push(parsed);
+          }
+        } catch (calErr) {
+          // Skip calendars the token can't read (e.g. holiday calendars without access)
+          const status = (calErr as { code?: number })?.code;
+          if (status === 401 || status === 403) {
+            // Don't mark reconnect for a single secondary calendar failure
+            if (cal.id === "primary" || cal.id === authed.calendarId) {
+              throw calErr;
+            }
+          }
+        }
+      })
+    );
+
+    events.sort((a, b) => a.start.getTime() - b.start.getTime());
     const result = { events, reconnectRequired: false, error: false };
     setGoogleCache(cacheKey, result, 45_000);
     return result;

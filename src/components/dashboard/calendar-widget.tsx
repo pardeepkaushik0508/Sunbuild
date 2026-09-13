@@ -13,7 +13,7 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calendarDayKey, crmEventMeta } from "@/lib/google/event-display";
 import { DASHBOARD_WIDGET_SHELL } from "@/components/dashboard/dashboard-widget-row";
@@ -89,33 +89,39 @@ export function CalendarWidget({
   const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [reconnectNeeded, setReconnectNeeded] = useState(
     googleReconnectRequired
   );
 
   const fetchGoogleEvents = useCallback(
-    async (around: Date, opts?: { silent?: boolean }) => {
+    async (
+      around: Date,
+      opts?: { silent?: boolean; force?: boolean }
+    ) => {
       if (!googleConnected) {
         setGoogleEvents([]);
         setSyncError(null);
         return;
       }
-      if (reconnectNeeded) {
+      // Manual Sync always attempts even if a prior poll marked reconnect.
+      if (reconnectNeeded && !opts?.force) {
         setGoogleEvents([]);
         return;
       }
       if (!opts?.silent) setSyncing(true);
       const ac = new AbortController();
-      const timeout = window.setTimeout(() => ac.abort(), 20_000);
+      const timeout = window.setTimeout(() => ac.abort(), 45_000);
       try {
-        const res = await fetch(
-          `/api/google/calendar/events?around=${encodeURIComponent(around.toISOString())}`,
-          {
-            credentials: "same-origin",
-            cache: "no-store",
-            signal: ac.signal,
-          }
-        );
+        const qs = new URLSearchParams({
+          around: around.toISOString(),
+        });
+        if (opts?.force) qs.set("force", "1");
+        const res = await fetch(`/api/google/calendar/events?${qs}`, {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: ac.signal,
+        });
         if (res.status === 401) {
           setGoogleEvents([]);
           setSyncError("Sign in again to sync Google Calendar.");
@@ -135,18 +141,22 @@ export function CalendarWidget({
         if (data.reconnectRequired) {
           setReconnectNeeded(true);
           setGoogleEvents([]);
-          setSyncError("Reconnect Google Calendar in Settings.");
+          setSyncError(
+            "Reconnect Google Calendar in Settings (new permissions may be required)."
+          );
           return;
         }
         if (data.error && (!data.events || data.events.length === 0)) {
-          setSyncError("Could not load Google Calendar events. Try again.");
+          setSyncError("Could not load Google Calendar events. Try Sync again.");
           setGoogleEvents([]);
           return;
         }
+        setReconnectNeeded(false);
         setSyncError(null);
         setGoogleEvents(Array.isArray(data.events) ? data.events : []);
+        setLastSyncedAt(new Date());
       } catch {
-        setSyncError("Google Calendar sync timed out. Retrying…");
+        setSyncError("Google Calendar sync timed out. Click Sync to retry.");
       } finally {
         window.clearTimeout(timeout);
         if (!opts?.silent) setSyncing(false);
@@ -154,6 +164,13 @@ export function CalendarWidget({
     },
     [googleConnected, reconnectNeeded]
   );
+
+  const handleSyncClick = useCallback(() => {
+    if (!googleConnected) return;
+    setReconnectNeeded(false);
+    setSyncError(null);
+    void fetchGoogleEvents(cursor, { force: true });
+  }, [googleConnected, cursor, fetchGoogleEvents]);
 
   useEffect(() => {
     void fetchGoogleEvents(cursor);
@@ -252,12 +269,35 @@ export function CalendarWidget({
               {syncing
                 ? "Syncing Google Calendar…"
                 : googleConnected && !reconnectNeeded
-                  ? `${subtitle} · ${googleCount} from Google`
+                  ? `${subtitle} · ${googleCount} from Google${
+                      lastSyncedAt
+                        ? ` · ${format(lastSyncedAt, "h:mm a")}`
+                        : ""
+                    }`
                   : subtitle}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {googleConnected ? (
+            <button
+              type="button"
+              onClick={handleSyncClick}
+              disabled={syncing}
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-lg border border-sb-border bg-white px-2.5 text-[12px] font-medium text-sb-ink transition hover:bg-sb-canvas",
+                syncing && "cursor-wait opacity-70"
+              )}
+              title="Sync Google Calendar now"
+              aria-label="Sync Google Calendar"
+            >
+              <RefreshCw
+                size={14}
+                className={cn(syncing && "animate-spin")}
+              />
+              Sync
+            </button>
+          ) : null}
           <a
             href={googleHref}
             target={!needsConnect ? "_blank" : undefined}
@@ -293,13 +333,9 @@ export function CalendarWidget({
           <button
             type="button"
             className="shrink-0 font-medium underline"
-            onClick={() => {
-              setReconnectNeeded(false);
-              setSyncError(null);
-              void fetchGoogleEvents(cursor);
-            }}
+            onClick={handleSyncClick}
           >
-            Retry
+            Sync
           </button>
         </div>
       ) : null}

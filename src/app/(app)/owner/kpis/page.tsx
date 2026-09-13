@@ -56,9 +56,13 @@ export default async function OwnerKpisPage() {
           value={formatGrowthPercent(avgGrowth)}
           accent="orange"
         />
-        <MetricCard label="Deadlines" value={totals.deadlines} accent="red" />
         <MetricCard
-          label="Pipeline Revenue"
+          label="Deadline Today"
+          value={totals.deadlines}
+          accent="red"
+        />
+        <MetricCard
+          label="YTD Revenue"
           value={
             stats[0]
               ? // reuse compact formatting via first company's helper path
@@ -122,7 +126,7 @@ export default async function OwnerKpisPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-sb-muted">Revenue</dt>
+                <dt className="text-xs text-sb-muted">YTD Revenue</dt>
                 <dd className="font-semibold">{c.revenueLabel}</dd>
               </div>
             </dl>

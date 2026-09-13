@@ -5,6 +5,10 @@ import { SalesPipeline } from "@/components/sales/sales-pipeline";
 import { LeadsRequiringAction } from "@/components/sales/leads-requiring-action";
 import { TodoWidget } from "@/components/dashboard/todo-widget";
 import { CalendarWidget } from "@/components/dashboard/calendar-widget";
+import {
+  DashboardCalendarSlot,
+  DashboardWidgetRow,
+} from "@/components/dashboard/dashboard-widget-row";
 import { ClientInfoStrip } from "@/components/dashboard/client-info-strip";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
 import { requireRole } from "@/lib/session";
@@ -25,7 +29,7 @@ export default async function SalesOverviewPage() {
       {/* PDF/Figma: KPI row is the first content block under the shell */}
       <SalesKpiCards kpis={data.kpis} error={data.sectionErrors.kpis} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <DashboardWidgetRow>
         <SalesRecentActivities
           items={data.activities}
           error={data.sectionErrors.activities}
@@ -37,7 +41,7 @@ export default async function SalesOverviewPage() {
           assignees={data.assignees}
           enableSalesCreate
         />
-        <div className="lg:col-span-2 xl:col-span-1">
+        <DashboardCalendarSlot>
           <CalendarWidget
             events={data.calendarEvents}
             subtitle="Sales schedule overview"
@@ -45,8 +49,8 @@ export default async function SalesOverviewPage() {
             googleReconnectRequired={data.googleReconnectRequired}
             connectReturnPath="/sales"
           />
-        </div>
-      </div>
+        </DashboardCalendarSlot>
+      </DashboardWidgetRow>
 
       <SalesPipeline
         stages={data.pipeline}

@@ -21,7 +21,8 @@ const ALLOWED: Role[] = [
 
 /**
  * Pull Google Calendar events for the visible month (± pad for grid edges).
- * Cached ~45s server-side. Parallelizes Google + local dedupe lookups.
+ * Fetches all selected calendars (primary, Birthdays, Holidays, etc.).
+ * Pass ?force=1 to bypass the short-lived server cache (Sync button).
  */
 export async function GET(request: Request) {
   try {
@@ -32,6 +33,9 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const aroundRaw = url.searchParams.get("around");
+    const force =
+      url.searchParams.get("force") === "1" ||
+      url.searchParams.get("force") === "true";
     const around = aroundRaw ? new Date(aroundRaw) : new Date();
     if (Number.isNaN(around.getTime())) {
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
@@ -47,7 +51,8 @@ export async function GET(request: Request) {
         session.user.id,
         session.membership.companyId,
         timeMin,
-        timeMax
+        timeMax,
+        { force }
       ),
       getAccessibleProjectIds(session),
     ]);
@@ -61,7 +66,6 @@ export async function GET(request: Request) {
       });
     }
 
-    // Skip events already mirrored as CRM rows (avoid duplicate list items).
     const syncedIds = listed.events.length
       ? await collectSyncedGoogleEventIds(
           session.membership.companyId,

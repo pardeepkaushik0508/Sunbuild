@@ -5,6 +5,10 @@ import { RecentJobsCard } from "@/components/dashboard/recent-jobs-widget";
 import { HighPriorityMicrosoftCard } from "@/components/dashboard/high-priority-widget";
 import { TodoWidget } from "@/components/dashboard/todo-widget";
 import { CalendarWidget } from "@/components/dashboard/calendar-widget";
+import {
+  DashboardCalendarSlot,
+  DashboardWidgetRow,
+} from "@/components/dashboard/dashboard-widget-row";
 import { ClientInfoStrip } from "@/components/dashboard/client-info-strip";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
 import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-lazy";
@@ -57,7 +61,7 @@ export function OverviewDashboard({ data }: { data: OverviewDashboardData }) {
         />
       )}
 
-      <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <DashboardWidgetRow>
         <RecentJobsCard
           jobs={data.jobs}
           selectedProjectId={data.selectedProjectId}
@@ -84,15 +88,15 @@ export function OverviewDashboard({ data }: { data: OverviewDashboardData }) {
             enableCreate
           />
         )}
-        <div className="lg:col-span-2 xl:col-span-1">
+        <DashboardCalendarSlot>
           <CalendarWidget
             events={data.calendarEvents}
             googleConnected={data.googleCalendarConnected}
             googleReconnectRequired={data.googleReconnectRequired}
             connectReturnPath={data.basePath}
           />
-        </div>
-      </div>
+        </DashboardCalendarSlot>
+      </DashboardWidgetRow>
 
       <GanttChart
         className="w-full"

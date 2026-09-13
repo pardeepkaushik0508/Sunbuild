@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { RecentJobsCard } from "@/components/dashboard/recent-jobs-widget";
 import { TodoWidget } from "@/components/dashboard/todo-widget";
 import { CalendarWidget } from "@/components/dashboard/calendar-widget";
+import {
+  DashboardCalendarSlot,
+  DashboardWidgetRow,
+} from "@/components/dashboard/dashboard-widget-row";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
 import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-lazy";
 import { ClientInfoStrip } from "@/components/dashboard/client-info-strip";
@@ -99,7 +103,7 @@ export default async function PMDashboardPage({ searchParams }: PageProps) {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <DashboardWidgetRow>
         <RecentJobsCard
           jobs={data.projects.map((p) => ({
             id: p.id,
@@ -123,7 +127,7 @@ export default async function PMDashboardPage({ searchParams }: PageProps) {
           defaultProjectId={data.selectedId}
           enableCreate
         />
-        <div className="lg:col-span-2 xl:col-span-1">
+        <DashboardCalendarSlot>
           <CalendarWidget
             events={data.calendarEvents}
             subtitle="Project schedule overview"
@@ -131,8 +135,8 @@ export default async function PMDashboardPage({ searchParams }: PageProps) {
             googleReconnectRequired={data.googleReconnectRequired}
             connectReturnPath="/pm"
           />
-        </div>
-      </div>
+        </DashboardCalendarSlot>
+      </DashboardWidgetRow>
 
       <GanttChart
         className="w-full"
