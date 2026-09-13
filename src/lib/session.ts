@@ -177,12 +177,11 @@ export const getAccessibleProjectIds = cache(async (session: AppSession) => {
     return projects.map((p) => p.id);
   }
 
+  // Only the currently assigned PM (project.pmId) can see the project.
+  // Stale ProjectAccess rows from a previous PM must not grant visibility.
   if (role === Role.PROJECT_MANAGER) {
     const projects = await prisma.project.findMany({
-      where: {
-        companyId,
-        OR: [{ pmId: userId }, { access: { some: { userId } } }],
-      },
+      where: { companyId, pmId: userId },
       select: { id: true },
     });
     return projects.map((p) => p.id);

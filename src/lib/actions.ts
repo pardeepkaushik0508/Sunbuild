@@ -699,6 +699,15 @@ export async function confirmContractAction(contractId: string, form: FormData) 
           pmId: pmId || undefined,
         },
       });
+      if (pmId && existing.pmId && existing.pmId !== pmId) {
+        await tx.projectAccess.deleteMany({
+          where: {
+            projectId,
+            userId: existing.pmId,
+            role: Role.PROJECT_MANAGER,
+          },
+        });
+      }
       if (pmId) {
         await ensurePmAccess(projectId, pmId);
       }
@@ -2831,6 +2840,19 @@ export async function updateUserAction(form: FormData) {
           });
         }
         if (nextRole === Role.PROJECT_MANAGER) {
+          const previous = await tx.project.findFirst({
+            where: { id: projectId, companyId },
+            select: { pmId: true },
+          });
+          if (previous?.pmId && previous.pmId !== userId) {
+            await tx.projectAccess.deleteMany({
+              where: {
+                projectId,
+                userId: previous.pmId,
+                role: Role.PROJECT_MANAGER,
+              },
+            });
+          }
           await tx.project.updateMany({
             where: { id: projectId, companyId },
             data: { pmId: userId },
@@ -3132,8 +3154,7 @@ export async function configureProjectAction(form: FormData) {
   const canConfigure =
     role === Role.OWNER ||
     role === Role.CEO ||
-    role === Role.OPERATIONS_ADMIN ||
-    role === Role.PROJECT_MANAGER;
+    role === Role.OPERATIONS_ADMIN;
   if (!canConfigure) throw new ForbiddenError();
 
   const parsed = configureProjectFormSchema.safeParse(formDataToObject(form));
@@ -3200,6 +3221,18 @@ export async function configureProjectAction(form: FormData) {
           : {}),
       },
     });
+
+    // When the assigned PM changes, revoke the previous PM's project access so
+    // they no longer see this job on Overview / Jobs / pickers.
+    if (existing.pmId && existing.pmId !== pmId) {
+      await tx.projectAccess.deleteMany({
+        where: {
+          projectId: data.projectId,
+          userId: existing.pmId,
+          role: Role.PROJECT_MANAGER,
+        },
+      });
+    }
 
     if (pmId && pmId !== existing.pmId) {
       await tx.projectAccess.upsert({

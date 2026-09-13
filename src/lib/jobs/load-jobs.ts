@@ -165,10 +165,7 @@ const accessibleProjectIdsForCompany = cache(
 
     if (role === Role.PROJECT_MANAGER) {
       const projects = await prisma.project.findMany({
-        where: {
-          companyId,
-          OR: [{ pmId: userId }, { access: { some: { userId } } }],
-        },
+        where: { companyId, pmId: userId },
         select: { id: true },
       });
       return projects.map((p) => p.id);
@@ -663,11 +660,11 @@ export async function loadJobsDashboardData(input: {
     role === Role.PROJECT_MANAGER ||
     role === Role.SALES_MANAGER;
 
+  // PMs can view assigned jobs only — configure is Owner / CEO / Ops Admin.
   const canConfigure =
     role === Role.OWNER ||
     role === Role.CEO ||
-    role === Role.OPERATIONS_ADMIN ||
-    role === Role.PROJECT_MANAGER;
+    role === Role.OPERATIONS_ADMIN;
 
   const canManageSchedule =
     role === Role.OWNER ||

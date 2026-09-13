@@ -76,7 +76,7 @@ export function canAccessProject(
   }
   if (role === Role.BOOKKEEPER) return true;
   if (role === Role.SALES_MANAGER) return opts.isAssigned;
-  if (role === Role.PROJECT_MANAGER) return opts.isAssigned || opts.isPm;
+  if (role === Role.PROJECT_MANAGER) return Boolean(opts.isPm);
   if (role === Role.SUBCONTRACTOR) return opts.isAssigned;
   if (role === Role.CLIENT) return opts.isAssigned || opts.isBuyer;
   return false;
