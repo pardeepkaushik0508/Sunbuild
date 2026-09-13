@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Priority } from "@prisma/client";
 import { X } from "lucide-react";
@@ -11,6 +11,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { useOptionalToast } from "@/components/ui/toast";
 import { toSafeErrorMessage } from "@/lib/errors";
 import { isNextNavigationError } from "@/lib/navigation-errors";
+import type { PersonOption } from "@/lib/users/person-label";
 
 export function AddTaskDialog({
   open,
@@ -22,13 +23,29 @@ export function AddTaskDialog({
   open: boolean;
   onClose: () => void;
   projects: Array<{ id: string; name: string }>;
-  assignees: Array<{ id: string; name: string }>;
+  assignees: PersonOption[];
   defaultProjectId?: string | null;
 }) {
   const router = useRouter();
   const toast = useOptionalToast();
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
+  const [projectId, setProjectId] = useState(
+    defaultProjectId ?? projects[0]?.id ?? ""
+  );
+
+  useEffect(() => {
+    if (open) {
+      setProjectId(defaultProjectId ?? projects[0]?.id ?? "");
+    }
+  }, [open, defaultProjectId, projects]);
+
+  const filteredAssignees = useMemo(() => {
+    if (!projectId) return assignees;
+    return assignees.filter(
+      (a) => !a.projectIds || a.projectIds.includes(projectId)
+    );
+  }, [assignees, projectId]);
 
   if (!open) return null;
 
@@ -79,7 +96,8 @@ export function AddTaskDialog({
             <Select
               name="projectId"
               required
-              defaultValue={defaultProjectId ?? projects[0]?.id ?? ""}
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
             >
               <option value="" disabled>
                 Select project
@@ -108,11 +126,11 @@ export function AddTaskDialog({
               </Select>
             </FormField>
             <FormField label="Subcontractor">
-              <Select name="assigneeId" defaultValue="">
+              <Select name="assigneeId" defaultValue="" key={projectId}>
                 <option value="">Unassigned</option>
-                {assignees.map((a) => (
+                {filteredAssignees.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}
+                    {a.label}
                   </option>
                 ))}
               </Select>

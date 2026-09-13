@@ -340,6 +340,27 @@ export async function assertCompanySubcontractor(
   return membership;
 }
 
+/**
+ * Subcontractor must belong to the company and already have ProjectAccess
+ * on the given project (PM can only assign work to project-available subs).
+ */
+export async function assertProjectSubcontractor(
+  session: AppSession,
+  userId: string,
+  projectId: string
+) {
+  await assertCompanySubcontractor(session, userId);
+  const access = await prisma.projectAccess.findFirst({
+    where: { projectId, userId },
+    select: { id: true },
+  });
+  if (!access) {
+    throw new ForbiddenError(
+      "Subcontractor must be assigned to this project first"
+    );
+  }
+}
+
 /** Target user must share an active membership in the actor's company. */
 export async function assertCompanyUser(session: AppSession, userId: string) {
   const membership = await prisma.membership.findFirst({

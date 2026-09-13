@@ -71,6 +71,10 @@ export function toSafeErrorMessage(error: unknown): string {
       msg === "Invalid status" ||
       msg.startsWith("File too large") ||
       msg.startsWith("File is too large") ||
+      msg.startsWith("File type not allowed") ||
+      msg.startsWith("File storage") ||
+      msg.startsWith("Failed to upload") ||
+      msg.startsWith("Failed to delete") ||
       msg.startsWith("Invalid ") ||
       msg.startsWith("Valid ") ||
       msg.startsWith("End date") ||
@@ -79,6 +83,7 @@ export function toSafeErrorMessage(error: unknown): string {
       /already in use/i.test(msg) ||
       /could not be sent/i.test(msg) ||
       /permission/i.test(msg) ||
+      /CLOUDINARY/i.test(msg) ||
       error.name === "AppError" ||
       error.name === "ForbiddenError" ||
       error.name === "RateLimitError" ||

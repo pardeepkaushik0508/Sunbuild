@@ -48,8 +48,8 @@ export type PermissionMatrixState = Record<
 
 /**
  * Defaults aligned with docs/ROLE_PERMISSIONS.md.
- * Matrix toggles may further restrict base CAPABILITIES — they must not
- * escalate privileges beyond the hard-coded capability table.
+ * Matrix toggles are authoritative for mapped modules: Owner may grant or
+ * revoke module access per role (including escalating beyond CAPABILITIES).
  */
 export const DEFAULT_PERMISSION_MATRIX: PermissionMatrixState = {
   userManagement: {
@@ -117,8 +117,9 @@ export function parsePermissionMatrix(raw: unknown): PermissionMatrixState {
 }
 
 /**
- * Map matrix modules → authorization capability keys (enforced as restrictions).
+ * Map matrix modules → authorization capability keys.
  * Finance is enforced via requireFinanceAccess (not companyWideProjects).
+ * clientCommunication is enforced via sessionHasClientCommunication (nav/UX).
  */
 export const MODULE_TO_CAPABILITIES: Record<
   PermissionModuleKey,

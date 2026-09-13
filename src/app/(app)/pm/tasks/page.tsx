@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { ProjectScopedAssigneeSelect } from "@/components/ui/person-select";
 import { resolveTaskDisplayStatus } from "@/lib/schedule/display-status";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName } from "@/lib/utils";
+import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
 import { PmProjectPicker } from "@/components/pm/project-picker";
 import { EditTaskButton } from "@/components/pm/edit-task-button";
 import { TaskStatusSelect } from "@/components/pm/task-status-select";
@@ -71,7 +73,7 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
       },
       include: {
         project: { select: { id: true, name: true } },
-        assignee: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true, trade: true } },
       },
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
       take: 500,
@@ -87,22 +89,13 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
       },
       orderBy: { name: "asc" },
     }),
-    prisma.membership.findMany({
-      where: {
-        companyId: session.membership.companyId,
-        isActive: true,
-        role: Role.SUBCONTRACTOR,
-      },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { user: { name: "asc" } },
+    loadProjectSubcontractors({
+      companyId: session.membership.companyId,
+      projectIds,
     }),
   ]);
 
   const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
-  const assigneeOptions = assignees.map((m) => ({
-    id: m.user.id,
-    name: m.user.name,
-  }));
 
   function toLocalDateInput(d: Date | null | undefined) {
     if (!d) return "";
@@ -219,14 +212,10 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
             </Select>
           </FormField>
           <FormField label="Subcontractor">
-            <Select name="assigneeId" defaultValue="">
-              <option value="">Unassigned</option>
-              {assignees.map((m) => (
-                <option key={m.user.id} value={m.user.id}>
-                  {m.user.name}
-                </option>
-              ))}
-            </Select>
+            <ProjectScopedAssigneeSelect
+              people={assignees}
+              defaultProjectId={filterProjectId}
+            />
           </FormField>
           <FormField label="Start date">
             <Input name="startDate" type="date" />
@@ -265,6 +254,11 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
               task.status,
               task.dueDate
             );
+            const assigneeLabel = task.assignee
+              ? task.assignee.trade
+                ? `${task.assignee.name} (${task.assignee.trade})`
+                : task.assignee.name
+              : "—";
             return {
               id: task.id,
               searchText: [
@@ -272,6 +266,7 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
                 task.description,
                 task.project.name,
                 task.assignee?.name,
+                task.assignee?.trade,
                 task.priority,
                 displayStatus,
               ]
@@ -309,7 +304,7 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
                         dueDate: toLocalDateInput(task.dueDate),
                       }}
                       projects={projectOptions}
-                      assignees={assigneeOptions}
+                      assignees={assignees}
                     />
                   </div>
                 </Td>,
@@ -321,7 +316,7 @@ export default async function PMTasksPage({ searchParams }: PageProps) {
                     {task.project.name}
                   </Link>
                 </Td>,
-                <Td key="assignee">{task.assignee?.name ?? "—"}</Td>,
+                <Td key="assignee">{assigneeLabel}</Td>,
                 <Td key="priority">
                   <StatusBadge tone={statusTone(task.priority)}>
                     {task.priority}

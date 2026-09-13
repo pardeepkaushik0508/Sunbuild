@@ -17,6 +17,8 @@ model User {
   image             String?
   imagePublicId     String?
   phone             String?
+  /// Trade / specialty for subcontractors (e.g. Painter, Plumber, Electrician).
+  trade             String?
   isActive          Boolean  @default(true)
   twoFactorEnabled  Boolean  @default(false)
   createdAt         DateTime @default(now())
@@ -54,6 +56,7 @@ model User {
   microsoftTodoProjectLinks MicrosoftTodoProjectLink[]
   whatsappMessagesSent      WhatsAppMessage[]           @relation("WhatsAppSender")
   sitePagesUpdated          SitePage[]                  @relation("SitePageUpdater")
+  notifications             Notification[]
 }
 
 /// Better Auth two-factor secrets (never expose to the browser).
@@ -1131,6 +1134,29 @@ model WhatsAppMessage {
 
   @@index([conversationId, sentAt])
   @@index([whatsappMessageId])
+}
+
+/// In-app notifications (bell + /notifications inbox).
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  companyId  String
+  type       String
+  title      String
+  body       String?
+  href       String?
+  tone       String?   // danger | warning | info
+  entityType String?
+  entityId   String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
 }
 
 // ─── Public site content (Privacy, Terms, …) ─────────────────────────────────

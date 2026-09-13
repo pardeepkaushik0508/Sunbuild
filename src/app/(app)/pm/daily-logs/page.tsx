@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
-import { formatDate, mediaUrl } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { MediaImage } from "@/components/ui/media-image";
+import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string; authorId?: string; date?: string }>;
@@ -65,14 +66,9 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    prisma.membership.findMany({
-      where: {
-        companyId: session.membership.companyId,
-        role: Role.SUBCONTRACTOR,
-        isActive: true,
-      },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { user: { name: "asc" } },
+    loadProjectSubcontractors({
+      companyId: session.membership.companyId,
+      projectIds,
     }),
   ]);
 
@@ -116,8 +112,8 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
             >
               <option value="">All subcontractors</option>
               {subcontractors.map((s) => (
-                <option key={s.user.id} value={s.user.id}>
-                  {s.user.name}
+                <option key={s.id} value={s.id}>
+                  {s.label}
                 </option>
               ))}
             </select>
@@ -166,6 +162,7 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
             { key: "work", label: "Work Completed" },
             { key: "notes", label: "Notes" },
             { key: "photos", label: "Photos", sortable: false },
+            { key: "view", label: "", sortable: false },
           ]}
           rows={logs.map((log) => ({
             id: log.id,
@@ -189,7 +186,12 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
             },
             cells: [
               <Td key="date" className="whitespace-nowrap font-medium">
-                {formatDate(log.logDate)}
+                <Link
+                  href={`/pm/daily-logs/${log.id}`}
+                  className="text-sb-ink hover:underline"
+                >
+                  {formatDate(log.logDate)}
+                </Link>
               </Td>,
               <Td key="project">
                 <Link
@@ -206,7 +208,13 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
                 </StatusBadge>
               </Td>,
               <Td key="work" className="max-w-xs truncate">
-                {log.workCompleted ?? "—"}
+                <Link
+                  href={`/pm/daily-logs/${log.id}`}
+                  className="hover:underline"
+                  title={log.workCompleted ?? undefined}
+                >
+                  {log.workCompleted ?? "—"}
+                </Link>
               </Td>,
               <Td key="notes" className="max-w-xs truncate text-sb-muted">
                 {log.siteNotes ?? "—"}
@@ -215,13 +223,14 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
                 {log.photos.length === 0 ? (
                   <span className="text-xs text-sb-muted">—</span>
                 ) : (
-                  <div className="flex gap-1">
+                  <Link
+                    href={`/pm/daily-logs/${log.id}`}
+                    className="flex gap-1"
+                    title="View all photos"
+                  >
                     {log.photos.map((photo) => (
-                      <a
+                      <span
                         key={photo.id}
-                        href={mediaUrl(photo.filePath) ?? "#"}
-                        target="_blank"
-                        rel="noreferrer"
                         className="block h-10 w-10 overflow-hidden rounded"
                       >
                         <MediaImage
@@ -231,10 +240,17 @@ export default async function PMDailyLogsPage({ searchParams }: PageProps) {
                           width={40}
                           height={40}
                         />
-                      </a>
+                      </span>
                     ))}
-                  </div>
+                  </Link>
                 )}
+              </Td>,
+              <Td key="view" className="whitespace-nowrap text-right">
+                <Link href={`/pm/daily-logs/${log.id}`}>
+                  <Button variant="outline" size="sm">
+                    View
+                  </Button>
+                </Link>
               </Td>,
             ],
           }))}

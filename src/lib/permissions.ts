@@ -52,6 +52,7 @@ export const FINANCE_MATRIX_ROLES: Role[] = [
 ];
 
 
+/** @deprecated Prefer roleHasCapability(..., "manageUsers", matrix) — base-role fallback only. */
 export function canManageUsers(role: Role) {
   return role === Role.OWNER || role === Role.OPERATIONS_ADMIN;
 }

@@ -25,16 +25,36 @@ function maskCloudinaryUrl(raw: string) {
   }
 }
 
+/**
+ * Normalize CLOUDINARY_URL from env.
+ * Common copy/paste wraps api_key/api_secret in <> which Cloudinary rejects as Invalid api_key.
+ */
+export function normalizeCloudinaryUrl(raw: string): string {
+  let url = raw.trim();
+  if (!url) return url;
+
+  // cloudinary://<key>:<secret>@cloud → strip accidental angle brackets
+  url = url.replace(
+    /^cloudinary:\/\/<?([^:>\s]+)>?:<?([^@>\s]+)>?@(.+)$/i,
+    "cloudinary://$1:$2@$3"
+  );
+  // Also handle already-encoded brackets from bad env parsers
+  url = url.replace(/%3C/gi, "").replace(/%3E/gi, "");
+  return url;
+}
+
 /** Configure from CLOUDINARY_URL once. Never log the secret. */
 export function getCloudinary() {
-  const url = process.env.CLOUDINARY_URL?.trim();
-  if (!url) {
+  const raw = process.env.CLOUDINARY_URL?.trim();
+  if (!raw) {
     throw new AppError(
       "File storage is not configured. Set CLOUDINARY_URL on the server.",
       503,
       "STORAGE_NOT_CONFIGURED"
     );
   }
+
+  const url = normalizeCloudinaryUrl(raw);
 
   if (!configured) {
     try {
@@ -43,6 +63,10 @@ export function getCloudinary() {
       if (!cfg.cloud_name || !cfg.api_key || !cfg.api_secret) {
         throw new Error("incomplete");
       }
+      // Reject leftover placeholder wrappers that pass "truthy" checks but fail uploads.
+      if (/[<>]/.test(cfg.api_key) || /[<>]/.test(cfg.api_secret)) {
+        throw new Error("placeholder_brackets");
+      }
       configured = true;
     } catch {
       console.error(
@@ -50,7 +74,7 @@ export function getCloudinary() {
         maskCloudinaryUrl(url)
       );
       throw new AppError(
-        "File storage configuration is invalid. Check CLOUDINARY_URL.",
+        "File storage configuration is invalid. Check CLOUDINARY_URL (use cloudinary://API_KEY:API_SECRET@CLOUD_NAME — no < > around credentials).",
         503,
         "STORAGE_MISCONFIGURED"
       );
@@ -61,7 +85,10 @@ export function getCloudinary() {
 }
 
 export function isCloudinaryConfigured(): boolean {
-  return Boolean(process.env.CLOUDINARY_URL?.trim());
+  const raw = process.env.CLOUDINARY_URL?.trim();
+  if (!raw) return false;
+  const url = normalizeCloudinaryUrl(raw);
+  return Boolean(url) && !/[<>]/.test(url);
 }
 
 export function cloudinaryRootFolder() {

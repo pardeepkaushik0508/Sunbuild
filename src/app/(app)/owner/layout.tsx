@@ -1,15 +1,15 @@
 import { Role } from "@prisma/client";
 import { RoleShell } from "@/components/layout/role-shell";
+import { MATRIX_ROLES } from "@/lib/permission-matrix";
 
 export default async function OwnerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Ops Admin needs Manage Users; page-level requireRole still gates Owner-only surfaces.
+  // Owner routes include Manage Users, which any matrix role may receive via
+  // Permissions. Page-level requireRole / capability checks still gate surfaces.
   return (
-    <RoleShell roles={[Role.OWNER, Role.OPERATIONS_ADMIN]}>
-      {children}
-    </RoleShell>
+    <RoleShell roles={[Role.OWNER, ...MATRIX_ROLES]}>{children}</RoleShell>
   );
 }

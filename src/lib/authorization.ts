@@ -133,17 +133,36 @@ export function roleHasCapability(
 ): boolean {
   if (role === Role.OWNER) return true;
 
-  // Base capability table is the privilege ceiling — the company matrix may
-  // only further restrict (never escalate beyond CAPABILITIES).
   const baseAllowed = (CAPABILITIES[capability] as Role[]).includes(role);
-  if (!baseAllowed) return false;
-
   const moduleKey = matrix ? moduleForCapability(capability) : null;
+
+  // Permissions Matrix is authoritative for mapped modules: Owner can grant
+  // OR revoke module access for any matrix role (not just restrict).
   if (moduleKey && matrix && isMatrixRole(role)) {
     return Boolean(matrix[moduleKey][role]);
   }
 
-  return true;
+  return baseAllowed;
+}
+
+/** True when the session may use the Manage Users module (matrix or base role). */
+export function sessionHasUserManagement(session: AppSession): boolean {
+  return roleHasCapability(
+    session.membership.role,
+    "manageUsers",
+    session.membership.permissionMatrix
+  );
+}
+
+/** Client Communication module — WhatsApp / client messaging surfaces. */
+export function sessionHasClientCommunication(session: AppSession): boolean {
+  const role = session.membership.role;
+  if (role === Role.OWNER) return true;
+  const matrix = session.membership.permissionMatrix;
+  if (matrix && isMatrixRole(role)) {
+    return Boolean(matrix.clientCommunication[role]);
+  }
+  return role !== Role.SUBCONTRACTOR;
 }
 
 export function requireCapability(session: AppSession, capability: Capability) {
@@ -192,17 +211,20 @@ export function canSetClientVisibility(role: Role) {
   );
 }
 
-/** Roles allowed to be invited by Operations/Owner (no self-elevation to OWNER by Ops). */
+/**
+ * Roles allowed to invite others. Owner may invite anyone.
+ * Other staff with manageUsers (enforced separately) may invite except Owner/CEO.
+ */
 export function canInviteRole(actorRole: Role, targetRole: Role): boolean {
   if (actorRole === Role.OWNER) return true;
-  if (actorRole === Role.OPERATIONS_ADMIN) {
-    return (
-      targetRole !== Role.OWNER &&
-      targetRole !== Role.CEO &&
-      Object.values(Role).includes(targetRole)
-    );
+  if (actorRole === Role.CLIENT || actorRole === Role.SUBCONTRACTOR) {
+    return false;
   }
-  return false;
+  return (
+    targetRole !== Role.OWNER &&
+    targetRole !== Role.CEO &&
+    (Object.values(Role) as string[]).includes(targetRole)
+  );
 }
 
 export function isValidRole(value: string): value is Role {

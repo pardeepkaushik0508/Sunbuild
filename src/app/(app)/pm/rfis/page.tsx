@@ -11,6 +11,8 @@ import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
+import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
+import { toPersonOption } from "@/lib/users/person-label";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -30,7 +32,7 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
       ? [filterProjectId]
       : projectIds;
 
-  const [rfis, projects, assignees] = await Promise.all([
+  const [rfis, projects, assigneeMemberships, projectSubs] = await Promise.all([
     prisma.rFI.findMany({
       where: { projectId: { in: filteredIds } },
       include: {
@@ -50,11 +52,32 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
       where: {
         companyId: session.membership.companyId,
         isActive: true,
-        role: { in: [Role.PROJECT_MANAGER, Role.SUBCONTRACTOR] },
+        role: Role.PROJECT_MANAGER,
+        user: { isActive: true },
       },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, trade: true } } },
+      orderBy: { user: { name: "asc" } },
+    }),
+    loadProjectSubcontractors({
+      companyId: session.membership.companyId,
+      projectIds,
     }),
   ]);
+
+  const assignees = [
+    ...assigneeMemberships.map((m) =>
+      toPersonOption({
+        id: m.user.id,
+        name: m.user.name,
+        role: m.role,
+        trade: m.user.trade,
+      })
+    ),
+    ...projectSubs,
+  ].filter(
+    (person, index, all) =>
+      all.findIndex((p) => p.id === person.id) === index
+  );
 
   return (
     <div>
@@ -113,8 +136,8 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
             <Select name="assigneeId" defaultValue="">
               <option value="">Unassigned</option>
               {assignees.map((m) => (
-                <option key={m.user.id} value={m.user.id}>
-                  {m.user.name}
+                <option key={m.id} value={m.id}>
+                  {m.label}
                 </option>
               ))}
             </Select>

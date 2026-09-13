@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
+import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -34,17 +35,13 @@ export default async function PMWarrantyPage({ searchParams }: PageProps) {
       include: {
         project: { select: { name: true } },
         clientUser: { select: { name: true } },
-        subcontractor: { select: { id: true, name: true } },
+        subcontractor: { select: { id: true, name: true, trade: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.membership.findMany({
-      where: {
-        companyId: session.membership.companyId,
-        role: Role.SUBCONTRACTOR,
-        isActive: true,
-      },
-      include: { user: { select: { id: true, name: true } } },
+    loadProjectSubcontractors({
+      companyId: session.membership.companyId,
+      projectIds: filteredIds,
     }),
   ]);
 
@@ -68,78 +65,84 @@ export default async function PMWarrantyPage({ searchParams }: PageProps) {
         <EmptyState title="No warranty tickets" />
       ) : (
         <div className="space-y-6">
-          {tickets.map((ticket) => (
-            <Card key={ticket.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium">
-                    {ticket.ticketNumber} — {ticket.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-sb-muted">
-                    {ticket.project.name} · {ticket.clientUser.name} ·{" "}
-                    {ticket.category}
+          {tickets.map((ticket) => {
+            const ticketSubs = subcontractors.filter(
+              (s) =>
+                !s.projectIds || s.projectIds.includes(ticket.projectId)
+            );
+            return (
+              <Card key={ticket.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">
+                      {ticket.ticketNumber} — {ticket.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-sb-muted">
+                      {ticket.project.name} · {ticket.clientUser.name} ·{" "}
+                      {ticket.category}
+                    </p>
+                  </div>
+                  <StatusBadge tone={statusTone(ticket.status)}>
+                    {ticket.status.replace(/_/g, " ")}
+                  </StatusBadge>
+                </div>
+                <p className="mt-3 text-sm">{ticket.description}</p>
+                {ticket.resolution ? (
+                  <p className="mt-2 text-sm text-sb-muted">
+                    Resolution: {ticket.resolution}
                   </p>
-                </div>
-                <StatusBadge tone={statusTone(ticket.status)}>
-                  {ticket.status.replace(/_/g, " ")}
-                </StatusBadge>
-              </div>
-              <p className="mt-3 text-sm">{ticket.description}</p>
-              {ticket.resolution ? (
-                <p className="mt-2 text-sm text-sb-muted">
-                  Resolution: {ticket.resolution}
-                </p>
-              ) : null}
+                ) : null}
 
-              <ActionForm
-                action={updateWarrantyStatusAction.bind(null, ticket.id)}
-                successMessage="Warranty ticket updated"
-                className="mt-4 grid gap-4 border-t border-sb-border pt-4 md:grid-cols-2"
-              >
-                <FormField label="Status">
-                  <Select name="status" defaultValue={ticket.status}>
-                    {Object.values(WarrantyStatus).map((s) => (
-                      <option key={s} value={s}>
-                        {s.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-                <FormField label="Assign subcontractor">
-                  <Select
-                    name="subcontractorId"
-                    defaultValue={ticket.subcontractorId ?? ""}
-                  >
-                    <option value="">Unassigned</option>
-                    {subcontractors.map((m) => (
-                      <option key={m.user.id} value={m.user.id}>
-                        {m.user.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-                <FormField label="Resolution" className="md:col-span-2">
-                  <Textarea
-                    name="resolution"
-                    defaultValue={ticket.resolution ?? ""}
-                  />
-                </FormField>
-                <FormField label="Comment" className="md:col-span-2">
-                  <Input name="comment" placeholder="Internal note..." />
-                </FormField>
-                <div className="md:col-span-2">
-                  <SubmitButton size="sm" pendingLabel="Saving…">
-                    Update ticket
-                  </SubmitButton>
-                </div>
-              </ActionForm>
-              {ticket.closedAt ? (
-                <p className="mt-2 text-xs text-sb-muted">
-                  Closed {formatDate(ticket.closedAt)}
-                </p>
-              ) : null}
-            </Card>
-          ))}
+                <ActionForm
+                  action={updateWarrantyStatusAction.bind(null, ticket.id)}
+                  successMessage="Warranty ticket updated"
+                  className="mt-4 grid gap-4 border-t border-sb-border pt-4 md:grid-cols-2"
+                >
+                  <FormField label="Status">
+                    <Select name="status" defaultValue={ticket.status}>
+                      {Object.values(WarrantyStatus).map((s) => (
+                        <option key={s} value={s}>
+                          {s.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <FormField label="Assign subcontractor">
+                    <Select
+                      name="subcontractorId"
+                      defaultValue={ticket.subcontractorId ?? ""}
+                    >
+                      <option value="">Unassigned</option>
+                      {ticketSubs.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <FormField label="Resolution" className="md:col-span-2">
+                    <Textarea
+                      name="resolution"
+                      defaultValue={ticket.resolution ?? ""}
+                    />
+                  </FormField>
+                  <FormField label="Comment" className="md:col-span-2">
+                    <Input name="comment" placeholder="Internal note..." />
+                  </FormField>
+                  <div className="md:col-span-2">
+                    <SubmitButton size="sm" pendingLabel="Saving…">
+                      Update ticket
+                    </SubmitButton>
+                  </div>
+                </ActionForm>
+                {ticket.closedAt ? (
+                  <p className="mt-2 text-xs text-sb-muted">
+                    Closed {formatDate(ticket.closedAt)}
+                  </p>
+                ) : null}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

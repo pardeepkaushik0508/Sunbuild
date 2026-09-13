@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Role } from "@prisma/client";
 import { createDailyLogAction } from "@/lib/actions";
 import { PageHeader, Card, EmptyState } from "@/components/ui/card";
@@ -7,9 +8,10 @@ import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, mediaUrl } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { MediaImage } from "@/components/ui/media-image";
+import { Button } from "@/components/ui/button";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -129,27 +131,41 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
             {logs.map((log) => (
               <Card key={log.id}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium">
-                      {formatDate(log.logDate)} · {log.project.name}
+                      <Link
+                        href={`/sub/daily-logs/${log.id}`}
+                        className="hover:underline"
+                      >
+                        {formatDate(log.logDate)} · {log.project.name}
+                      </Link>
                     </p>
-                    <p className="mt-1 text-sm text-sb-text">
+                    <p className="mt-1 line-clamp-2 text-sm text-sb-text">
                       {log.workCompleted ?? "—"}
                     </p>
                     {log.siteNotes ? (
-                      <p className="mt-1 text-sm text-sb-muted">{log.siteNotes}</p>
+                      <p className="mt-1 line-clamp-2 text-sm text-sb-muted">
+                        {log.siteNotes}
+                      </p>
                     ) : null}
+                    <div className="mt-3">
+                      <Link href={`/sub/daily-logs/${log.id}`}>
+                        <Button variant="outline" size="sm">
+                          View details
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                   <StatusBadge tone="green">{log.status}</StatusBadge>
                 </div>
                 {log.photos.length > 0 ? (
-                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {log.photos.map((photo) => (
-                      <a
+                  <Link
+                    href={`/sub/daily-logs/${log.id}`}
+                    className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+                  >
+                    {log.photos.slice(0, 4).map((photo) => (
+                      <span
                         key={photo.id}
-                        href={mediaUrl(photo.filePath) ?? "#"}
-                        target="_blank"
-                        rel="noreferrer"
                         className="block overflow-hidden rounded-[8px]"
                       >
                         <MediaImage
@@ -159,9 +175,9 @@ export default async function SubDailyLogsPage({ searchParams }: PageProps) {
                           width={240}
                           height={240}
                         />
-                      </a>
+                      </span>
                     ))}
-                  </div>
+                  </Link>
                 ) : null}
               </Card>
             ))}

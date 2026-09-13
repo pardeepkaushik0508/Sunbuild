@@ -72,6 +72,7 @@ async function upsertUser(input: {
   name: string;
   phone?: string;
   password: string;
+  trade?: string;
 }) {
   const email = input.email.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -94,6 +95,7 @@ async function upsertUser(input: {
       data: {
         name: input.name,
         phone: input.phone,
+        trade: input.trade ?? existing.trade,
         email,
         isActive: true,
         emailVerified: true,
@@ -106,6 +108,7 @@ async function upsertUser(input: {
       email,
       name: input.name,
       phone: input.phone,
+      trade: input.trade,
       emailVerified: true,
       isActive: true,
     },
@@ -678,6 +681,7 @@ async function main() {
     name: "Terry Trade",
     phone: "14035550107",
     password: DEMO_PASSWORD,
+    trade: "Framing",
   });
   const client = await upsertUser({
     email: "client@example.com",

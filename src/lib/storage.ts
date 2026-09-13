@@ -141,8 +141,9 @@ export async function ensureUploadDir(...segments: string[]) {
 }
 
 /**
- * Persist an upload to Cloudinary (required when CLOUDINARY_URL is set).
- * Does NOT write persistent user assets to the Render/local filesystem.
+ * Persist an upload to Cloudinary when configured.
+ * Falls back to local `uploads/` when Cloudinary is missing or rejects credentials
+ * (common local misconfig) so image upload/update keeps working.
  */
 export async function saveUpload(
   file: File,
@@ -158,7 +159,38 @@ export async function saveUpload(
   const safeName = sanitizeOriginalName(file.name);
   const displayName = path.basename(file.name).slice(0, 200);
 
-  if (!isCloudinaryConfigured()) {
+  if (isCloudinaryConfigured()) {
+    try {
+      const asset = await uploadBufferToCloudinary({
+        buffer: bytes,
+        folder: safeFolder,
+        originalFilename: safeName,
+        mimeType: mime || file.type,
+      });
+
+      return {
+        filePath: asset.secureUrl,
+        fileName: displayName,
+        size: asset.bytes ?? bytes.length,
+        provider: "CLOUDINARY",
+        publicId: asset.publicId,
+        resourceType: asset.resourceType,
+        format: asset.format,
+        width: asset.width,
+        height: asset.height,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown";
+      const canFallback =
+        process.env.NODE_ENV !== "production" ||
+        process.env.FILE_STORAGE_ALLOW_LOCAL_FALLBACK === "1";
+      if (!canFallback) throw err;
+      console.error(
+        "[storage] Cloudinary upload failed — using local uploads fallback",
+        { message }
+      );
+    }
+  } else if (process.env.NODE_ENV === "production") {
     throw new AppError(
       "File storage is not configured. Set CLOUDINARY_URL on the server.",
       503,
@@ -166,23 +198,18 @@ export async function saveUpload(
     );
   }
 
-  const asset = await uploadBufferToCloudinary({
-    buffer: bytes,
-    folder: safeFolder,
-    originalFilename: safeName,
-    mimeType: mime || file.type,
-  });
-
+  const local = await saveLocalUploadForMigration(bytes, safeFolder, displayName);
+  const ext = path.extname(displayName).replace(".", "").toLowerCase() || null;
   return {
-    filePath: asset.secureUrl,
-    fileName: displayName,
-    size: asset.bytes ?? bytes.length,
-    provider: "CLOUDINARY",
-    publicId: asset.publicId,
-    resourceType: asset.resourceType,
-    format: asset.format,
-    width: asset.width,
-    height: asset.height,
+    filePath: local.filePath,
+    fileName: local.fileName,
+    size: local.size,
+    provider: "LOCAL",
+    publicId: null,
+    resourceType: (mime || "").startsWith("image/") ? "image" : "raw",
+    format: ext,
+    width: null,
+    height: null,
   };
 }
 

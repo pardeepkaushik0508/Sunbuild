@@ -3,7 +3,11 @@ import { AppShell } from "@/components/layout/app-shell";
 import { AuthResumeGuard } from "@/components/session/auth-resume-guard";
 import { SessionTimeoutGuard } from "@/components/session/session-timeout-guard";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
-import { sessionHasFinanceAccess } from "@/lib/authorization";
+import {
+  sessionHasClientCommunication,
+  sessionHasFinanceAccess,
+  sessionHasUserManagement,
+} from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import {
   getMfaPolicy,
@@ -58,6 +62,8 @@ export async function RoleShell({
       activeMembershipId={session.membership.id}
       whatsappContacts={[]}
       showFinanceNav={sessionHasFinanceAccess(session)}
+      showUsersNav={sessionHasUserManagement(session)}
+      showClientComms={sessionHasClientCommunication(session)}
     >
       <AuthResumeGuard />
       <SessionTimeoutGuard timeoutMinutes={sessionTimeoutMinutes} />

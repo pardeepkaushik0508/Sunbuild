@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, whatsappLink } from "@/lib/utils";
+import { formatPersonOptionLabel } from "@/lib/users/person-label";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -56,7 +57,7 @@ export default async function LeadDetailPage({ params }: PageProps) {
       isActive: true,
       role: { in: [Role.SALES_MANAGER, Role.OWNER] },
     },
-    include: { user: { select: { id: true, name: true } } },
+    include: { user: { select: { id: true, name: true, trade: true } } },
   });
 
   const wa = whatsappLink(lead.phone, `Hi ${lead.firstName}, this is Sunview Homes.`);
@@ -139,7 +140,10 @@ export default async function LeadDetailPage({ params }: PageProps) {
                 <option value="">Unassigned</option>
                 {assignees.map((m) => (
                   <option key={m.user.id} value={m.user.id}>
-                    {m.user.name}
+                    {formatPersonOptionLabel(m.user.name, {
+                      role: m.role,
+                      trade: m.user.trade,
+                    })}
                   </option>
                 ))}
               </Select>

@@ -15,6 +15,7 @@ import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { ClientPortalFields } from "@/components/contracts/client-portal-fields";
+import { formatPersonOptionLabel } from "@/lib/users/person-label";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -217,7 +218,9 @@ export default async function PMContractDetailPage({ params }: PageProps) {
                 <option value="">Select PM</option>
                 {pms.map((m) => (
                   <option key={m.user.id} value={m.user.id}>
-                    {m.user.name}
+                    {formatPersonOptionLabel(m.user.name, {
+                      role: Role.PROJECT_MANAGER,
+                    })}
                     {m.user.id === session.user.id ? " (you)" : ""}
                   </option>
                 ))}

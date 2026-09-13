@@ -21,7 +21,7 @@ export function AddSalesFollowUpDialog({
   open: boolean;
   onClose: () => void;
   leads: Array<{ id: string; name: string }>;
-  assignees: Array<{ id: string; name: string }>;
+  assignees: Array<{ id: string; name: string; label?: string }>;
 }) {
   const router = useRouter();
   const toast = useOptionalToast();
@@ -127,7 +127,7 @@ export function AddSalesFollowUpDialog({
               <option value="">Current user</option>
               {assignees.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.label ?? a.name}
                 </option>
               ))}
             </Select>

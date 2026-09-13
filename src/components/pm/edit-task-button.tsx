@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Priority, TaskStatus } from "@prisma/client";
 import { Pencil, X } from "lucide-react";
@@ -11,6 +11,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { useOptionalToast } from "@/components/ui/toast";
 import { toSafeErrorMessage } from "@/lib/errors";
 import { isNextNavigationError } from "@/lib/navigation-errors";
+import type { PersonOption } from "@/lib/users/person-label";
 
 export type EditableTask = {
   id: string;
@@ -38,13 +39,21 @@ export function EditTaskButton({
 }: {
   task: EditableTask;
   projects: Array<{ id: string; name: string }>;
-  assignees: Array<{ id: string; name: string }>;
+  assignees: PersonOption[];
 }) {
   const [open, setOpen] = useState(false);
+  const [projectId, setProjectId] = useState(task.projectId);
   const router = useRouter();
   const toast = useOptionalToast();
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
+
+  const filteredAssignees = useMemo(() => {
+    if (!projectId) return assignees;
+    return assignees.filter(
+      (a) => !a.projectIds || a.projectIds.includes(projectId)
+    );
+  }, [assignees, projectId]);
 
   async function onSubmit(formData: FormData) {
     if (pendingRef.current) return;
@@ -67,7 +76,10 @@ export function EditTaskButton({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setProjectId(task.projectId);
+          setOpen(true);
+        }}
         className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-sb-muted hover:bg-sb-canvas hover:text-sb-ink"
         aria-label={`Edit ${task.title}`}
         title="Edit task"
@@ -105,7 +117,12 @@ export function EditTaskButton({
 
             <form ref={formRef} action={onSubmit} className="grid gap-4">
               <FormField label="Project" required>
-                <Select name="projectId" required defaultValue={task.projectId}>
+                <Select
+                  name="projectId"
+                  required
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -143,11 +160,20 @@ export function EditTaskButton({
                 </FormField>
               </div>
               <FormField label="Subcontractor">
-                <Select name="assigneeId" defaultValue={task.assigneeId ?? ""}>
+                <Select
+                  name="assigneeId"
+                  defaultValue={
+                    task.assigneeId &&
+                    filteredAssignees.some((a) => a.id === task.assigneeId)
+                      ? task.assigneeId
+                      : ""
+                  }
+                  key={`${projectId}-${task.assigneeId}`}
+                >
                   <option value="">Unassigned</option>
-                  {assignees.map((a) => (
+                  {filteredAssignees.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name}
+                      {a.label}
                     </option>
                   ))}
                 </Select>

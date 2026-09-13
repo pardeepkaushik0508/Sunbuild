@@ -18,7 +18,7 @@ export function LeadCreateForm({
   onSuccess,
   onCancel,
 }: {
-  assignees: Array<{ id: string; name: string }>;
+  assignees: Array<{ id: string; name: string; label?: string }>;
   onSuccess?: () => void;
   onCancel?: () => void;
 }) {
@@ -82,7 +82,7 @@ export function LeadCreateForm({
           <option value="">Unassigned</option>
           {assignees.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.name}
+              {a.label ?? a.name}
             </option>
           ))}
         </Select>
@@ -130,7 +130,7 @@ export function LeadCreateForm({
 export function LeadCreateDialog({
   assignees,
 }: {
-  assignees: Array<{ id: string; name: string }>;
+  assignees: Array<{ id: string; name: string; label?: string }>;
 }) {
   const [open, setOpen] = useState(false);
 

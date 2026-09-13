@@ -46,6 +46,12 @@ describe("RBAC capabilities", () => {
     assert.equal(canInviteRole(Role.OWNER, Role.CEO), true);
   });
 
+  it("PM with manageUsers may invite staff but not Owner/CEO", () => {
+    assert.equal(canInviteRole(Role.PROJECT_MANAGER, Role.OWNER), false);
+    assert.equal(canInviteRole(Role.PROJECT_MANAGER, Role.CEO), false);
+    assert.equal(canInviteRole(Role.PROJECT_MANAGER, Role.SALES_MANAGER), true);
+  });
+
   it("rejects forged role strings", () => {
     assert.equal(isValidRole("owner"), false);
     assert.equal(isValidRole("OWNER"), true);

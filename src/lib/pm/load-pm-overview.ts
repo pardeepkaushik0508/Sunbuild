@@ -3,7 +3,6 @@ import {
   Priority,
   ProjectStatus,
   RfiStatus,
-  Role,
   ScheduleStatus,
   TaskStatus,
 } from "@prisma/client";
@@ -21,6 +20,7 @@ import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
+import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
 
 export type PmOverviewStat = {
   id: string;
@@ -133,14 +133,9 @@ export async function loadPmOverviewData(
       orderBy: { sortOrder: "asc" },
       take: 50,
     }),
-    prisma.membership.findMany({
-      where: {
-        companyId: session.membership.companyId,
-        isActive: true,
-        role: Role.SUBCONTRACTOR,
-      },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { user: { name: "asc" } },
+    loadProjectSubcontractors({
+      companyId: session.membership.companyId,
+      projectIds: accessibleIds,
     }),
     selectedId
       ? prisma.project.findFirst({
@@ -432,10 +427,7 @@ export async function loadPmOverviewData(
     clientItems,
     insights: insights.slice(0, 3),
     projectsForTaskForm: projects.map((p) => ({ id: p.id, name: p.name })),
-    assigneesForTaskForm: assignees.map((m) => ({
-      id: m.user.id,
-      name: m.user.name,
-    })),
+    assigneesForTaskForm: assignees,
     activeProjectCount,
   };
 }

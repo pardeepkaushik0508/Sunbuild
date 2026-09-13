@@ -44,23 +44,49 @@ function fakeSession(
   };
 }
 
-describe("permission matrix cannot escalate", () => {
-  it("Sales cannot manageUsers even if matrix toggles are true", () => {
+describe("permission matrix grants and restricts", () => {
+  it("Sales can manageUsers when matrix grants User Management", () => {
     const escalated = structuredClone(DEFAULT_PERMISSION_MATRIX);
     escalated.userManagement.SALES_MANAGER = true;
     assert.equal(
       roleHasCapability(Role.SALES_MANAGER, "manageUsers", escalated),
+      true
+    );
+  });
+
+  it("CEO can manageUsers when matrix grants User Management", () => {
+    const escalated = structuredClone(DEFAULT_PERMISSION_MATRIX);
+    escalated.userManagement.CEO = true;
+    assert.equal(roleHasCapability(Role.CEO, "manageUsers", escalated), true);
+    assert.equal(
+      roleHasCapability(Role.CEO, "manageUsers", DEFAULT_PERMISSION_MATRIX),
       false
     );
   });
 
-  it("CEO cannot manageUsers with default or escalated matrix", () => {
+  it("PM can manageUsers when matrix grants User Management", () => {
     const escalated = structuredClone(DEFAULT_PERMISSION_MATRIX);
-    escalated.userManagement.CEO = true;
-    assert.equal(roleHasCapability(Role.CEO, "manageUsers", escalated), false);
+    escalated.userManagement.PROJECT_MANAGER = true;
     assert.equal(
-      roleHasCapability(Role.CEO, "manageUsers", DEFAULT_PERMISSION_MATRIX),
+      roleHasCapability(Role.PROJECT_MANAGER, "manageUsers", escalated),
+      true
+    );
+    assert.equal(
+      roleHasCapability(
+        Role.PROJECT_MANAGER,
+        "manageUsers",
+        DEFAULT_PERMISSION_MATRIX
+      ),
       false
+    );
+  });
+
+  it("PM can manageContracts when matrix grants Project Creation", () => {
+    const escalated = structuredClone(DEFAULT_PERMISSION_MATRIX);
+    escalated.projectCreation.PROJECT_MANAGER = true;
+    assert.equal(
+      roleHasCapability(Role.PROJECT_MANAGER, "manageContracts", escalated),
+      true
     );
   });
 

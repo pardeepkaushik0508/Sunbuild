@@ -1,7 +1,6 @@
 import {
   Priority,
   ProjectStatus,
-  Role,
   ScheduleStatus,
   TaskStatus,
 } from "@prisma/client";
@@ -34,6 +33,8 @@ import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
 import { getPublicMicrosoftConnection } from "@/lib/microsoft/todo";
 import type { PublicMicrosoftTodoConnection } from "@/lib/microsoft/types";
+import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
+import type { PersonOption } from "@/lib/users/person-label";
 
 export type OverviewJob = {
   id: string;
@@ -75,7 +76,7 @@ export type OverviewDashboardData = {
   insights: InsightCard[];
   insightsViewAllHref: string;
   projectsForTaskForm: Array<{ id: string; name: string }>;
-  assigneesForTaskForm: Array<{ id: string; name: string }>;
+  assigneesForTaskForm: PersonOption[];
   basePath: string;
   jobsViewAllHref: string;
   todoViewAllHref: string;
@@ -254,14 +255,9 @@ export async function loadOverviewDashboardData(input: {
         status: { in: ["OPEN", "IN_PROGRESS"] },
       },
     }),
-    prisma.membership.findMany({
-      where: {
-        companyId: { in: companyIdsForStats },
-        isActive: true,
-        role: Role.SUBCONTRACTOR,
-      },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { user: { name: "asc" } },
+    loadProjectSubcontractors({
+      companyId: session.membership.companyId,
+      projectIds,
     }),
     prisma.project.count({
       where: {
@@ -470,7 +466,7 @@ export async function loadOverviewDashboardData(input: {
     insightsViewAllHref:
       basePath === "/owner" ? "/owner/alerts" : "/pm/schedule",
     projectsForTaskForm: projects.map((p) => ({ id: p.id, name: p.name })),
-    assigneesForTaskForm: uniqueAssignees(assignees),
+    assigneesForTaskForm: assignees,
     basePath,
     jobsViewAllHref: basePath === "/owner" ? "/owner/jobs" : "/pm/projects",
     todoViewAllHref: "/pm/tasks",
@@ -481,15 +477,13 @@ export async function loadOverviewDashboardData(input: {
   };
 }
 
-function uniqueAssignees(
-  memberships: Array<{ user: { id: string; name: string } }>
-) {
+function uniqueAssignees(memberships: PersonOption[]) {
   const seen = new Set<string>();
-  const out: Array<{ id: string; name: string }> = [];
+  const out: PersonOption[] = [];
   for (const m of memberships) {
-    if (seen.has(m.user.id)) continue;
-    seen.add(m.user.id);
-    out.push({ id: m.user.id, name: m.user.name });
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    out.push(m);
   }
   return out;
 }

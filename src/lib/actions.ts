@@ -31,6 +31,7 @@ import {
   assertContractAccess,
   assertCompanyUser,
   assertCompanySubcontractor,
+  assertProjectSubcontractor,
 } from "@/lib/session";
 import {
   deleteUpload,
@@ -38,6 +39,7 @@ import {
   saveUpload,
   storageMeta,
 } from "@/lib/storage";
+import { notifyProjectManagersOfDailyLog } from "@/lib/notifications";
 import {
   assertPasswordMeetsPolicy,
   getPasswordPolicy,
@@ -923,7 +925,9 @@ export async function createTaskAction(form: FormData) {
   }
   const data = parsed.data;
   await assertProjectAccess(session, data.projectId);
-  if (data.assigneeId) await assertCompanySubcontractor(session, data.assigneeId);
+  if (data.assigneeId) {
+    await assertProjectSubcontractor(session, data.assigneeId, data.projectId);
+  }
 
   const task = await prisma.task.create({
     data: {
@@ -970,7 +974,9 @@ export async function updateTaskAction(form: FormData) {
 
   await assertProjectAccess(session, existing.projectId);
   await assertProjectAccess(session, data.projectId);
-  if (data.assigneeId) await assertCompanySubcontractor(session, data.assigneeId);
+  if (data.assigneeId) {
+    await assertProjectSubcontractor(session, data.assigneeId, data.projectId);
+  }
 
   if (!Object.values(Priority).includes(data.priority as Priority)) {
     throw new AppError("Invalid priority");
@@ -1311,6 +1317,8 @@ export async function createDailyLogAction(form: FormData) {
     .slice(0, 10);
 
   const uploaded: Awaited<ReturnType<typeof saveCompanyUpload>>[] = [];
+  let createdId: string | null = null;
+  let projectName = "";
   try {
     for (const file of photoFiles) {
       const saved = await saveCompanyUpload(
@@ -1321,7 +1329,13 @@ export async function createDailyLogAction(form: FormData) {
       uploaded.push(saved);
     }
 
-    await prisma.dailyLog.create({
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true },
+    });
+    projectName = project?.name ?? "Project";
+
+    const created = await prisma.dailyLog.create({
       data: {
         projectId,
         authorId: session.user.id,
@@ -1334,7 +1348,9 @@ export async function createDailyLogAction(form: FormData) {
           create: uploaded.map((saved) => storageMeta(saved)),
         },
       },
+      select: { id: true },
     });
+    createdId = created.id;
   } catch (err) {
     for (const saved of uploaded) {
       await deleteUpload(saved.filePath, {
@@ -1345,10 +1361,31 @@ export async function createDailyLogAction(form: FormData) {
     throw err;
   }
 
+  if (createdId) {
+    try {
+      await notifyProjectManagersOfDailyLog({
+        projectId,
+        companyId: session.membership.companyId,
+        dailyLogId: createdId,
+        authorName: session.user.name || "Subcontractor",
+        projectName,
+        excludeUserId: session.user.id,
+      });
+    } catch (err) {
+      console.error("[daily-log] failed to notify project managers", err);
+    }
+  }
+
   revalidatePath("/pm/daily-logs");
   revalidatePath("/sub");
   revalidatePath("/sub/daily-logs");
   revalidatePath(`/sub/jobs/${projectId}`);
+  revalidatePath("/notifications");
+  if (createdId) {
+    revalidatePath(`/sub/daily-logs/${createdId}`);
+    revalidatePath(`/pm/daily-logs/${createdId}`);
+    redirect(`/sub/daily-logs/${createdId}`);
+  }
 }
 
 export async function uploadDocumentAction(form: FormData) {
@@ -2299,6 +2336,7 @@ export async function inviteUserAction(form: FormData): Promise<
     const combinedName = [firstName, lastName].filter(Boolean).join(" ").trim();
     const name =
       combinedName || formString(form, "name") || email.split("@")[0];
+    const trade = formString(form, "trade") || null;
     const provided = formString(form, "tempPassword");
     const statusRaw = formString(form, "status");
     const createActive = statusRaw !== "INACTIVE";
@@ -2355,6 +2393,7 @@ export async function inviteUserAction(form: FormData): Promise<
             email,
             name,
             phone: formString(form, "phone") || null,
+            trade: role === Role.SUBCONTRACTOR ? trade : null,
             emailVerified: true,
             isActive: createActive,
           },
@@ -2390,6 +2429,12 @@ export async function inviteUserAction(form: FormData): Promise<
           data: {
             name,
             phone: formString(form, "phone") || user.phone,
+            trade:
+              role === Role.SUBCONTRACTOR
+                ? trade
+                : role
+                  ? null
+                  : user.trade,
             isActive: createActive,
           },
         });
@@ -2646,6 +2691,7 @@ export async function updateUserAction(form: FormData) {
   const name = combinedName || formString(form, "name") || membership.user.name;
   const email = formString(form, "email").toLowerCase() || membership.user.email;
   const phone = formString(form, "phone");
+  const trade = formString(form, "trade") || null;
   const roleRaw = formString(form, "role");
   const statusRaw = formString(form, "status");
   const projectIds = form
@@ -2722,6 +2768,7 @@ export async function updateUserAction(form: FormData) {
         name,
         email,
         phone: phone || null,
+        trade: nextRole === Role.SUBCONTRACTOR ? trade : null,
         isActive: setActive,
       },
     });

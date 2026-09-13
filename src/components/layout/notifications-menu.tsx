@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { markNotificationReadAction } from "@/lib/notifications-actions";
 
 type NotificationItem = {
   id: string;
@@ -12,25 +13,19 @@ type NotificationItem = {
   body: string;
   href: string;
   tone?: "danger" | "warning" | "info";
+  read?: boolean;
+  persisted?: boolean;
 };
-
-function viewAllForPath(pathname: string) {
-  if (pathname.startsWith("/client")) return "/client/change-orders";
-  if (pathname.startsWith("/sub")) return "/sub";
-  if (pathname.startsWith("/pm")) return "/pm/change-orders";
-  if (pathname.startsWith("/sales")) return "/sales";
-  if (pathname.startsWith("/bookkeeper")) return "/bookkeeper/invoices";
-  return "/owner/alerts";
-}
 
 export function NotificationsMenu() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const viewAllHref = viewAllForPath(pathname);
+  const viewAllHref = "/notifications";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,10 +35,20 @@ export function NotificationsMenu() {
         cache: "no-store",
       });
       if (!res.ok) throw new Error("failed");
-      const data = (await res.json()) as { items: NotificationItem[] };
+      const data = (await res.json()) as {
+        items: NotificationItem[];
+        unreadCount?: number;
+      };
       setItems(data.items ?? []);
+      setUnreadCount(
+        typeof data.unreadCount === "number"
+          ? data.unreadCount
+          : (data.items ?? []).filter((i) => i.persisted && i.read === false)
+              .length
+      );
     } catch {
       setItems([]);
+      setUnreadCount(0);
     } finally {
       setLoading(false);
       setFetched(true);
@@ -84,7 +89,7 @@ export function NotificationsMenu() {
     };
   }, []);
 
-  const unread = items.length > 0;
+  const unread = unreadCount > 0 || items.length > 0;
 
   return (
     <div className="relative" ref={rootRef}>
@@ -131,8 +136,18 @@ export function NotificationsMenu() {
                   >
                     <Link
                       href={item.href}
-                      onClick={() => setOpen(false)}
-                      className="block px-4 py-3 transition hover:bg-sb-canvas"
+                      onClick={() => {
+                        setOpen(false);
+                        if (item.persisted && item.read === false) {
+                          void markNotificationReadAction(item.id).then(() =>
+                            load()
+                          );
+                        }
+                      }}
+                      className={cn(
+                        "block px-4 py-3 transition hover:bg-sb-canvas",
+                        item.persisted && item.read === false && "bg-sb-canvas/50"
+                      )}
                     >
                       <p className="text-sm font-medium text-sb-ink">
                         {item.title}

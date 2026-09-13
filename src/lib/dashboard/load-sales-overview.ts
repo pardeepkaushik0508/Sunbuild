@@ -15,6 +15,7 @@ import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
 import type { AppSession } from "@/lib/session";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
+import { toPersonOption, type PersonOption } from "@/lib/users/person-label";
 
 export type SalesKpi = {
   id: string;
@@ -68,7 +69,7 @@ export type SalesOverviewData = {
   actionLeads: ActionLead[];
   clientItems: ClientInfoItem[];
   insights: InsightCard[];
-  assignees: Array<{ id: string; name: string }>;
+  assignees: PersonOption[];
   leadsForForm: Array<{ id: string; name: string }>;
   sectionErrors: Partial<
     Record<
@@ -217,7 +218,7 @@ export async function loadSalesOverviewData(
   let openFollowUps: ActivityRow[] = [];
   let actionLeadsRaw: ActionLeadRow[] = [];
   let recentLead: ClientLeadRow | null = null;
-  let assignees: Array<{ id: string; name: string }> = [];
+  let assignees: PersonOption[] = [];
   let openLeads: Array<{ id: string; name: string }> = [];
 
   try {
@@ -352,9 +353,16 @@ export async function loadSalesOverviewData(
         isActive: true,
         role: { in: ["SALES_MANAGER", "OWNER"] },
       },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, trade: true } } },
     });
-    assignees = memberships.map((m) => ({ id: m.user.id, name: m.user.name }));
+    assignees = memberships.map((m) =>
+      toPersonOption({
+        id: m.user.id,
+        name: m.user.name,
+        role: m.role,
+        trade: m.user.trade,
+      })
+    );
 
     const leads = await prisma.lead.findMany({
       where: {

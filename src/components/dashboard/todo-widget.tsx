@@ -6,6 +6,7 @@ import { AlertTriangle, Plus, Search } from "lucide-react";
 import { Priority } from "@prisma/client";
 import { cn, initials } from "@/lib/utils";
 import { AddTaskDialog } from "@/components/dashboard/add-task-dialog";
+import type { PersonOption } from "@/lib/users/person-label";
 import dynamic from "next/dynamic";
 
 const AddSalesFollowUpDialog = dynamic(
@@ -109,7 +110,7 @@ export function TodoWidget({
   viewAllHref: string;
   addHref?: string;
   projects?: Array<{ id: string; name: string }>;
-  assignees?: Array<{ id: string; name: string }>;
+  assignees?: PersonOption[];
   leads?: Array<{ id: string; name: string }>;
   defaultProjectId?: string | null;
   enableCreate?: boolean;

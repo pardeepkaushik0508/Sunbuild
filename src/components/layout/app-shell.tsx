@@ -65,6 +65,10 @@ type ShellProps = {
   whatsappContacts?: WhatsAppContact[];
   /** Show Invoices when Permissions Matrix grants Financial Report. */
   showFinanceNav?: boolean;
+  /** Show Manage Users when Permissions Matrix grants User Management. */
+  showUsersNav?: boolean;
+  /** Show WhatsApp when Permissions Matrix grants Client Communication. */
+  showClientComms?: boolean;
 };
 
 type NavDef = {
@@ -88,12 +92,40 @@ function settingsHrefForRole(role: Role) {
   }
 }
 
-function navForRole(role: Role, showFinanceNav = false): NavDef[] {
+function navForRole(
+  role: Role,
+  showFinanceNav = false,
+  showUsersNav = false
+): NavDef[] {
   const financeItem: NavDef = {
     label: "Invoices",
     href: "/bookkeeper/invoices",
     icon: Receipt,
   };
+  const usersItem: NavDef = {
+    label: "Manage Users",
+    href: "/owner/users",
+    icon: Users,
+  };
+
+  function withOptionalModules(
+    items: NavDef[],
+    opts: { financeAt?: number; usersAt?: number; skipUsers?: boolean }
+  ) {
+    const next = [...items];
+    if (showFinanceNav && opts.financeAt != null) {
+      next.splice(opts.financeAt, 0, financeItem);
+    }
+    // Owner / Ops already include Manage Users in their base nav.
+    if (showUsersNav && !opts.skipUsers && opts.usersAt != null) {
+      const financeShift =
+        showFinanceNav && opts.financeAt != null && opts.financeAt <= opts.usersAt
+          ? 1
+          : 0;
+      next.splice(opts.usersAt + financeShift, 0, usersItem);
+    }
+    return next;
+  }
 
   switch (role) {
     case Role.OWNER:
@@ -118,78 +150,93 @@ function navForRole(role: Role, showFinanceNav = false): NavDef[] {
         { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
       ];
     case Role.CEO:
-      return [
-        { label: "Overview", href: "/ceo", icon: LayoutDashboard },
-        { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
-        { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
-        { label: "Settings", href: "/settings", icon: Settings },
-      ];
+      return withOptionalModules(
+        [
+          { label: "Overview", href: "/ceo", icon: LayoutDashboard },
+          { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
+          { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
+          { label: "Settings", href: "/settings", icon: Settings },
+        ],
+        { financeAt: 3, usersAt: 2 }
+      );
     case Role.OPERATIONS_ADMIN: {
       const items: NavDef[] = [
         { label: "Overview", href: "/admin", icon: LayoutDashboard },
         { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
-        { label: "Manage Users", href: "/owner/users", icon: Users },
         { label: "Contracts", href: "/pm/contracts", icon: FileText },
         { label: "Settings", href: "/settings", icon: Settings },
       ];
-      if (showFinanceNav) items.splice(4, 0, financeItem);
+      if (showUsersNav) items.splice(2, 0, usersItem);
+      if (showFinanceNav) {
+        const at = showUsersNav ? 4 : 3;
+        items.splice(at, 0, financeItem);
+      }
       return items;
     }
-    case Role.SALES_MANAGER: {
-      const items: NavDef[] = [
-        { label: "Overview", href: "/sales", icon: LayoutDashboard },
-        { label: "Lead Management", href: "/sales/leads", icon: ClipboardList },
-        { label: "Proposals", href: "/sales/proposals", icon: FileText },
-        { label: "Contracts", href: "/sales/contracts", icon: FileText },
-        { label: "Documents", href: "/sales/documents", icon: FileText },
-        { label: "Activities", href: "/sales/activities", icon: CalendarDays },
-        { label: "Reports", href: "/sales/reports", icon: Briefcase },
-        { label: "Settings", href: "/settings", icon: Settings },
-      ];
-      if (showFinanceNav) items.splice(7, 0, financeItem);
-      return items;
-    }
-    case Role.PROJECT_MANAGER: {
-      const items: NavDef[] = [
-        { label: "Overview", href: "/pm", icon: LayoutDashboard },
-        { label: "Projects", href: "/pm/projects", icon: Briefcase },
-        { label: "To-Dos", href: "/pm/tasks", icon: CheckSquare },
-        { label: "Schedule", href: "/pm/schedule", icon: CalendarDays },
-        { label: "Daily Logs", href: "/pm/daily-logs", icon: ClipboardList },
-        { label: "RFIs", href: "/pm/rfis", icon: MessageCircle },
-        { label: "Change Orders", href: "/pm/change-orders", icon: FileText },
-        { label: "Selection", href: "/pm/selections", icon: Home },
-        { label: "Documents", href: "/pm/documents", icon: FileText },
-        { label: "Photos", href: "/pm/photos", icon: Camera },
-        { label: "Contracts", href: "/pm/contracts", icon: FileText },
-        { label: "Warranty", href: "/pm/warranty", icon: Wrench },
-        { label: "Settings", href: "/settings", icon: Settings },
-      ];
-      if (showFinanceNav) items.splice(12, 0, financeItem);
-      return items;
-    }
+    case Role.SALES_MANAGER:
+      return withOptionalModules(
+        [
+          { label: "Overview", href: "/sales", icon: LayoutDashboard },
+          { label: "Lead Management", href: "/sales/leads", icon: ClipboardList },
+          { label: "Proposals", href: "/sales/proposals", icon: FileText },
+          { label: "Contracts", href: "/sales/contracts", icon: FileText },
+          { label: "Documents", href: "/sales/documents", icon: FileText },
+          { label: "Activities", href: "/sales/activities", icon: CalendarDays },
+          { label: "Reports", href: "/sales/reports", icon: Briefcase },
+          { label: "Settings", href: "/settings", icon: Settings },
+        ],
+        { financeAt: 7, usersAt: 7 }
+      );
+    case Role.PROJECT_MANAGER:
+      return withOptionalModules(
+        [
+          { label: "Overview", href: "/pm", icon: LayoutDashboard },
+          { label: "Projects", href: "/pm/projects", icon: Briefcase },
+          { label: "To-Dos", href: "/pm/tasks", icon: CheckSquare },
+          { label: "Schedule", href: "/pm/schedule", icon: CalendarDays },
+          { label: "Daily Logs", href: "/pm/daily-logs", icon: ClipboardList },
+          { label: "RFIs", href: "/pm/rfis", icon: MessageCircle },
+          { label: "Change Orders", href: "/pm/change-orders", icon: FileText },
+          { label: "Selection", href: "/pm/selections", icon: Home },
+          { label: "Documents", href: "/pm/documents", icon: FileText },
+          { label: "Photos", href: "/pm/photos", icon: Camera },
+          { label: "Contracts", href: "/pm/contracts", icon: FileText },
+          { label: "Warranty", href: "/pm/warranty", icon: Wrench },
+          { label: "Settings", href: "/settings", icon: Settings },
+        ],
+        { financeAt: 12, usersAt: 12 }
+      );
     case Role.BOOKKEEPER:
-      return [
-        { label: "Overview", href: "/bookkeeper", icon: LayoutDashboard },
-        { label: "Invoices", href: "/bookkeeper/invoices", icon: Receipt },
-        { label: "Settings", href: "/settings", icon: Settings },
-      ];
+      return withOptionalModules(
+        [
+          { label: "Overview", href: "/bookkeeper", icon: LayoutDashboard },
+          { label: "Invoices", href: "/bookkeeper/invoices", icon: Receipt },
+          { label: "Settings", href: "/settings", icon: Settings },
+        ],
+        { usersAt: 2 }
+      );
     case Role.SUBCONTRACTOR:
-      return [
-        { label: "Jobs", href: "/sub", icon: Briefcase },
-        { label: "Daily Logs", href: "/sub/daily-logs", icon: ClipboardList },
-      ];
+      return withOptionalModules(
+        [
+          { label: "Jobs", href: "/sub", icon: Briefcase },
+          { label: "Daily Logs", href: "/sub/daily-logs", icon: ClipboardList },
+        ],
+        { usersAt: 2 }
+      );
     case Role.CLIENT:
-      return [
-        { label: "Overview", href: "/client", icon: LayoutDashboard },
-        { label: "Selections", href: "/client/selections", icon: Home },
-        { label: "Schedule", href: "/client/schedule", icon: CalendarDays },
-        { label: "Calendar", href: "/client/calendar", icon: CalendarDays },
-        { label: "Payments", href: "/client/payments", icon: Receipt },
-        { label: "Documents", href: "/client/documents", icon: FileText },
-        { label: "Photos", href: "/client/photos", icon: Camera },
-        { label: "Warranty", href: "/client/warranty", icon: Wrench },
-      ];
+      return withOptionalModules(
+        [
+          { label: "Overview", href: "/client", icon: LayoutDashboard },
+          { label: "Selections", href: "/client/selections", icon: Home },
+          { label: "Schedule", href: "/client/schedule", icon: CalendarDays },
+          { label: "Calendar", href: "/client/calendar", icon: CalendarDays },
+          { label: "Payments", href: "/client/payments", icon: Receipt },
+          { label: "Documents", href: "/client/documents", icon: FileText },
+          { label: "Photos", href: "/client/photos", icon: Camera },
+          { label: "Warranty", href: "/client/warranty", icon: Wrench },
+        ],
+        { usersAt: 8 }
+      );
     default:
       return [];
   }
@@ -219,13 +266,15 @@ function AppShellInner({
   activeMembershipId,
   whatsappContacts = [],
   showFinanceNav = false,
+  showUsersNav = false,
+  showClientComms = true,
 }: ShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
   const nav = useMemo(
-    () => navForRole(role, showFinanceNav),
-    [role, showFinanceNav]
+    () => navForRole(role, showFinanceNav, showUsersNav),
+    [role, showFinanceNav, showUsersNav]
   );
   const settingsHref = settingsHrefForRole(role);
 
@@ -313,14 +362,16 @@ function AppShellInner({
               profiles={profiles}
               activeMembershipId={activeMembershipId}
             />
-            <Button
-              variant="whatsapp"
-              size="sm"
-              onClick={() => setWhatsAppOpen(true)}
-            >
-              <MessageCircle size={14} />
-              WhatsApp
-            </Button>
+            {showClientComms ? (
+              <Button
+                variant="whatsapp"
+                size="sm"
+                onClick={() => setWhatsAppOpen(true)}
+              >
+                <MessageCircle size={14} />
+                WhatsApp
+              </Button>
+            ) : null}
           </div>
         </div>
       </header>
@@ -480,11 +531,13 @@ function AppShellInner({
         </div>
       </main>
 
-      <WhatsAppSidebar
-        open={whatsAppOpen}
-        onClose={() => setWhatsAppOpen(false)}
-        contacts={whatsappContacts}
-      />
+      {showClientComms ? (
+        <WhatsAppSidebar
+          open={whatsAppOpen}
+          onClose={() => setWhatsAppOpen(false)}
+          contacts={whatsappContacts}
+        />
+      ) : null}
     </div>
   );
 }

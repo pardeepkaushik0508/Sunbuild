@@ -9,6 +9,7 @@ import { LeadCreateDialog } from "@/components/sales/lead-create-form";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
+import { toPersonOption } from "@/lib/users/person-label";
 
 type PageProps = {
   searchParams: Promise<{ q?: string; stage?: string; filter?: string }>;
@@ -91,7 +92,7 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
         isActive: true,
         role: { in: [Role.SALES_MANAGER, Role.OWNER] },
       },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, trade: true } } },
     }),
   ]);
 
@@ -104,10 +105,14 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
           ? `Stage: ${stage.replace(/_/g, " ")}`
           : null;
 
-  const assigneeOptions = assignees.map((m) => ({
-    id: m.user.id,
-    name: m.user.name,
-  }));
+  const assigneeOptions = assignees.map((m) =>
+    toPersonOption({
+      id: m.user.id,
+      name: m.user.name,
+      role: m.role,
+      trade: m.user.trade,
+    })
+  );
 
   return (
     <div>

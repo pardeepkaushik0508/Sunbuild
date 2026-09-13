@@ -1,8 +1,11 @@
-import { Role } from "@prisma/client";
 import { ManageUsersDashboard } from "@/components/owner/manage-users-dashboard";
 import { loadManageUsersData } from "@/lib/users/load-manage-users";
-import { requireRole } from "@/lib/session";
+import { requireSession } from "@/lib/session";
+import { sessionHasUserManagement } from "@/lib/authorization";
+import { ROLE_HOME } from "@/lib/permissions";
+import { redirect } from "next/navigation";
 import type { UserAccountStatus } from "@/lib/users/load-manage-users";
+import { Role } from "@prisma/client";
 
 type PageProps = {
   searchParams: Promise<{
@@ -19,7 +22,10 @@ type PageProps = {
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 25, 50] as const;
 
 export default async function OwnerUsersPage({ searchParams }: PageProps) {
-  const session = await requireRole([Role.OWNER, Role.OPERATIONS_ADMIN]);
+  const session = await requireSession();
+  if (!sessionHasUserManagement(session)) {
+    redirect(ROLE_HOME[session.membership.role]);
+  }
   const params = await searchParams;
 
   const page = Number.parseInt(params.page ?? "1", 10);

@@ -27,6 +27,8 @@ import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
+import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
+import { formatPersonOptionLabel } from "@/lib/users/person-label";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -73,20 +75,15 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
         pm: { select: { id: true, name: true, email: true } },
         access: {
           include: {
-            user: { select: { id: true, name: true, email: true } },
+            user: {
+              select: { id: true, name: true, email: true, trade: true },
+            },
           },
         },
       },
     }),
     prisma.completionDocument.findUnique({ where: { projectId: id } }),
-    prisma.membership.findMany({
-      where: {
-        companyId: session.membership.companyId,
-        role: Role.SUBCONTRACTOR,
-        isActive: true,
-      },
-      include: { user: { select: { id: true, name: true } } },
-    }),
+    loadCompanySubcontractors(session.membership.companyId),
     prisma.scheduleItem.findMany({
       where: { projectId: id },
       orderBy: { startDate: "asc" },
@@ -387,10 +384,15 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
                 key={access.id}
                 className="rounded-[10px] border border-sb-border px-3 py-2 text-sm"
               >
-                <span className="font-medium">{access.user.name}</span>
-                {access.role ? (
+                <span className="font-medium">
+                  {formatPersonOptionLabel(access.user.name, {
+                    role: access.role,
+                    trade: access.user.trade,
+                  })}
+                </span>
+                {access.user.email ? (
                   <span className="ml-2 text-xs text-sb-muted">
-                    {access.role.replace(/_/g, " ")}
+                    {access.user.email}
                   </span>
                 ) : null}
               </li>
@@ -419,8 +421,8 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
                   Select subcontractor
                 </option>
                 {subcontractors.map((m) => (
-                  <option key={m.user.id} value={m.user.id}>
-                    {m.user.name}
+                  <option key={m.id} value={m.id}>
+                    {m.label}
                   </option>
                 ))}
               </Select>

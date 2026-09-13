@@ -20,6 +20,7 @@ export type ManageUserRow = {
   name: string;
   email: string;
   phone: string | null;
+  trade: string | null;
   image: string | null;
   initials: string;
   status: UserAccountStatus;
@@ -206,6 +207,7 @@ export async function loadManageUsersData(
           name: true,
           email: true,
           phone: true,
+          trade: true,
           image: true,
           isActive: true,
           createdAt: true,
@@ -250,6 +252,7 @@ export async function loadManageUsersData(
     name: string;
     email: string;
     phone: string | null;
+    trade: string | null;
     image: string | null;
     status: UserAccountStatus;
     role: Role;
@@ -283,6 +286,7 @@ export async function loadManageUsersData(
       name: m.user.name,
       email: m.user.email,
       phone: m.user.phone,
+      trade: m.user.trade,
       image: m.user.image,
       status,
       role: m.role,
@@ -374,6 +378,7 @@ export async function loadManageUsersData(
       name: r.name,
       email: r.email,
       phone: r.phone,
+      trade: r.trade,
       image: r.image,
       initials: initials(r.name),
       status: r.status,

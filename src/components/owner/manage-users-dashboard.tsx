@@ -878,6 +878,16 @@ function UserFormDialog({
             ))}
           </Select>
         </FormField>
+        <FormField
+          label="Trade / specialty"
+          hint="For subcontractors: Painter, Plumber, Electrician, etc."
+        >
+          <Input
+            name="trade"
+            defaultValue={user?.trade ?? ""}
+            placeholder="Painter, Plumber…"
+          />
+        </FormField>
         <FormField label="Account status" required>
           <Select name="status" defaultValue={user?.status ?? "ACTIVE"}>
             <option value="ACTIVE">Active</option>
@@ -957,6 +967,9 @@ function UserViewDialog({
               {statusLabel(user.status)}
             </StatusBadge>
             <StatusBadge tone="orange">{user.roleLabel}</StatusBadge>
+            {user.trade ? (
+              <StatusBadge tone="info">{user.trade}</StatusBadge>
+            ) : null}
           </div>
           <a
             href={`mailto:${user.email}`}
