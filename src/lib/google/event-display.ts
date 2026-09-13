@@ -94,7 +94,7 @@ function googleMetaLabel(g: GoogleListedEventLike): string {
  * Always labels the source as Google Calendar for the UI.
  */
 export function mapGoogleEventToCalendarEvent(
-  g: GoogleListedEventLike
+  g: GoogleListedEventLike & { kind?: "event" | "task" }
 ): MappedCalendarEvent {
   const date = g.allDay
     ? g.start.toISOString().slice(0, 10)
@@ -102,13 +102,20 @@ export function mapGoogleEventToCalendarEvent(
   const calPart = g.calendarId
     ? g.calendarId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 48)
     : "cal";
+  const isTask =
+    g.kind === "task" ||
+    (g.calendarName != null && /^tasks$/i.test(g.calendarName));
 
   return {
     id: `google-${calPart}-${g.googleEventId}`,
     date,
     title: g.title,
     type: "google",
-    meta: googleMetaLabel(g),
+    meta: isTask
+      ? g.calendarName && !/^tasks$/i.test(g.calendarName)
+        ? `Google Tasks · ${g.calendarName}`
+        : "Google Tasks"
+      : googleMetaLabel(g),
     source: "google",
     googleEventId: g.googleEventId,
   };

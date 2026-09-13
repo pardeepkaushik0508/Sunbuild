@@ -153,8 +153,9 @@ export function TodoWidget({
       if (item.dueDate) {
         const d = new Date(item.dueDate);
         if (tab === "today") {
-          if (!(d >= start && d < endToday)) return false;
-        } else if (!(d >= start && d < endWeek)) {
+          // Include overdue + due today (Deadline Today behavior).
+          if (!(d < endToday)) return false;
+        } else if (!(d < endWeek)) {
           return false;
         }
       } else if (tab === "today") {

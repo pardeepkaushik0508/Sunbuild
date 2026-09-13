@@ -214,8 +214,11 @@ export async function getAuthedCalendarClient(
   companyId: string
 ): Promise<{
   calendar: calendar_v3.Calendar;
+  /** Shared OAuth2 client — reuse for Tasks / other Google APIs. */
+  auth: InstanceType<typeof google.auth.OAuth2>;
   connectionId: string;
   calendarId: string;
+  scope: string | null;
 } | null> {
   const row = await prisma.googleCalendarConnection.findUnique({
     where: { userId_companyId: { userId, companyId } },
@@ -309,8 +312,10 @@ export async function getAuthedCalendarClient(
 
     return {
       calendar: google.calendar({ version: "v3", auth: client }),
+      auth: client,
       connectionId: row.id,
       calendarId: row.googleCalendarId || "primary",
+      scope: row.scope,
     };
   } catch (err) {
     console.error("[google-calendar] auth client failed:", {

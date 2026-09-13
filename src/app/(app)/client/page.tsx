@@ -3,21 +3,35 @@ import {
   ChangeOrderStatus,
   DocumentVisibility,
   PhotoVisibility,
+  Priority,
   ProjectStatus,
   Role,
+  TaskStatus,
 } from "@prisma/client";
 import { Mail, MessageCircle, Phone } from "lucide-react";
 import { Card, EmptyState, ProgressBar } from "@/components/ui/card";
-import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ClientPortalBanner } from "@/components/client/portal-banner";
+import { RecentJobsCard } from "@/components/dashboard/recent-jobs-widget";
+import { TodoWidget } from "@/components/dashboard/todo-widget";
+import { CalendarWidget } from "@/components/dashboard/calendar-widget";
+import {
+  DashboardCalendarSlot,
+  DashboardWidgetRow,
+} from "@/components/dashboard/dashboard-widget-row";
+import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-lazy";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, mediaUrl, whatsappLink } from "@/lib/utils";
 import { MediaImage } from "@/components/ui/media-image";
-import { resolveScheduleDisplayStatus } from "@/lib/schedule/display-status";
 import { resolveClientProject } from "@/lib/client/project";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
+import { buildGanttTree } from "@/lib/dashboard/gantt-tree";
+import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
+import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
+import { getPublicConnection } from "@/lib/google/calendar";
+import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
+import type { TodoItem } from "@/components/dashboard/todo-widget";
 
 export default async function ClientHomePage({
   searchParams,
@@ -38,58 +52,92 @@ export default async function ClientHomePage({
     );
   }
 
-  const [full, projects] = await Promise.all([
-    prisma.project.findFirst({
-      where: { id: project.id },
-      include: {
-        buyer: true,
-        pm: true,
-        milestones: { orderBy: { sortOrder: "asc" }, take: 8 },
-        scheduleItems: { select: { status: true } },
-        tasks: { select: { status: true } },
-        documents: {
-          where: { visibility: DocumentVisibility.CLIENT_VISIBLE },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        },
-        photos: {
-          where: { visibility: PhotoVisibility.CLIENT_VISIBLE },
-          orderBy: { createdAt: "desc" },
-          take: 6,
-        },
-        changeOrders: {
-          where: { status: ChangeOrderStatus.PENDING_CLIENT },
-          take: 5,
-        },
-        selectionPackages: {
-          where: { status: { not: "DRAFT" } },
-          include: {
-            sections: {
-              where: {
-                status: {
-                  in: ["DRAFT", "CHANGES_REQUESTED", "SUBMITTED"],
-                },
-              },
-              take: 3,
-            },
+  const [full, projects, scheduleItems, milestones, openTasks] =
+    await Promise.all([
+      prisma.project.findFirst({
+        where: { id: project.id },
+        include: {
+          buyer: true,
+          pm: true,
+          milestones: { orderBy: { sortOrder: "asc" }, take: 8 },
+          scheduleItems: { select: { status: true } },
+          tasks: { select: { status: true } },
+          documents: {
+            where: { visibility: DocumentVisibility.CLIENT_VISIBLE },
+            orderBy: { createdAt: "desc" },
+            take: 5,
           },
-          take: 2,
+          photos: {
+            where: { visibility: PhotoVisibility.CLIENT_VISIBLE },
+            orderBy: { createdAt: "desc" },
+            take: 6,
+          },
+          changeOrders: {
+            where: { status: ChangeOrderStatus.PENDING_CLIENT },
+            take: 8,
+          },
+          selectionPackages: {
+            where: { status: { not: "DRAFT" } },
+            include: {
+              sections: {
+                where: {
+                  status: {
+                    in: ["DRAFT", "CHANGES_REQUESTED", "SUBMITTED"],
+                  },
+                },
+                take: 5,
+              },
+            },
+            take: 3,
+          },
+          invoices: {
+            where: { status: { notIn: ["PAID", "VOID", "DRAFT"] } },
+            orderBy: { dueDate: "asc" },
+            take: 5,
+          },
         },
-        invoices: {
-          where: { status: { notIn: ["PAID", "VOID", "DRAFT"] } },
-          orderBy: { dueDate: "asc" },
-          take: 3,
+      }),
+      prisma.project.findMany({
+        where: { id: { in: ids } },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          progressPercent: true,
+          status: true,
+          milestones: { select: { status: true } },
+          scheduleItems: { select: { status: true } },
+          tasks: { select: { status: true } },
         },
-      },
-    }),
-    ids.length > 1
-      ? prisma.project.findMany({
-          where: { id: { in: ids } },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        })
-      : Promise.resolve([{ id: project.id, name: project.name }]),
-  ]);
+      }),
+      prisma.scheduleItem.findMany({
+        where: { projectId: project.id },
+        orderBy: { startDate: "asc" },
+      }),
+      prisma.milestone.findMany({
+        where: { projectId: project.id },
+        orderBy: { sortOrder: "asc" },
+      }),
+      prisma.task.findMany({
+        where: {
+          projectId: project.id,
+          status: {
+            in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED],
+          },
+        },
+        orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
+        take: 30,
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          priority: true,
+          status: true,
+          startDate: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
   if (!full) {
     return (
@@ -100,12 +148,7 @@ export default async function ClientHomePage({
     );
   }
 
-  const wa = whatsappLink(
-    full.pm?.phone,
-    `Hi ${full.pm?.name ?? "PM"}, regarding ${full.name}`
-  );
-
-  const openSelections = full.selectionPackages.flatMap((p) => p.sections);
+  const progressById = await loadProgressByProjectIds(projects.map((p) => p.id));
 
   const liveProgress = computeProjectProgress({
     progressPercent: full.progressPercent,
@@ -115,352 +158,307 @@ export default async function ClientHomePage({
     tasks: full.tasks,
   });
 
+  const wa = whatsappLink(
+    full.pm?.phone,
+    `Hi ${full.pm?.name ?? "PM"}, regarding ${full.name}`
+  );
+
+  const openSelections = full.selectionPackages.flatMap((p) => p.sections);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  const todos: TodoItem[] = [
+    ...full.changeOrders.map((co) => ({
+      id: `co-${co.id}`,
+      title: co.title,
+      description: "Change order awaiting your action",
+      dueDate: today,
+      priority: Priority.HIGH,
+      projectName: full.name,
+      href: `/client/change-orders?projectId=${full.id}`,
+    })),
+    ...openSelections.map((sec) => ({
+      id: `sel-${sec.id}`,
+      title: sec.name,
+      description: "Selection needs review",
+      dueDate: today,
+      priority: Priority.HIGH,
+      projectName: full.name,
+      href: "/client/selections",
+    })),
+    ...full.invoices.map((inv) => ({
+      id: `inv-${inv.id}`,
+      title: `Invoice ${inv.invoiceNumber}`,
+      description: inv.dueDate ? `Due ${formatDate(inv.dueDate)}` : "Payment due",
+      dueDate: inv.dueDate ?? today,
+      priority: Priority.MEDIUM,
+      projectName: full.name,
+      href: "/client/payments",
+    })),
+    ...milestones
+      .filter((m) => m.status !== "COMPLETED" && m.dueDate)
+      .slice(0, 8)
+      .map((m) => ({
+        id: `ms-${m.id}`,
+        title: m.title,
+        description: "Upcoming milestone",
+        dueDate: m.dueDate,
+        priority: Priority.MEDIUM,
+        projectName: full.name,
+        href: `/client/schedule?projectId=${full.id}`,
+      })),
+  ];
+
+  const localEvents: CalendarEvent[] = [
+    ...scheduleItems.map((s) => ({
+      id: `sched-${s.id}`,
+      date: s.startDate.toISOString(),
+      title: s.title,
+      type: "schedule" as const,
+      meta: s.trade || full.name,
+    })),
+    ...milestones
+      .filter((m) => m.dueDate)
+      .map((m) => ({
+        id: `ms-${m.id}`,
+        date: m.dueDate!.toISOString(),
+        title: m.title,
+        type: "milestone" as const,
+        meta: full.name,
+      })),
+    ...openTasks
+      .filter((t) => t.dueDate)
+      .map((t) => ({
+        id: `task-${t.id}`,
+        date: t.dueDate!.toISOString(),
+        title: t.title,
+        type: "task" as const,
+        meta: full.name,
+      })),
+  ];
+
+  const [merged, connection] = await Promise.all([
+    mergeExternalGoogleEvents({ session, localEvents }),
+    getPublicConnection(session.user.id, session.membership.companyId),
+  ]);
+
+  const ganttTasks = buildGanttTree(
+    scheduleItems.map((item) => ({
+      id: item.id,
+      title: item.title,
+      trade: item.trade,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      status: item.status,
+      dependsOnId: item.dependsOnId,
+      assigneeName: item.assigneeName,
+      projectName: full.name,
+      href: `/client/schedule?projectId=${full.id}`,
+    }))
+  ).map((t) => ({
+    ...t,
+    href:
+      t.isPhase || t.status === "PHASE"
+        ? null
+        : `/client/schedule?projectId=${full.id}`,
+  }));
+
+  const projectPicker = projects.map((p) => ({ id: p.id, name: p.name }));
+
   return (
-    <div className="space-y-5">
+    <div className="w-full space-y-5">
       <ClientPortalBanner
         projectName={full.name}
         statusLabel={full.status.replace(/_/g, " ")}
-        projects={projects}
+        projects={projectPicker}
         activeProjectId={full.id}
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-3 gap-1 p-2">
-            {full.photos.length > 0 ? (
-              full.photos.slice(0, 3).map((ph) => (
+      <DashboardWidgetRow>
+        <RecentJobsCard
+          jobs={projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            progressPercent:
+              progressById.get(p.id) ??
+              computeProjectProgress({
+                progressPercent: p.progressPercent,
+                status: p.status,
+                milestones: p.milestones,
+                scheduleItems: p.scheduleItems,
+                tasks: p.tasks,
+              }),
+            href: `/client?projectId=${p.id}`,
+          }))}
+          selectedProjectId={full.id}
+          linkMode="href"
+          viewAllHref="/client"
+          title="Your Homes"
+          subtitle="Track build progress"
+        />
+        <TodoWidget
+          items={todos}
+          viewAllHref={`/client/schedule?projectId=${full.id}`}
+        />
+        <DashboardCalendarSlot>
+          <CalendarWidget
+            events={merged.events}
+            subtitle="Your project schedule"
+            googleConnected={connection.connected}
+            googleReconnectRequired={
+              connection.status === "RECONNECT_REQUIRED" ||
+              merged.googleReconnectRequired
+            }
+            connectReturnPath="/client"
+          />
+        </DashboardCalendarSlot>
+      </DashboardWidgetRow>
+
+      <GanttChart
+        className="w-full"
+        tasks={ganttTasks}
+        progressPercent={liveProgress}
+        projectLabel={full.name}
+      />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-base font-semibold">Build Feed</h3>
+            <Link
+              href={`/client/photos?projectId=${full.id}`}
+              className="text-xs font-medium text-sb-ink underline"
+            >
+              All photos
+            </Link>
+          </div>
+          {full.photos.length === 0 ? (
+            <p className="text-sm text-sb-muted">
+              Progress photos from your project manager will appear here.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {full.photos.map((ph) => (
                 <Link
                   key={ph.id}
                   href={`/client/photos?projectId=${full.id}`}
-                  className="block overflow-hidden rounded-xl"
+                  className="block overflow-hidden rounded-lg"
                 >
                   <MediaImage
                     src={ph.filePath}
-                    alt={ph.caption || ph.fileName}
-                    aspectClassName="h-40"
-                    className="rounded-xl"
-                    width={320}
-                    height={160}
+                    alt={ph.caption || ""}
+                    aspectClassName="aspect-square"
+                    width={200}
+                    height={200}
                   />
                 </Link>
-              ))
-            ) : (
-              <>
-                <div className="h-40 rounded-xl bg-gradient-to-br from-stone-200 to-stone-300" />
-                <div className="h-40 rounded-xl bg-gradient-to-br from-amber-100 to-orange-200" />
-                <div className="h-40 rounded-xl bg-gradient-to-br from-slate-200 to-slate-400" />
-              </>
-            )}
-          </div>
-          {full.photos.length > 0 ? (
-            <div className="border-t border-sb-border px-3 py-2">
-              <Link
-                href={`/client/photos?projectId=${full.id}`}
-                className="text-sm font-medium text-sb-ink underline"
-              >
-                View all photos
-              </Link>
+              ))}
             </div>
-          ) : null}
+          )}
         </Card>
 
-        <Card className="relative overflow-hidden bg-[linear-gradient(135deg,#1f2937_0%,#374151_100%)] p-0 text-white">
-          <div className="relative z-10 p-6">
-            <p className="sb-brand text-2xl text-sb-orange">{full.name}</p>
-            <p className="mt-2 text-sm text-white/80">
-              {full.municipalAddress || "Address pending"}
-            </p>
-            <div className="mt-6">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span>Progress</span>
-                <span className="font-semibold">{liveProgress}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/20">
-                <div
-                  className="h-full rounded-full bg-sb-orange"
-                  style={{ width: `${liveProgress}%` }}
-                />
-              </div>
-            </div>
-            <p className="mt-4 text-sm text-white/80">
-              Next milestone:{" "}
-              <span className="font-medium text-white">
-                {full.milestones.find((m) => m.status !== "COMPLETED")?.title ||
-                  "—"}
-              </span>
-            </p>
-            <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
-              <div className="text-xs text-white/70">
-                <p>PM: {full.pm?.name || "—"}</p>
-                <p>Status: {full.status.replace(/_/g, " ")}</p>
-              </div>
-              {wa ? (
-                <a href={wa} target="_blank" rel="noreferrer">
-                  <Button variant="secondary" size="sm">
-                    <Mail size={14} />
-                    Message PM
-                  </Button>
-                </a>
-              ) : (
-                <Button variant="secondary" size="sm" disabled>
-                  Message PM
-                </Button>
-              )}
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card>
-          <h3 className="mb-3 text-base font-semibold text-sb-orange">
-            Needs your attention
-          </h3>
-          <div className="space-y-3">
-            {full.changeOrders.length === 0 &&
-            openSelections.length === 0 &&
-            full.invoices.length === 0 ? (
-              <p className="text-sm text-sb-muted">Nothing urgent right now.</p>
-            ) : null}
-            {full.changeOrders.map((co) => (
-              <div key={co.id} className="rounded-xl border border-sb-border p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold">{co.title}</p>
+          <h3 className="mb-3 text-base font-semibold">Project Documents</h3>
+          <div className="space-y-2">
+            {full.documents.length === 0 ? (
+              <p className="text-sm text-sb-muted">No client documents yet.</p>
+            ) : (
+              full.documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-sb-border px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{doc.title}</p>
                     <p className="text-xs text-sb-muted">
-                      Change order awaiting your action
+                      {doc.category} · {formatDate(doc.createdAt)}
                     </p>
                   </div>
-                  <StatusBadge tone="danger">URGENT</StatusBadge>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Link href={`/client/change-orders?projectId=${full.id}`}>
-                    <Button size="sm" variant="outline">
-                      REVIEW
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ))}
-            {openSelections.map((sec) => (
-              <div
-                key={sec.id}
-                className="rounded-xl border border-sb-border p-3"
-              >
-                <p className="text-sm font-semibold">{sec.name}</p>
-                <p className="text-xs text-sb-muted">Selection needs review</p>
-                <div className="mt-3">
-                  <Link href="/client/selections">
-                    <Button size="sm" variant="outline">
-                      Open
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ))}
-            {full.invoices.map((inv) => (
-              <div
-                key={inv.id}
-                className="rounded-xl border border-sb-border p-3"
-              >
-                <p className="text-sm font-semibold">
-                  Invoice {inv.invoiceNumber}
-                </p>
-                <p className="text-xs text-sb-muted">
-                  Due {formatDate(inv.dueDate)}
-                </p>
-                <div className="mt-3">
-                  <Link href="/client/payments">
+                  <a
+                    href={mediaUrl(doc.filePath) ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     <Button size="sm" variant="outline">
                       View
                     </Button>
-                  </Link>
+                  </a>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
 
-        <div className="space-y-4">
-          <Card>
-            <h3 className="mb-3 text-base font-semibold">Project Documents</h3>
-            <div className="space-y-2">
-              {full.documents.length === 0 ? (
-                <p className="text-sm text-sb-muted">No client documents yet.</p>
-              ) : (
-                full.documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-sb-border px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{doc.title}</p>
-                      <p className="text-xs text-sb-muted">
-                        {doc.category} · {formatDate(doc.createdAt)}
-                      </p>
-                    </div>
-                    <a
-                      href={mediaUrl(doc.filePath) ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Button size="sm" variant="outline">
-                        View
-                      </Button>
-                    </a>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-
-          <Card>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-base font-semibold">Build Feed</h3>
-              <Link
-                href={`/client/photos?projectId=${full.id}`}
-                className="text-xs font-medium text-sb-ink underline"
-              >
-                All photos
-              </Link>
-            </div>
-            {full.photos.length === 0 ? (
-              <p className="text-sm text-sb-muted">
-                Progress photos from your project manager will appear here.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {full.photos.map((ph) => (
-                  <Link
-                    key={ph.id}
-                    href={`/client/photos?projectId=${full.id}`}
-                    className="block overflow-hidden rounded-lg"
-                  >
-                    <MediaImage
-                      src={ph.filePath}
-                      alt={ph.caption || ""}
-                      aspectClassName="aspect-square"
-                      width={200}
-                      height={200}
-                    />
-                  </Link>
-                ))}
+        <Card>
+          <h3 className="mb-3 text-base font-semibold">Team Contacts</h3>
+          {full.pm ? (
+            <div className="flex items-center justify-between rounded-xl border border-sb-border p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sb-purple/15 text-sm font-semibold text-sb-purple">
+                  {full.pm.name
+                    .split(" ")
+                    .map((p) => p[0])
+                    .join("")
+                    .slice(0, 2)}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{full.pm.name}</p>
+                  <p className="text-xs text-sb-muted">Project Manager</p>
+                </div>
               </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          <Card>
-            <h3 className="mb-3 text-base font-semibold">Upcoming Milestones</h3>
-            <div className="space-y-2">
-              {full.milestones.length === 0 ? (
-                <p className="text-sm text-sb-muted">No milestones yet.</p>
-              ) : (
-                full.milestones.map((m) => {
-                  const display = resolveScheduleDisplayStatus(
-                    m.status,
-                    m.dueDate
-                  );
-                  return (
-                    <div
-                      key={m.id}
-                      className="flex items-center justify-between rounded-xl border border-sb-border px-3 py-2"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{m.title}</p>
-                        <p className="text-xs text-sb-muted">
-                          {formatDate(m.dueDate)}
-                        </p>
-                      </div>
-                      <StatusBadge tone={statusTone(display)}>
-                        {display.replace(/_/g, " ").toLowerCase()}
-                      </StatusBadge>
-                    </div>
-                  );
-                })
-              )}
+              <div className="flex gap-2">
+                {full.pm.phone ? (
+                  <a
+                    href={`tel:${full.pm.phone}`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sb-purple/30 text-sb-purple"
+                  >
+                    <Phone size={14} />
+                  </a>
+                ) : null}
+                {full.pm.email ? (
+                  <a
+                    href={`mailto:${full.pm.email}`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sb-purple/30 text-sb-purple"
+                  >
+                    <Mail size={14} />
+                  </a>
+                ) : null}
+                {wa ? (
+                  <a
+                    href={wa}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sb-green-border text-sb-green"
+                  >
+                    <MessageCircle size={14} />
+                  </a>
+                ) : null}
+              </div>
             </div>
-            <Link
-              href="/client/schedule"
-              className="mt-3 inline-block text-sm underline"
-            >
-              View full schedule
+          ) : (
+            <p className="text-sm text-sb-muted">PM not assigned yet.</p>
+          )}
+          {full.status === ProjectStatus.HANDED_OVER || full.warrantyStart ? (
+            <Link href="/client/warranty" className="mt-3 inline-block">
+              <Button variant="orange" size="sm">
+                Open Warranty
+              </Button>
             </Link>
-          </Card>
-
-          <Card>
-            <h3 className="mb-3 text-base font-semibold">Team Contacts</h3>
-            {full.pm ? (
-              <div className="flex items-center justify-between rounded-xl border border-sb-border p-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sb-purple/15 text-sm font-semibold text-sb-purple">
-                    {full.pm.name
-                      .split(" ")
-                      .map((p) => p[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{full.pm.name}</p>
-                    <p className="text-xs text-sb-muted">Project Manager</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {full.pm.phone ? (
-                    <a
-                      href={`tel:${full.pm.phone}`}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sb-purple/30 text-sb-purple"
-                    >
-                      <Phone size={14} />
-                    </a>
-                  ) : null}
-                  {full.pm.email ? (
-                    <a
-                      href={`mailto:${full.pm.email}`}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sb-purple/30 text-sb-purple"
-                    >
-                      <Mail size={14} />
-                    </a>
-                  ) : null}
-                  {wa ? (
-                    <a
-                      href={wa}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sb-green-border text-sb-green"
-                    >
-                      <MessageCircle size={14} />
-                    </a>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-sb-muted">PM not assigned yet.</p>
-            )}
-            {full.status === ProjectStatus.HANDED_OVER || full.warrantyStart ? (
-              <Link href="/client/warranty" className="mt-3 inline-block">
-                <Button variant="orange" size="sm">
-                  Open Warranty
-                </Button>
-              </Link>
-            ) : null}
-          </Card>
-        </div>
+          ) : null}
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-medium">Build progress</p>
+              <span className="text-xs text-sb-muted">
+                Buyer:{" "}
+                {full.buyer
+                  ? fullName(full.buyer.firstName, full.buyer.lastName)
+                  : "—"}
+              </span>
+            </div>
+            <ProgressBar value={liveProgress} color="orange" />
+          </div>
+        </Card>
       </div>
-
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="font-semibold">Build progress</h3>
-          <span className="text-sm text-sb-muted">
-            Buyer:{" "}
-            {full.buyer
-              ? fullName(full.buyer.firstName, full.buyer.lastName)
-              : "—"}
-          </span>
-        </div>
-        <ProgressBar value={liveProgress} color="orange" />
-      </Card>
     </div>
   );
 }

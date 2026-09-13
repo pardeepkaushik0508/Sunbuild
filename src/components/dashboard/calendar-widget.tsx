@@ -134,6 +134,7 @@ export function CalendarWidget({
         const data = (await res.json()) as {
           events?: CalendarEvent[];
           reconnectRequired?: boolean;
+          tasksScopeMissing?: boolean;
           error?: boolean;
           count?: number;
         };
@@ -151,7 +152,11 @@ export function CalendarWidget({
           return;
         }
         setReconnectNeeded(false);
-        setSyncError(null);
+        setSyncError(
+          data.tasksScopeMissing
+            ? "Reconnect Google Calendar to sync Google Tasks (Due: … items)."
+            : null
+        );
         setGoogleEvents(Array.isArray(data.events) ? data.events : []);
       } catch {
         setSyncError("Google Calendar sync timed out. Click Sync to retry.");

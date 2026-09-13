@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { endOfMonth, startOfMonth } from "date-fns";
 import { requireApiSession, getAccessibleProjectIds } from "@/lib/session";
 import { listGoogleEventsInRange } from "@/lib/google/calendar";
+import { listGoogleTasksInRange } from "@/lib/google/tasks";
 import { collectSyncedGoogleEventIds } from "@/lib/google/sync";
 import { mapGoogleEventToCalendarEvent } from "@/lib/google/event-display";
 import { UnauthorizedError, ForbiddenError } from "@/lib/errors";
@@ -20,8 +21,8 @@ const ALLOWED: Role[] = [
 ];
 
 /**
- * Pull Google Calendar events for the visible month (± pad for grid edges).
- * Fetches all selected calendars (primary, Birthdays, Holidays, etc.).
+ * Pull Google Calendar events + Google Tasks for the visible month (± pad).
+ * Tasks require a separate API/scope from normal calendar events.
  * Pass ?force=1 to bypass the short-lived server cache (Sync button).
  */
 export async function GET(request: Request) {
@@ -46,8 +47,15 @@ export async function GET(request: Request) {
     const timeMax = new Date(endOfMonth(around));
     timeMax.setDate(timeMax.getDate() + 7);
 
-    const [listed, projectIds] = await Promise.all([
+    const [listed, taskListed, projectIds] = await Promise.all([
       listGoogleEventsInRange(
+        session.user.id,
+        session.membership.companyId,
+        timeMin,
+        timeMax,
+        { force }
+      ),
+      listGoogleTasksInRange(
         session.user.id,
         session.membership.companyId,
         timeMin,
@@ -61,28 +69,40 @@ export async function GET(request: Request) {
       return NextResponse.json({
         events: [] as CalendarEvent[],
         reconnectRequired: true,
+        tasksScopeMissing: false,
         error: listed.error,
         count: 0,
       });
     }
 
-    const syncedIds = listed.events.length
-      ? await collectSyncedGoogleEventIds(
-          session.membership.companyId,
-          projectIds
-        )
-      : new Set<string>();
+    const syncedIds =
+      listed.events.length > 0
+        ? await collectSyncedGoogleEventIds(
+            session.membership.companyId,
+            projectIds
+          )
+        : new Set<string>();
 
     const events: CalendarEvent[] = [];
     for (const g of listed.events) {
       if (syncedIds.has(g.googleEventId)) continue;
       events.push(mapGoogleEventToCalendarEvent(g));
     }
+    for (const t of taskListed.tasks) {
+      events.push(
+        mapGoogleEventToCalendarEvent({
+          ...t,
+          kind: "task",
+          calendarName: t.calendarName || "Tasks",
+        })
+      );
+    }
 
     return NextResponse.json({
       events,
       reconnectRequired: false,
-      error: listed.error,
+      tasksScopeMissing: taskListed.tasksScopeMissing,
+      error: listed.error || taskListed.error,
       count: events.length,
     });
   } catch (err) {
@@ -98,6 +118,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       events: [] as CalendarEvent[],
       reconnectRequired: false,
+      tasksScopeMissing: false,
       error: true,
       count: 0,
     });
