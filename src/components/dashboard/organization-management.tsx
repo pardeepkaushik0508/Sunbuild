@@ -214,7 +214,7 @@ export function OrganizationManagement({
                             <p className="truncate text-[20px] leading-none font-bold tracking-tight text-sb-ink">
                               {metricValue(company, metric.key)}
                             </p>
-                            <p className="mt-1 truncate text-[12px] text-sb-muted">
+                            <p className="mt-1 text-[12px] leading-tight text-sb-muted">
                               {metric.label}
                             </p>
                           </div>

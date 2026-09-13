@@ -24,28 +24,59 @@ export type MappedCalendarEvent = {
   googleEventId: string;
 };
 
-/** Stable calendar day key. Prefer YYYY-MM-DD for all-day Google dates. */
+/**
+ * Stable local calendar day key (YYYY-MM-DD).
+ * - Plain date strings stay as-is
+ * - Midnight-UTC ISO (typical Prisma date-only fields) use the UTC calendar day
+ * - Everything else uses the viewer's local calendar day
+ */
 export function calendarDayKey(
   isoOrDate: string | Date,
   opts?: { allDay?: boolean }
 ): string {
   if (typeof isoOrDate === "string") {
     if (/^\d{4}-\d{2}-\d{2}$/.test(isoOrDate)) return isoOrDate;
+    if (opts?.allDay) return isoOrDate.slice(0, 10);
+    // Date-only values often serialize as midnight UTC — keep that calendar day.
+    if (/^\d{4}-\d{2}-\d{2}T00:00:00(\.0+)?(Z|[+-]00:00)$/.test(isoOrDate)) {
+      return isoOrDate.slice(0, 10);
+    }
     const d = new Date(isoOrDate);
     if (Number.isNaN(d.getTime())) return "";
-    if (opts?.allDay) return isoOrDate.slice(0, 10);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    return formatLocalDay(d);
   }
   if (Number.isNaN(isoOrDate.getTime())) return "";
   if (opts?.allDay) {
     return isoOrDate.toISOString().slice(0, 10);
   }
-  const y = isoOrDate.getFullYear();
-  const m = String(isoOrDate.getMonth() + 1).padStart(2, "0");
-  const day = String(isoOrDate.getDate()).padStart(2, "0");
+  // Local midnight Date from the grid — use local parts.
+  if (
+    isoOrDate.getHours() === 0 &&
+    isoOrDate.getMinutes() === 0 &&
+    isoOrDate.getSeconds() === 0 &&
+    isoOrDate.getMilliseconds() === 0
+  ) {
+    return formatLocalDay(isoOrDate);
+  }
+  // Midnight UTC Date object (Prisma date-only) — use UTC calendar day.
+  if (
+    isoOrDate.getUTCHours() === 0 &&
+    isoOrDate.getUTCMinutes() === 0 &&
+    isoOrDate.getUTCSeconds() === 0 &&
+    isoOrDate.getUTCMilliseconds() === 0
+  ) {
+    const y = isoOrDate.getUTCFullYear();
+    const m = String(isoOrDate.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(isoOrDate.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return formatLocalDay(isoOrDate);
+}
+
+function formatLocalDay(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 

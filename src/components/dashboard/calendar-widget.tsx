@@ -89,7 +89,6 @@ export function CalendarWidget({
   const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [reconnectNeeded, setReconnectNeeded] = useState(
     googleReconnectRequired
   );
@@ -154,7 +153,6 @@ export function CalendarWidget({
         setReconnectNeeded(false);
         setSyncError(null);
         setGoogleEvents(Array.isArray(data.events) ? data.events : []);
-        setLastSyncedAt(new Date());
       } catch {
         setSyncError("Google Calendar sync timed out. Click Sync to retry.");
       } finally {
@@ -224,7 +222,8 @@ export function CalendarWidget({
     const map = new Map<string, CalendarEvent[]>();
     for (const ev of mergedEvents) {
       const key = calendarDayKey(ev.date, {
-        allDay: ev.type === "google" && /^\d{4}-\d{2}-\d{2}$/.test(ev.date),
+        allDay:
+          ev.type === "google" && /^\d{4}-\d{2}-\d{2}$/.test(ev.date),
       });
       if (!key) continue;
       const list = map.get(key) ?? [];
@@ -233,6 +232,49 @@ export function CalendarWidget({
     }
     return map;
   }, [mergedEvents]);
+
+  const monthEventCount = useMemo(() => {
+    let count = 0;
+    for (const [key, list] of eventsByDay) {
+      const [y, m] = key.split("-").map(Number);
+      if (
+        y === cursor.getFullYear() &&
+        m === cursor.getMonth() + 1
+      ) {
+        count += list.length;
+      }
+    }
+    return count;
+  }, [eventsByDay, cursor]);
+
+  const monthGoogleCount = useMemo(() => {
+    let count = 0;
+    for (const [key, list] of eventsByDay) {
+      const [y, m] = key.split("-").map(Number);
+      if (y !== cursor.getFullYear() || m !== cursor.getMonth() + 1) continue;
+      count += list.filter(
+        (ev) => ev.source === "google" || ev.type === "google"
+      ).length;
+    }
+    return count;
+  }, [eventsByDay, cursor]);
+
+  // Keep the selected day inside the visible month so the list matches the grid.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (isSameMonth(prev, cursor)) return prev;
+      const today = new Date();
+      if (isSameMonth(today, cursor)) return today;
+      let firstEventDay: Date | null = null;
+      for (const [key] of eventsByDay) {
+        const [y, m, d] = key.split("-").map(Number);
+        if (y !== cursor.getFullYear() || m !== cursor.getMonth() + 1) continue;
+        const day = new Date(y, m - 1, d);
+        if (!firstEventDay || day < firstEventDay) firstEventDay = day;
+      }
+      return firstEventDay ?? startOfMonth(cursor);
+    });
+  }, [cursor, eventsByDay]);
 
   const selectedKey = calendarDayKey(selected);
   const selectedEvents = eventsByDay.get(selectedKey) ?? [];
@@ -252,7 +294,17 @@ export function CalendarWidget({
         : "Open in Google Calendar"
       : "Connect Google Calendar";
 
-  const googleCount = googleEvents.length;
+  const subtitleText = syncing
+    ? "Syncing Google Calendar…"
+    : monthEventCount > 0
+      ? `${monthEventCount} event${monthEventCount === 1 ? "" : "s"} this month${
+          monthGoogleCount > 0
+            ? ` · ${monthGoogleCount} from Google`
+            : ""
+        }`
+      : googleConnected && !reconnectNeeded
+        ? `${subtitle} · no events this month`
+        : subtitle;
 
   return (
     <section className={DASHBOARD_WIDGET_SHELL}>
@@ -265,17 +317,7 @@ export function CalendarWidget({
             <h3 className="text-[16px] font-semibold text-sb-ink">
               {format(cursor, "MMMM yyyy")}
             </h3>
-            <p className="text-[12px] text-sb-muted">
-              {syncing
-                ? "Syncing Google Calendar…"
-                : googleConnected && !reconnectNeeded
-                  ? `${subtitle} · ${googleCount} from Google${
-                      lastSyncedAt
-                        ? ` · ${format(lastSyncedAt, "h:mm a")}`
-                        : ""
-                    }`
-                  : subtitle}
-            </p>
+            <p className="text-[12px] text-sb-muted">{subtitleText}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -350,9 +392,14 @@ export function CalendarWidget({
           const key = calendarDayKey(day);
           const inMonth = isSameMonth(day, cursor);
           const isSelected = isSameDay(day, selected);
+          const isToday = isSameDay(day, new Date());
+          const dayEvents = eventsByDay.get(key) ?? [];
           const hasEvents =
-            (eventsByDay.get(key)?.length ?? 0) > 0 ||
+            dayEvents.length > 0 ||
             (inMonth && legacyHighlights.has(day.getDate()));
+          const hasGoogle = dayEvents.some(
+            (ev) => ev.source === "google" || ev.type === "google"
+          );
           return (
             <button
               key={key}
@@ -362,22 +409,40 @@ export function CalendarWidget({
                 if (!inMonth) setCursor(startOfMonth(day));
               }}
               className={cn(
-                "relative flex h-9 items-center justify-center rounded-lg text-sm transition",
+                "relative flex h-9 flex-col items-center justify-center rounded-lg text-sm transition",
                 !inMonth && "text-[#d1d5db]",
-                inMonth && !isSelected && "text-sb-ink hover:bg-sb-canvas",
-                isSelected && "bg-[#1f2937] font-semibold text-white",
-                !isSelected &&
+                inMonth && !isSelected && !hasEvents && "text-sb-ink hover:bg-sb-canvas",
+                inMonth &&
+                  !isSelected &&
                   hasEvents &&
-                  inMonth &&
-                  "font-semibold text-[#6d28d9]"
+                  (hasGoogle
+                    ? "bg-[#e8f0fe] font-semibold text-[#1a73e8]"
+                    : "bg-[#f3e8ff] font-semibold text-[#6d28d9]"),
+                isSelected && "bg-[#1f2937] font-semibold text-white",
+                isToday &&
+                  !isSelected &&
+                  "ring-1 ring-inset ring-sb-orange/70"
               )}
-              aria-label={format(day, "MMMM d, yyyy")}
+              aria-label={`${format(day, "MMMM d, yyyy")}${
+                hasEvents ? `, ${dayEvents.length} events` : ""
+              }`}
               aria-pressed={isSelected}
             >
-              {format(day, "d")}
-              {hasEvents && !isSelected ? (
-                <span className="absolute bottom-1 h-1 w-1 rounded-full bg-[#8b5cf6]" />
-              ) : null}
+              <span className="leading-none">{format(day, "d")}</span>
+              {hasEvents ? (
+                <span
+                  className={cn(
+                    "mt-0.5 h-1 w-1 rounded-full",
+                    isSelected
+                      ? "bg-white"
+                      : hasGoogle
+                        ? "bg-[#1a73e8]"
+                        : "bg-[#8b5cf6]"
+                  )}
+                />
+              ) : (
+                <span className="mt-0.5 h-1 w-1" aria-hidden />
+              )}
             </button>
           );
         })}
