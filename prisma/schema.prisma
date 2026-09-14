@@ -580,6 +580,7 @@ model AllowanceItem {
   quantity           Float?
   unit               String?
   amount             Float               @default(0)
+  actualCost         Float?
   costCode           String?
   selectionRequired  Boolean             @default(true)
   selectionDueDate   DateTime?

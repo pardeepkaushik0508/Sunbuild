@@ -149,7 +149,7 @@ export async function addAllowanceItemAction(soaId: string, form: FormData) {
     action: "SOA_ITEM_ADDED",
     entityType: "ScheduleOfAllowances",
     entityId: soaId,
-    metadata: JSON.stringify({ category, name, amount }),
+    metadata: { category, name, amount },
   });
 
   revalidatePath(`/sales/soa/${soaId}`);

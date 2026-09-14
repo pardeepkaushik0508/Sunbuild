@@ -62,7 +62,7 @@ export default async function SalesContractWorkspacePage({ params }: PageProps) 
           id: true,
           name: true,
           status: true,
-          projectManager: { select: { name: true, email: true } },
+          pm: { select: { name: true, email: true } },
         },
       },
       scheduleOfAllowances: {
@@ -570,9 +570,9 @@ export default async function SalesContractWorkspacePage({ params }: PageProps) 
                 <p>
                   <strong>Executed At:</strong> {formatDate(contract.executedAt)}
                 </p>
-                {contract.project?.projectManager ? (
+                {contract.project?.pm ? (
                   <p>
-                    <strong>Assigned PM:</strong> {contract.project.projectManager.name}
+                    <strong>Assigned PM:</strong> {contract.project.pm.name}
                   </p>
                 ) : null}
                 <p className="mt-2 text-[11px] text-emerald-700">

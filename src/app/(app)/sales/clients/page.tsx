@@ -23,17 +23,17 @@ export default async function SalesClientsPage() {
   const buyers = await prisma.buyer.findMany({
     where: {
       OR: [
-        { clientProjects: { some: { companyId } } },
-        { purchaseContracts: { some: { companyId } } },
-        { purchaseContracts: { some: { uploadedById: session.user.id } } },
+        { projects: { some: { companyId } } },
+        { contracts: { some: { companyId } } },
+        { contracts: { some: { uploadedById: session.user.id } } },
       ],
     },
     include: {
-      clientProjects: {
+      projects: {
         where: { companyId },
         select: { id: true, name: true, status: true },
       },
-      purchaseContracts: {
+      contracts: {
         where: {
           OR: [
             { companyId },
@@ -55,17 +55,17 @@ export default async function SalesClientsPage() {
 
   const totalClients = buyers.length;
   const totalContracts = buyers.reduce(
-    (acc, b) => acc + b.purchaseContracts.length,
+    (acc, b) => acc + b.contracts.length,
     0
   );
   const totalProjects = buyers.reduce(
-    (acc, b) => acc + b.clientProjects.length,
+    (acc, b) => acc + b.projects.length,
     0
   );
   const totalValue = buyers.reduce(
     (acc, b) =>
       acc +
-      b.purchaseContracts.reduce(
+      b.contracts.reduce(
         (sub, c) => sub + Number(c.totalContractPrice ?? c.purchasePrice ?? 0),
         0
       ),
@@ -145,8 +145,8 @@ export default async function SalesClientsPage() {
           ]}
           rows={buyers.map((b) => {
             const name = fullName(b.firstName, b.lastName);
-            const totalClientPrice = b.purchaseContracts.reduce(
-              (sum, c) => sum + Number(c.totalContractPrice ?? c.purchasePrice ?? 0),
+            const totalClientPrice = b.contracts.reduce(
+              (sum: number, c) => sum + Number(c.totalContractPrice ?? c.purchasePrice ?? 0),
               0
             );
 
@@ -157,16 +157,16 @@ export default async function SalesClientsPage() {
                 b.email,
                 b.phone,
                 b.mailingAddress,
-                b.clientProjects.map((p) => p.name).join(" "),
-                b.purchaseContracts.map((c) => c.contractNumber).join(" "),
+                b.projects.map((p) => p.name).join(" "),
+                b.contracts.map((c) => c.contractNumber).join(" "),
               ]
                 .filter(Boolean)
                 .join(" "),
               sortValues: {
                 client: name,
                 contact: b.email || b.phone || "",
-                contracts: b.purchaseContracts.length,
-                projects: b.clientProjects.length,
+                contracts: b.contracts.length,
+                projects: b.projects.length,
                 totalValue: totalClientPrice,
               },
               cells: [
@@ -181,9 +181,9 @@ export default async function SalesClientsPage() {
                   {b.phone ? <div className="text-xs text-sb-muted">{b.phone}</div> : null}
                 </Td>,
                 <Td key="contracts">
-                  {b.purchaseContracts.length > 0 ? (
+                  {b.contracts.length > 0 ? (
                     <div className="flex flex-col gap-1">
-                      {b.purchaseContracts.map((c) => (
+                      {b.contracts.map((c) => (
                         <Link
                           key={c.id}
                           href={`/sales/contracts/${c.id}`}
@@ -202,9 +202,9 @@ export default async function SalesClientsPage() {
                   )}
                 </Td>,
                 <Td key="projects">
-                  {b.clientProjects.length > 0 ? (
+                  {b.projects.length > 0 ? (
                     <div className="flex flex-col gap-1">
-                      {b.clientProjects.map((p) => (
+                      {b.projects.map((p) => (
                         <Link
                           key={p.id}
                           href={`/pm/projects/${p.id}`}
@@ -224,8 +224,8 @@ export default async function SalesClientsPage() {
                 </Td>,
                 <Td key="actions">
                   <div className="flex items-center gap-1.5">
-                    {b.purchaseContracts[0] ? (
-                      <Link href={`/sales/contracts/${b.purchaseContracts[0].id}`}>
+                    {b.contracts[0] ? (
+                      <Link href={`/sales/contracts/${b.contracts[0].id}`}>
                         <Button variant="outline" size="sm" className="h-7 text-xs">
                           <Eye className="mr-1 h-3.5 w-3.5" />
                           Contract

@@ -187,10 +187,10 @@ export async function createPurchaseContractAction(form: FormData) {
     action: "CONTRACT_CREATED",
     entityType: "PurchaseContract",
     entityId: contract.id,
-    metadata: JSON.stringify({
+    metadata: {
       contractNumber: contract.contractNumber,
       totalContractPrice: contract.totalContractPrice,
-    }),
+    },
   });
 
   redirect(`/sales/contracts/${contract.id}`);
@@ -359,10 +359,10 @@ export async function createContractRevisionAction(
     action: "CONTRACT_REVISION_CREATED",
     entityType: "PurchaseContract",
     entityId: contractId,
-    metadata: JSON.stringify({
+    metadata: {
       newVersion: contract.version + 1,
       reason,
-    }),
+    },
   });
 
   revalidatePath(`/sales/contracts/${contractId}`);
@@ -406,7 +406,7 @@ export async function uploadSignedContractAction(
     action: "CONTRACT_SIGNED_UPLOADED",
     entityType: "PurchaseContract",
     entityId: contractId,
-    metadata: JSON.stringify({ fileName: saved.fileName }),
+    metadata: { fileName: saved.fileName },
   });
 
   revalidatePath(`/sales/contracts/${contractId}`);

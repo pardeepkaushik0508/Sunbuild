@@ -34,18 +34,20 @@ export async function ensureSitePages() {
 }
 
 export async function getSitePage(key: SitePageKey) {
-  await ensureSitePages();
-  const page = await prisma.sitePage.findUnique({ where: { key } });
-  if (!page) {
-    return {
-      key,
-      title: SITE_PAGE_META[key].title,
-      bodyHtml: sanitizeSiteHtml(DEFAULT_SITE_PAGES[key]),
-      updatedAt: new Date(),
-      updatedById: null as string | null,
-    };
+  try {
+    await ensureSitePages();
+    const page = await prisma.sitePage.findUnique({ where: { key } });
+    if (page) return page;
+  } catch (err) {
+    console.warn("[site-page] Database unreachable during build, using default content:", err instanceof Error ? err.message : String(err));
   }
-  return page;
+  return {
+    key,
+    title: SITE_PAGE_META[key].title,
+    bodyHtml: sanitizeSiteHtml(DEFAULT_SITE_PAGES[key]),
+    updatedAt: new Date(),
+    updatedById: null as string | null,
+  };
 }
 
 export async function listSitePages() {

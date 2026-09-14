@@ -16,11 +16,13 @@ export const CAPABILITIES = {
   manageLeads: [Role.OWNER, Role.SALES_MANAGER] as Role[],
   manageContracts: [
     Role.OWNER,
+    Role.CEO,
     Role.OPERATIONS_ADMIN,
     Role.SALES_MANAGER,
   ] as Role[],
   manageSoa: [
     Role.OWNER,
+    Role.CEO,
     Role.OPERATIONS_ADMIN,
     Role.SALES_MANAGER,
   ] as Role[],

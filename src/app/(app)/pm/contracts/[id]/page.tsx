@@ -80,7 +80,7 @@ export default async function PMContractDetailPage({ params }: PageProps) {
     <div>
       <PageHeader
         title={contract.contractNumber ?? "Contract review"}
-        description={contract.projectName ?? contract.fileName}
+        description={contract.projectName ?? contract.fileName ?? undefined}
         actions={
           <>
             <Link href="/pm/contracts">

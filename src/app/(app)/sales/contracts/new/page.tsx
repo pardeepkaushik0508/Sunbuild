@@ -30,19 +30,25 @@ export default async function SalesContractNewPage({ searchParams }: PageProps) 
   });
 
   // 2. Leads for company (unconverted or relevant)
-  const leads = await prisma.lead.findMany({
+  const rawLeads = await prisma.lead.findMany({
     where: { companyId },
-    select: { id: true, name: true, email: true, phone: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+  const leads = rawLeads.map((l) => ({
+    id: l.id,
+    name: `${l.firstName} ${l.lastName}`.trim() || "Unnamed Lead",
+    email: l.email,
+    phone: l.phone,
+  }));
 
   // 3. Existing Buyers
   const buyers = await prisma.buyer.findMany({
     where: {
       OR: [
-        { clientProjects: { some: { companyId } } },
-        { purchaseContracts: { some: { companyId } } },
+        { projects: { some: { companyId } } },
+        { contracts: { some: { companyId } } },
       ],
     },
     select: { id: true, firstName: true, lastName: true, email: true, phone: true },

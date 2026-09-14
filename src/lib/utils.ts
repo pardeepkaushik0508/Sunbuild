@@ -129,3 +129,9 @@ export function formatRelativeTime(date: Date | string | null | undefined) {
   }
   return formatDate(d);
 }
+
+/** Currency rounding helper — avoids floating point arithmetic drift. */
+export function roundMoney(amount: number | null | undefined): number {
+  if (amount == null || !Number.isFinite(amount)) return 0;
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+}

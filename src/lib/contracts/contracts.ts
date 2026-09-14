@@ -134,6 +134,7 @@ export function calculateContractTotals(
 export type AllowanceRow = {
   id?: string;
   amount?: number | null;
+  actualCost?: number | null;
   selectedCost?: number | null;
   status?: AllowanceItemStatus | string;
 };
@@ -153,20 +154,24 @@ export type SoaTotalsSummary = {
 export function calculateSoaTotals(items: AllowanceRow[]): SoaTotalsSummary {
   let totalAllowance = 0;
   let committedAmount = 0;
+  let overageAmount = 0;
 
   for (const item of items) {
-    totalAllowance += roundMoney(item.amount ?? 0);
-    committedAmount += roundMoney(item.selectedCost ?? 0);
+    const budgeted = roundMoney(item.amount ?? 0);
+    const actual = roundMoney(item.actualCost ?? item.selectedCost ?? 0);
+    totalAllowance += budgeted;
+    committedAmount += actual;
+    if (actual > budgeted) {
+      overageAmount += roundMoney(actual - budgeted);
+    }
   }
 
   totalAllowance = roundMoney(totalAllowance);
   committedAmount = roundMoney(committedAmount);
+  overageAmount = roundMoney(overageAmount);
 
   const remainingAmount = roundMoney(
     Math.max(0, totalAllowance - committedAmount)
-  );
-  const overageAmount = roundMoney(
-    Math.max(0, committedAmount - totalAllowance)
   );
   const underAllowance = roundMoney(
     Math.max(0, totalAllowance - committedAmount)
@@ -475,11 +480,11 @@ export async function executeContractTransaction(opts: {
       action: "CONTRACT_EXECUTED",
       entityType: "PurchaseContract",
       entityId: contractId,
-      metadata: JSON.stringify({
+      metadata: {
         contractNumber: contract.contractNumber,
         totalContractPrice: contract.totalContractPrice,
         projectId,
-      }),
+      },
     });
 
     return {
