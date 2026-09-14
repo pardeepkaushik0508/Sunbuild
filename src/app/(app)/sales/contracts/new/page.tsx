@@ -1,16 +1,14 @@
 import Link from "next/link";
 import { Role } from "@prisma/client";
-import { uploadContractAction } from "@/lib/actions";
-import { PageHeader, Card } from "@/components/ui/card";
-import { FormField, Input, Textarea } from "@/components/ui/form";
+import { PageHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ActionForm } from "@/components/ui/action-form";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
+import { FileText, ArrowLeft } from "lucide-react";
+import { ContractCreateForm } from "./contract-create-form";
 
 type PageProps = {
-  searchParams: Promise<{ projectId?: string }>;
+  searchParams: Promise<{ projectId?: string; leadId?: string }>;
 };
 
 export default async function SalesContractNewPage({ searchParams }: PageProps) {
@@ -20,104 +18,63 @@ export default async function SalesContractNewPage({ searchParams }: PageProps) 
     Role.OPERATIONS_ADMIN,
     Role.CEO,
   ]);
-  const { projectId } = await searchParams;
 
+  const { projectId, leadId } = await searchParams;
+  const companyId = session.membership.companyId;
+
+  // 1. Projects for company
   const projects = await prisma.project.findMany({
-    where: { companyId: session.membership.companyId },
+    where: { companyId },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
+  });
+
+  // 2. Leads for company (unconverted or relevant)
+  const leads = await prisma.lead.findMany({
+    where: { companyId },
+    select: { id: true, name: true, email: true, phone: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  // 3. Existing Buyers
+  const buyers = await prisma.buyer.findMany({
+    where: {
+      OR: [
+        { clientProjects: { some: { companyId } } },
+        { purchaseContracts: { some: { companyId } } },
+      ],
+    },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+    orderBy: { lastName: "asc" },
+    take: 50,
   });
 
   const defaultProjectId =
     projectId && projects.some((p) => p.id === projectId) ? projectId : "";
 
   return (
-    <div>
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <PageHeader
-        title="Upload contract"
-        description="Upload a purchase agreement PDF and enter details for PM hand-off"
+        title="New Purchase Contract"
+        description="Draft an authoritative buyer purchase agreement and initialize Schedule of Allowances (SOA)"
+        icon={<FileText className="h-5 w-5" />}
         actions={
           <Link href="/sales/contracts">
             <Button variant="outline" size="sm">
-              All contracts
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              All Contracts
             </Button>
           </Link>
         }
       />
 
-      <Card>
-        <ActionForm
-          action={uploadContractAction}
-          encType="multipart/form-data"
-          className="grid gap-4 md:grid-cols-2"
-        >
-          <FormField label="PDF file" className="md:col-span-2">
-            <Input name="file" type="file" accept=".pdf,application/pdf" required />
-          </FormField>
-          <FormField label="Link to project (optional)">
-            <select
-              name="projectId"
-              defaultValue={defaultProjectId}
-              className="h-10 w-full rounded-[10px] border border-sb-border bg-white px-3 text-sm text-sb-text"
-            >
-              <option value="">No project yet (new contract)</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Project / Model name">
-            <Input name="projectName" placeholder="e.g. Sagebrush Custom Build" />
-          </FormField>
-          <FormField label="Contract number">
-            <Input name="contractNumber" placeholder="e.g. SC-2026-001" />
-          </FormField>
-          <FormField label="Municipal address">
-            <Input name="municipalAddress" placeholder="Street address" />
-          </FormField>
-          <FormField label="Legal address">
-            <Input name="legalAddress" placeholder="Plan / Block / Lot details" />
-          </FormField>
-          <FormField label="Lot / block / plan">
-            <Input name="lotBlockPlan" placeholder="Lot 12, Block 4, Plan 982-1234" />
-          </FormField>
-          <FormField label="Purchase price (CAD)">
-            <Input name="purchasePrice" type="number" step="0.01" placeholder="850000.00" />
-          </FormField>
-          <FormField label="Contract date">
-            <Input name="contractDate" type="date" />
-          </FormField>
-          <FormField label="Target closing">
-            <Input name="targetClosing" type="date" />
-          </FormField>
-          <FormField label="Buyer first name">
-            <Input name="buyerFirstName" />
-          </FormField>
-          <FormField label="Buyer last name">
-            <Input name="buyerLastName" />
-          </FormField>
-          <FormField label="Buyer email">
-            <Input name="buyerEmail" type="email" />
-          </FormField>
-          <FormField label="Buyer phone">
-            <Input name="buyerPhone" type="tel" />
-          </FormField>
-          <FormField label="Buyer mailing address" className="md:col-span-2">
-            <Input name="buyerMailing" />
-          </FormField>
-          <FormField label="Builder name">
-            <Input name="builderName" defaultValue="Sunview Custom Homes" />
-          </FormField>
-          <FormField label="Notes / special stipulations" className="md:col-span-2">
-            <Textarea name="reviewNotes" placeholder="Financing conditions, deposit schedules, special buyer requests..." />
-          </FormField>
-          <div className="md:col-span-2">
-            <SubmitButton pendingLabel="Uploading…">Upload & review</SubmitButton>
-          </div>
-        </ActionForm>
-      </Card>
+      <ContractCreateForm
+        projects={projects}
+        leads={leads}
+        buyers={buyers}
+        defaultProjectId={defaultProjectId}
+      />
     </div>
   );
 }

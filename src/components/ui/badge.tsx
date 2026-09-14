@@ -47,6 +47,8 @@ export function statusTone(status: string): keyof typeof tones {
       "RESOLVED",
       "WON",
       "ACTIVE",
+      "EXECUTED",
+      "SIGNED",
     ].includes(s)
   )
     return "success";
@@ -63,6 +65,8 @@ export function statusTone(status: string): keyof typeof tones {
       "SENT",
       "MEDIUM",
       "MED",
+      "READY_FOR_REVIEW",
+      "PARTIALLY_USED",
     ].includes(s)
   )
     return "warning";
@@ -78,10 +82,11 @@ export function statusTone(status: string): keyof typeof tones {
       "LOST",
       "HIGH",
       "URGENT",
+      "OVER_ALLOWANCE",
     ].includes(s)
   )
     return "danger";
-  if (["IN_PROGRESS", "ASSIGNED", "SUBMITTED"].includes(s)) return "info";
+  if (["IN_PROGRESS", "ASSIGNED", "SUBMITTED", "SENT_TO_CLIENT", "SELECTED"].includes(s)) return "info";
   if (
     [
       "PRE_CONSTRUCTION",

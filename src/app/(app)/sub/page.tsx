@@ -1,5 +1,14 @@
+import {
+  Briefcase,
+  ListTodo,
+  MessageSquareWarning,
+  Timer,
+  CheckCheck,
+  AlertCircle,
+} from "lucide-react";
 import { Role, TaskStatus } from "@prisma/client";
-import { PageHeader, MetricCard } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/card";
+import { OverviewMetricCard } from "@/components/dashboard/overview-metric-card";
 import { RecentJobsCard } from "@/components/dashboard/recent-jobs-widget";
 import { TodoWidget } from "@/components/dashboard/todo-widget";
 import { CalendarWidget } from "@/components/dashboard/calendar-widget";
@@ -7,9 +16,11 @@ import {
   DashboardCalendarSlot,
   DashboardWidgetRow,
 } from "@/components/dashboard/dashboard-widget-row";
+import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-lazy";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
+import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
@@ -38,7 +49,6 @@ export default async function SubDashboardPage() {
     deadlineToday,
     completedTasks,
     overdueTasks,
-    scheduleItems,
   ] = await Promise.all([
     prisma.project.findMany({
       where: { id: { in: projectIds } },
@@ -78,61 +88,108 @@ export default async function SubDashboardPage() {
         dueDate: { not: null, lt: startOfToday },
       },
     }),
-    prisma.scheduleItem.findMany({
-      where: { projectId: { in: projectIds } },
-      include: { project: { select: { name: true } } },
-      orderBy: { startDate: "asc" },
-      take: 60,
-    }),
   ]);
 
   const progressById = await loadProgressByProjectIds(projects.map((p) => p.id));
 
-  const localEvents: CalendarEvent[] = [
-    ...tasks
-      .filter((t) => t.dueDate)
-      .map((t) => ({
-        id: `task-${t.id}`,
-        date: t.dueDate!.toISOString(),
-        title: t.title,
-        type: "task" as const,
-        meta: t.project.name,
-      })),
-    ...scheduleItems.map((s) => ({
-      id: `sched-${s.id}`,
-      date: s.startDate.toISOString(),
-      title: s.title,
-      type: "schedule" as const,
-      meta: s.project.name,
-    })),
-  ];
+  const localEvents: CalendarEvent[] = tasks
+    .filter((t) => t.dueDate)
+    .map((t) => ({
+      id: `task-${t.id}`,
+      date: t.dueDate!.toISOString(),
+      title: t.title,
+      type: "task" as const,
+      meta: t.project.name,
+    }));
 
   const [merged, connection] = await Promise.all([
     mergeExternalGoogleEvents({ session, localEvents }),
     getPublicConnection(session.user.id, session.membership.companyId),
   ]);
 
-  const stats = [
-    { id: "jobs", label: "Assigned Jobs", value: projects.length, accent: "green" as const },
-    { id: "tasks", label: "Open Tasks", value: openTaskCount, accent: "orange" as const },
-    { id: "rfis", label: "Open RFIs", value: rfis, accent: "blue" as const },
+  // Gantt: only this subcontractor's assigned tasks (not full project schedule).
+  const ganttTasks = buildGanttTree(
+    tasksToScheduleRows(
+      tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        startDate: t.startDate,
+        dueDate: t.dueDate,
+        createdAt: t.createdAt,
+        assigneeName: session.user.name ?? null,
+        projectName: t.project.name,
+        projectId: t.project.id,
+      }))
+    )
+  ).map((t) => ({
+    ...t,
+    href:
+      t.isPhase || t.status === "PHASE"
+        ? null
+        : t.projectName
+          ? `/sub/jobs/${tasks.find((x) => x.title === t.title)?.projectId ?? projects[0]?.id ?? ""}`
+          : "/sub",
+  }));
+
+  // Prefer stable job links from task ids embedded as task:id
+  const ganttWithLinks = ganttTasks.map((t) => {
+    const taskId = t.id.startsWith("task:") ? t.id.slice(5) : null;
+    const match = taskId ? tasks.find((x) => x.id === taskId) : null;
+    return {
+      ...t,
+      href:
+        t.isPhase || t.status === "PHASE"
+          ? null
+          : match
+            ? `/sub/jobs/${match.projectId}`
+            : "/sub",
+    };
+  });
+
+  const doneCount = completedTasks;
+  const openCount = openTaskCount;
+  const progressPercent =
+    openCount + doneCount > 0
+      ? Math.round((doneCount / (openCount + doneCount)) * 100)
+      : 0;
+
+  const metrics = [
     {
-      id: "deadline",
+      label: "Assigned Jobs",
+      value: projects.length,
+      wrap: "bg-[#dcfce7] text-[#16a34a]",
+      Icon: Briefcase,
+    },
+    {
+      label: "Open Tasks",
+      value: openTaskCount,
+      wrap: "bg-[#ffedd5] text-[#ea580c]",
+      Icon: ListTodo,
+    },
+    {
+      label: "Open RFIs",
+      value: rfis,
+      wrap: "bg-[#dbeafe] text-[#2563eb]",
+      Icon: MessageSquareWarning,
+    },
+    {
       label: "Deadline Today",
       value: deadlineToday,
-      accent: "red" as const,
+      wrap: "bg-[#fee2e2] text-[#dc2626]",
+      Icon: Timer,
     },
     {
-      id: "done",
       label: "Completed",
       value: completedTasks,
-      accent: "purple" as const,
+      wrap: "bg-[#ede9fe] text-[#7c3aed]",
+      Icon: CheckCheck,
     },
     {
-      id: "overdue",
       label: "Overdue",
       value: overdueTasks,
-      accent: "indigo" as const,
+      wrap: "bg-[#e0e7ff] text-[#4338ca]",
+      Icon: AlertCircle,
     },
   ];
 
@@ -143,13 +200,14 @@ export default async function SubDashboardPage() {
         description="Assigned jobs, tasks and RFIs only"
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {stats.map((s) => (
-          <MetricCard
-            key={s.id}
-            label={s.label}
-            value={s.value}
-            accent={s.accent}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {metrics.map((m) => (
+          <OverviewMetricCard
+            key={m.label}
+            label={m.label}
+            value={m.value}
+            icon={m.Icon}
+            wrap={m.wrap}
           />
         ))}
       </div>
@@ -191,6 +249,13 @@ export default async function SubDashboardPage() {
           />
         </DashboardCalendarSlot>
       </DashboardWidgetRow>
+
+      <GanttChart
+        className="w-full"
+        tasks={ganttWithLinks}
+        progressPercent={progressPercent}
+        projectLabel="My tasks"
+      />
     </div>
   );
 }

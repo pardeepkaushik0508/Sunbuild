@@ -34,6 +34,8 @@ model User {
   leadActivities    LeadActivity[]
   createdProposals  Proposal[]          @relation("ProposalCreator")
   uploadedContracts PurchaseContract[]  @relation("ContractUploader")
+  salesContracts    PurchaseContract[]  @relation("ContractSalesRep")
+  contractVersions  PurchaseContractVersion[] @relation("ContractVersionCreator")
   assignedProjects  Project[]           @relation("ProjectPM")
   createdTasks      Task[]              @relation("TaskCreator")
   assignedTasks     Task[]              @relation("TaskAssignee")
@@ -134,6 +136,8 @@ model Company {
   leads       Lead[]
   proposals   Proposal[]
   invitations Invitation[]
+  contracts   PurchaseContract[]
+  soas        ScheduleOfAllowances[]
 }
 
 /// Typed key/value settings. Scopes must not be mixed:
@@ -277,6 +281,7 @@ model Lead {
   createdBy  User            @relation("LeadCreator", fields: [createdById], references: [id])
   activities LeadActivity[]
   proposals  Proposal[]
+  contracts  PurchaseContract[]
 
   @@index([companyId, status])
   @@index([companyId, updatedAt])
@@ -349,6 +354,7 @@ model Buyer {
 
   projects  Project[]
   contracts PurchaseContract[]
+  soas      ScheduleOfAllowances[]
   whatsappConversations WhatsAppConversation[]
 }
 
@@ -393,6 +399,7 @@ model Project {
   pm        User?    @relation("ProjectPM", fields: [pmId], references: [id])
   access    ProjectAccess[]
   contracts PurchaseContract[]
+  soas      ScheduleOfAllowances[]
   deposits  Deposit[]
   conditions Condition[]
   tasks     Task[]
@@ -417,53 +424,178 @@ model Project {
 }
 
 enum ContractStatus {
+  DRAFT
+  READY_FOR_REVIEW
+  SENT_TO_CLIENT
+  SIGNED
+  EXECUTED
+  CANCELLED
+  SUPERSEDED
   UPLOADED
   IN_REVIEW
   CONFIRMED
-  SUPERSEDED
 }
 
 model PurchaseContract {
-  id              String         @id @default(cuid())
+  id                String         @id @default(cuid())
+  companyId         String?
+  projectId         String?
+  buyerId           String?
+  leadId            String?
+  salesPersonId     String?
+  filePath          String?
+  fileName          String?
+  storageProvider   String?
+  storagePublicId   String?
+  mediaWidth        Int?
+  mediaHeight       Int?
+  mediaFormat       String?
+  mediaBytes        Int?
+  mediaResourceType String?
+  version           Int            @default(1)
+  status            ContractStatus @default(DRAFT)
+  uploadedById      String
+  contractNumber    String?
+  contractDate      DateTime?
+  effectiveDate     DateTime?
+  purchasePrice     Float?
+  basePrice         Float?
+  allowanceTotal    Float?
+  upgradesTotal     Float?
+  discountsTotal    Float?
+  taxRate           Float?
+  taxAmount         Float?
+  totalContractPrice Float?
+  targetClosing     DateTime?
+  projectName       String?
+  municipalAddress  String?
+  legalAddress      String?
+  lotBlockPlan      String?
+  buyerFirstName    String?
+  buyerLastName     String?
+  buyerEmail        String?
+  buyerPhone        String?
+  buyerMailing      String?
+  builderName       String?
+  scopeSummary      String?
+  inclusions        String?
+  exclusions        String?
+  specialConditions String?
+  clientTerms       String?
+  internalNotes     String?
+  extractedJson     String?
+  reviewNotes       String?
+  confirmedAt       DateTime?
+  executedAt        DateTime?
+  executedSnapshot  Json?
+  executedSoaSnapshot Json?
+  signedFilePath    String?
+  signedFileName    String?
+  signedStoragePublicId String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  company      Company?       @relation(fields: [companyId], references: [id])
+  project      Project?       @relation(fields: [projectId], references: [id])
+  buyer        Buyer?         @relation(fields: [buyerId], references: [id])
+  lead         Lead?          @relation(fields: [leadId], references: [id])
+  salesPerson  User?          @relation("ContractSalesRep", fields: [salesPersonId], references: [id])
+  uploadedBy   User           @relation("ContractUploader", fields: [uploadedById], references: [id])
+  deposits     Deposit[]
+  conditions   Condition[]
+  versions     PurchaseContractVersion[]
+  scheduleOfAllowances ScheduleOfAllowances?
+
+  @@index([companyId, status])
+  @@index([salesPersonId])
+  @@index([projectId])
+  @@index([buyerId])
+}
+
+model PurchaseContractVersion {
+  id             String   @id @default(cuid())
+  contractId     String
+  version        Int
+  contractNumber String
+  purchasePrice  Float?
+  basePrice      Float?
+  allowanceTotal Float?
+  snapshotData   Json
+  filePath       String?
+  fileName       String?
+  createdById    String
+  reason         String?
+  createdAt      DateTime @default(now())
+
+  contract  PurchaseContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("ContractVersionCreator", fields: [createdById], references: [id])
+
+  @@index([contractId])
+}
+
+model ScheduleOfAllowances {
+  id              String   @id @default(cuid())
+  soaNumber       String   @unique
+  contractId      String   @unique
+  version         Int      @default(1)
   projectId       String?
   buyerId         String?
-  filePath        String
-  fileName        String
-  storageProvider String?
-  storagePublicId String?
-  mediaWidth      Int?
-  mediaHeight     Int?
-  mediaFormat     String?
-  mediaBytes      Int?
-  mediaResourceType String?
-  version         Int            @default(1)
-  status          ContractStatus @default(UPLOADED)
-  uploadedById    String
-  contractNumber  String?
-  contractDate    DateTime?
-  purchasePrice   Float?
-  targetClosing   DateTime?
-  projectName     String?
-  municipalAddress String?
-  legalAddress    String?
-  lotBlockPlan    String?
-  buyerFirstName  String?
-  buyerLastName   String?
-  buyerEmail      String?
-  buyerPhone      String?
-  buyerMailing    String?
-  builderName     String?
-  extractedJson   String?
-  reviewNotes     String?
-  confirmedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  companyId       String?
+  status          String   @default("DRAFT")
+  notes           String?
+  effectiveDate   DateTime?
+  totalAllowance  Float    @default(0)
+  committedAmount Float    @default(0)
+  remainingAmount Float    @default(0)
+  overageAmount   Float    @default(0)
+  executedSnapshot Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  project    Project? @relation(fields: [projectId], references: [id])
-  buyer      Buyer?   @relation(fields: [buyerId], references: [id])
-  uploadedBy User     @relation("ContractUploader", fields: [uploadedById], references: [id])
-  deposits   Deposit[]
-  conditions Condition[]
+  contract  PurchaseContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  project   Project?         @relation(fields: [projectId], references: [id])
+  buyer     Buyer?           @relation(fields: [buyerId], references: [id])
+  company   Company?         @relation(fields: [companyId], references: [id])
+  items     AllowanceItem[]
+
+  @@index([companyId])
+  @@index([projectId])
+}
+
+enum AllowanceItemStatus {
+  PENDING_SELECTION
+  PARTIALLY_USED
+  SELECTED
+  COMPLETE
+  OVER_ALLOWANCE
+}
+
+model AllowanceItem {
+  id                 String              @id @default(cuid())
+  soaId              String
+  category           String
+  name               String
+  description        String?
+  location           String?
+  quantity           Float?
+  unit               String?
+  amount             Float               @default(0)
+  costCode           String?
+  selectionRequired  Boolean             @default(true)
+  selectionDueDate   DateTime?
+  notes              String?
+  displayToClient    Boolean             @default(true)
+  status             AllowanceItemStatus @default(PENDING_SELECTION)
+  sortOrder          Int                 @default(0)
+  selectionSectionId String?
+  selectionItemId    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  soa               ScheduleOfAllowances @relation(fields: [soaId], references: [id], onDelete: Cascade)
+  selectionSections SelectionSection[]
+
+  @@index([soaId])
 }
 
 enum DepositStatus {
@@ -692,6 +824,7 @@ enum SelectionPackageStatus {
 model SelectionPackage {
   id          String                  @id @default(cuid())
   projectId   String
+  soaId       String?
   title       String                  @default("Home Selections")
   status      SelectionPackageStatus  @default(DRAFT)
   submittedAt DateTime?
@@ -714,6 +847,7 @@ enum SelectionSectionStatus {
 model SelectionSection {
   id          String                 @id @default(cuid())
   packageId   String
+  allowanceItemId String?
   name        String
   sortOrder   Int                    @default(0)
   status      SelectionSectionStatus @default(DRAFT)
@@ -725,9 +859,10 @@ model SelectionSection {
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
 
-  package   SelectionPackage    @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  items     SelectionItem[]
-  approvals SelectionApproval[]
+  package       SelectionPackage    @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  allowanceItem AllowanceItem?       @relation(fields: [allowanceItemId], references: [id], onDelete: SetNull)
+  items         SelectionItem[]
+  approvals     SelectionApproval[]
 }
 
 model SelectionItem {

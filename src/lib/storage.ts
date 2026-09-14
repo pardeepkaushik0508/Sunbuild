@@ -183,18 +183,26 @@ export async function saveUpload(
       const message = err instanceof Error ? err.message : "unknown";
       const canFallback =
         process.env.NODE_ENV !== "production" ||
-        process.env.FILE_STORAGE_ALLOW_LOCAL_FALLBACK === "1";
+        process.env.FILE_STORAGE_ALLOW_LOCAL_FALLBACK === "1" ||
+        process.env.REQUIRE_CLOUDINARY !== "1";
       if (!canFallback) throw err;
-      console.error(
+      console.warn(
         "[storage] Cloudinary upload failed — using local uploads fallback",
         { message }
       );
     }
-  } else if (process.env.NODE_ENV === "production") {
+  } else if (
+    process.env.NODE_ENV === "production" &&
+    process.env.REQUIRE_CLOUDINARY === "1"
+  ) {
     throw new AppError(
       "File storage is not configured. Set CLOUDINARY_URL on the server.",
       503,
       "STORAGE_NOT_CONFIGURED"
+    );
+  } else {
+    console.warn(
+      "[storage] Cloudinary is not configured — using local uploads fallback"
     );
   }
 

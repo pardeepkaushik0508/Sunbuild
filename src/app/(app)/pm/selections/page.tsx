@@ -87,6 +87,7 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
       include: {
         sections: {
           include: {
+            allowanceItem: true,
             items: { orderBy: { sortOrder: "asc" } },
             _count: { select: { items: true, approvals: true } },
           },
@@ -388,13 +389,23 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                 <p className="mt-1 text-sm">
                   Budget:{" "}
                   <span className="font-semibold">
-                    {formatCurrency(section.allowance)}
+                    {formatCurrency(section.allowance ?? section.allowanceItem?.amount)}
                   </span>
                 </p>
                 <p className="text-sm">
                   Used:{" "}
                   <span className="font-semibold">{formatCurrency(used)}</span>
                 </p>
+                {section.allowanceItem ? (
+                  <p className="mt-1 text-[11px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block font-medium">
+                    Linked to SOA ({formatCurrency(section.allowanceItem.amount)})
+                  </p>
+                ) : null}
+                {used > Number(section.allowance ?? section.allowanceItem?.amount ?? 0) && (section.allowance || section.allowanceItem) ? (
+                  <p className="mt-1 text-[11px] text-sb-red font-semibold">
+                    Over Allowance: +{formatCurrency(used - Number(section.allowance ?? section.allowanceItem?.amount ?? 0))}
+                  </p>
+                ) : null}
                 <p className="mt-2 text-xs text-sb-muted">
                   Updated {formatDate(section.updatedAt)}
                 </p>

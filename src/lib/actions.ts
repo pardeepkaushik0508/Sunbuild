@@ -1471,78 +1471,89 @@ export async function uploadDocumentAction(form: FormData) {
 }
 
 export async function uploadPhotoAction(form: FormData) {
-  const session = await requireSession();
-  requireCapability(session, "uploadPhotos");
-  await rateLimitAction(session.user.id, "photo-upload", true);
-  const projectId = formString(form, "projectId");
-  await assertProjectAccess(session, projectId);
-  const file = form.get("file");
-  if (!(file instanceof File) || !file.size) throw new AppError("File required");
-
-  let saved;
   try {
-    saved = await saveCompanyUpload(
-      session.membership.companyId,
-      file,
-      `photos/${projectId}`
-    );
-  } catch (err) {
-    if (err instanceof AppError) throw err;
-    console.error("[photo-upload] storage failed", err);
-    throw new AppError(
-      "Failed to upload photo. Check CLOUDINARY_URL on the server.",
-      502,
-      "STORAGE_UPLOAD_FAILED"
-    );
-  }
-
-  // Default: PM/staff uploads are client-visible so they appear on the client portal.
-  // Subcontractors remain INTERNAL until a PM publishes.
-  const requested = formString(form, "visibility") as PhotoVisibility;
-  let visibility: PhotoVisibility = PhotoVisibility.INTERNAL;
-
-  const staffCanPublish =
-    session.membership.role !== Role.SUBCONTRACTOR &&
-    canSetClientVisibility(session.membership.role);
-
-  if (staffCanPublish) {
-    requireCapability(session, "publishPhotos");
-    if (requested === PhotoVisibility.INTERNAL) {
-      visibility = PhotoVisibility.INTERNAL;
-    } else {
-      // Explicit CLIENT_VISIBLE, empty, or any other value → show to client
-      visibility = PhotoVisibility.CLIENT_VISIBLE;
+    const session = await requireSession();
+    requireCapability(session, "uploadPhotos");
+    await rateLimitAction(session.user.id, "photo-upload", true);
+    const projectId = formString(form, "projectId");
+    if (!projectId) {
+      return { error: "Please select a project." };
     }
-  }
+    await assertProjectAccess(session, projectId);
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size) {
+      return { error: "Please select an image file to upload." };
+    }
 
-  try {
-    await prisma.photo.create({
-      data: {
-        projectId,
-        ...storageMeta(saved),
-        caption: formString(form, "caption") || null,
-        visibility,
-        uploadedById: session.user.id,
-        publishedAt:
-          visibility === PhotoVisibility.CLIENT_VISIBLE ? new Date() : null,
-        publishedById:
-          visibility === PhotoVisibility.CLIENT_VISIBLE
-            ? session.user.id
-            : null,
-      },
-    });
+    let saved;
+    try {
+      saved = await saveCompanyUpload(
+        session.membership.companyId,
+        file,
+        `photos/${projectId}`
+      );
+    } catch (err) {
+      if (err instanceof AppError) return { error: err.message };
+      console.error("[photo-upload] storage failed", err);
+      return {
+        error: "Failed to upload photo. Please check file storage configuration.",
+      };
+    }
+
+    // Default: PM/staff uploads are client-visible so they appear on the client portal.
+    // Subcontractors remain INTERNAL until a PM publishes.
+    const requested = formString(form, "visibility") as PhotoVisibility;
+    let visibility: PhotoVisibility = PhotoVisibility.INTERNAL;
+
+    const staffCanPublish =
+      session.membership.role !== Role.SUBCONTRACTOR &&
+      canSetClientVisibility(session.membership.role);
+
+    if (staffCanPublish) {
+      requireCapability(session, "publishPhotos");
+      if (requested === PhotoVisibility.INTERNAL) {
+        visibility = PhotoVisibility.INTERNAL;
+      } else {
+        // Explicit CLIENT_VISIBLE, empty, or any other value → show to client
+        visibility = PhotoVisibility.CLIENT_VISIBLE;
+      }
+    }
+
+    try {
+      await prisma.photo.create({
+        data: {
+          projectId,
+          ...storageMeta(saved),
+          caption: formString(form, "caption") || null,
+          visibility,
+          uploadedById: session.user.id,
+          publishedAt:
+            visibility === PhotoVisibility.CLIENT_VISIBLE ? new Date() : null,
+          publishedById:
+            visibility === PhotoVisibility.CLIENT_VISIBLE
+              ? session.user.id
+              : null,
+        },
+      });
+    } catch (err) {
+      await deleteUpload(saved.filePath, {
+        publicId: saved.publicId,
+        resourceType: saved.resourceType,
+      });
+      throw err;
+    }
+    revalidatePath("/pm/photos");
+    revalidatePath(`/sub/jobs/${projectId}`);
+    revalidatePath("/sub");
+    revalidatePath("/client");
+    revalidatePath("/client/photos");
+    return { success: true };
   } catch (err) {
-    await deleteUpload(saved.filePath, {
-      publicId: saved.publicId,
-      resourceType: saved.resourceType,
-    });
+    if (err instanceof AppError) {
+      return { error: err.message };
+    }
     throw err;
   }
-  revalidatePath("/pm/photos");
-  revalidatePath(`/sub/jobs/${projectId}`);
-  revalidatePath("/sub");
-  revalidatePath("/client");
-  revalidatePath("/client/photos");
 }
 
 export async function publishPhotoAction(photoId: string) {

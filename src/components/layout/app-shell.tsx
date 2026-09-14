@@ -25,6 +25,7 @@ import {
   CheckSquare,
   AlertTriangle,
   LineChart,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -144,7 +145,7 @@ function navForRole(
           ],
         },
         { label: "Settings", href: "/owner/settings", icon: Settings },
-        { label: "Contracts", href: "/pm/contracts", icon: FileText },
+        { label: "Contracts", href: "/sales/contracts", icon: FileText },
         { label: "Leads", href: "/sales/leads", icon: ClipboardList },
         { label: "Invoices", href: "/bookkeeper/invoices", icon: Receipt },
         { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
@@ -163,7 +164,7 @@ function navForRole(
       const items: NavDef[] = [
         { label: "Overview", href: "/admin", icon: LayoutDashboard },
         { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
-        { label: "Contracts", href: "/pm/contracts", icon: FileText },
+        { label: "Contracts", href: "/sales/contracts", icon: FileText },
         { label: "Settings", href: "/settings", icon: Settings },
       ];
       if (showUsersNav) items.splice(2, 0, usersItem);
@@ -178,14 +179,16 @@ function navForRole(
         [
           { label: "Overview", href: "/sales", icon: LayoutDashboard },
           { label: "Lead Management", href: "/sales/leads", icon: ClipboardList },
+          { label: "Clients", href: "/sales/clients", icon: Users },
+          { label: "Purchase Contracts", href: "/sales/contracts", icon: FileText },
+          { label: "SOA / Allowances", href: "/sales/soa", icon: FileSpreadsheet },
           { label: "Proposals", href: "/sales/proposals", icon: FileText },
-          { label: "Contracts", href: "/sales/contracts", icon: FileText },
           { label: "Documents", href: "/sales/documents", icon: FileText },
           { label: "Activities", href: "/sales/activities", icon: CalendarDays },
           { label: "Reports", href: "/sales/reports", icon: Briefcase },
           { label: "Settings", href: "/settings", icon: Settings },
         ],
-        { financeAt: 7, usersAt: 7 }
+        { financeAt: 9, usersAt: 9 }
       );
     case Role.PROJECT_MANAGER:
       return withOptionalModules(
@@ -200,11 +203,10 @@ function navForRole(
           { label: "Selection", href: "/pm/selections", icon: Home },
           { label: "Documents", href: "/pm/documents", icon: FileText },
           { label: "Photos", href: "/pm/photos", icon: Camera },
-          { label: "Contracts", href: "/pm/contracts", icon: FileText },
           { label: "Warranty", href: "/pm/warranty", icon: Wrench },
           { label: "Settings", href: "/settings", icon: Settings },
         ],
-        { financeAt: 12, usersAt: 12 }
+        { financeAt: 11, usersAt: 11 }
       );
     case Role.BOOKKEEPER:
       return withOptionalModules(

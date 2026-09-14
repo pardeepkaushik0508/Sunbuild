@@ -46,8 +46,16 @@ export class RateLimitError extends AppError {
 /** Safe client-facing message; logs detail server-side when needed. */
 export function toSafeErrorMessage(error: unknown): string {
   if (error instanceof AppError) return error.message;
+  if (typeof error === "string") return error;
   if (error instanceof Error) {
     const msg = error.message?.trim() || "";
+    // Handle React production / Server Action masked errors
+    if (/Minified React error #441/i.test(msg) || /digest/i.test(msg)) {
+      return "Server error during upload. Please verify file storage configuration or server logs.";
+    }
+    if (/Minified React error #418/i.test(msg)) {
+      return "Page hydration mismatch. Please refresh the page.";
+    }
     // Preserve intentional Forbidden/Not found throws from legacy code
     if (/Body exceeded .+ limit/i.test(msg)) {
       return "File is too large to upload. Please use a smaller PDF (max 20 MB).";

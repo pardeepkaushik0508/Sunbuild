@@ -29,6 +29,7 @@ import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
 import { formatPersonOptionLabel } from "@/lib/users/person-label";
+import { FileText, FileSpreadsheet, Lock, ExternalLink } from "lucide-react";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -73,6 +74,20 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       include: {
         buyer: true,
         pm: { select: { id: true, name: true, email: true } },
+        contracts: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: {
+            scheduleOfAllowances: {
+              include: { items: true },
+            },
+          },
+        },
+        soas: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { items: true },
+        },
         access: {
           include: {
             user: {
@@ -121,8 +136,14 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
 
   if (!project) notFound();
 
+  const contract = project.contracts?.[0];
+  const soa = contract?.scheduleOfAllowances ?? project.soas?.[0];
+  const originalContractPrice = contract?.totalContractPrice ?? project.purchasePrice ?? 0;
+  const approvedCOSum = approvedChangeOrders.reduce((acc, co) => acc + co.amount, 0);
+  const revisedContractValue = originalContractPrice + approvedCOSum;
+
   const projectBudget = computeBudgetUtilization({
-    purchasePrice: project.purchasePrice,
+    purchasePrice: originalContractPrice || project.purchasePrice,
     approvedChangeOrders,
   });
 
@@ -308,6 +329,125 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
         ]}
         viewAllHref="/pm/contracts"
       />
+
+      {/* Contract & Allowance Financial Summary (Read-Only for PM) */}
+      <Card className="border-l-4 border-l-sb-blue">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-sb-border pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-sb-blue" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-sb-ink">
+                  Purchase Contract & Allowance Summary
+                </h2>
+                {contract?.status ? (
+                  <StatusBadge tone={statusTone(contract.status)}>
+                    {contract.status.replace(/_/g, " ")}
+                  </StatusBadge>
+                ) : null}
+              </div>
+              <p className="text-xs text-sb-muted">
+                {contract?.contractNumber ? `${contract.contractNumber} (v${contract.version})` : "Standard Builder Agreement"} · Managed authoritatively by Sales
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-sb-muted bg-neutral-100 px-2.5 py-1 rounded-md">
+            <Lock className="h-3.5 w-3.5 text-sb-muted" />
+            <span>Read-Only (PM View)</span>
+          </div>
+        </div>
+
+        {/* Pricing Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-sb-border text-xs">
+          <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
+            <span className="text-sb-muted block uppercase tracking-wider text-[10px] font-semibold">
+              Original Contract Value
+            </span>
+            <span className="text-lg font-bold font-mono text-sb-ink mt-0.5 block">
+              {formatCurrency(originalContractPrice)}
+            </span>
+            <span className="text-[11px] text-sb-muted">Immutable baseline</span>
+          </div>
+
+          <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
+            <span className="text-sb-muted block uppercase tracking-wider text-[10px] font-semibold">
+              Approved Change Orders
+            </span>
+            <span className="text-lg font-bold font-mono text-sb-ink mt-0.5 block">
+              +{formatCurrency(approvedCOSum)}
+            </span>
+            <span className="text-[11px] text-sb-muted">{approvedChangeOrders.length} approved change orders</span>
+          </div>
+
+          <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+            <span className="text-emerald-800 block uppercase tracking-wider text-[10px] font-bold">
+              Current Revised Contract Value
+            </span>
+            <span className="text-lg font-black font-mono text-emerald-700 mt-0.5 block">
+              {formatCurrency(revisedContractValue)}
+            </span>
+            <span className="text-[11px] text-emerald-700">Original + Approved COs</span>
+          </div>
+        </div>
+
+        {/* Schedule of Allowances (SOA) Breakdown */}
+        {soa ? (
+          <div className="pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-sb-orange" />
+                <h3 className="font-semibold text-xs text-sb-ink uppercase tracking-wider">
+                  Schedule of Allowances ({soa.soaNumber})
+                </h3>
+              </div>
+              <span className="text-xs text-sb-muted">
+                {soa.items.length} budgeted allowance items
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-center">
+              <div className="border border-sb-border rounded-lg p-2">
+                <span className="text-sb-muted text-[11px] block">Allowance Budget</span>
+                <span className="font-mono font-bold text-sb-ink text-sm">
+                  {formatCurrency(soa.totalAllowance)}
+                </span>
+              </div>
+              <div className="border border-sb-border rounded-lg p-2">
+                <span className="text-sb-muted text-[11px] block">Committed</span>
+                <span className="font-mono font-bold text-blue-600 text-sm">
+                  {formatCurrency(soa.committedAmount)}
+                </span>
+              </div>
+              <div className="border border-sb-border rounded-lg p-2">
+                <span className="text-sb-muted text-[11px] block">Remaining</span>
+                <span className="font-mono font-bold text-emerald-600 text-sm">
+                  {formatCurrency(soa.remainingAmount)}
+                </span>
+              </div>
+              <div className="border border-sb-border rounded-lg p-2">
+                <span className="text-sb-muted text-[11px] block">Overages</span>
+                <span className={`font-mono font-bold text-sm ${soa.overageAmount > 0 ? "text-sb-red" : "text-sb-muted"}`}>
+                  {formatCurrency(soa.overageAmount)}
+                </span>
+              </div>
+            </div>
+
+            {soa.items.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                {soa.items.slice(0, 6).map((it) => (
+                  <span
+                    key={it.id}
+                    className="inline-flex items-center gap-1 rounded bg-gray-50 border border-gray-200 px-2 py-1 text-[11px]"
+                  >
+                    <span className="text-sb-ink font-medium">{it.name}:</span>
+                    <span className="font-mono text-sb-muted">{formatCurrency(it.amount)}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Card>
 
       {projectBudget.changeOrders.length > 0 ? (
         <Card className="mb-6">

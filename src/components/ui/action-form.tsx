@@ -31,7 +31,13 @@ export function ActionForm({
   const formAction = useCallback(
     async (formData: FormData) => {
       try {
-        await action(formData);
+        const res = (await action(formData)) as
+          | { error?: string; success?: boolean }
+          | undefined;
+        if (res && typeof res === "object" && "error" in res && res.error) {
+          toast?.error(toSafeErrorMessage(res.error));
+          return;
+        }
         if (successMessage) {
           toast?.success(successMessage);
         }

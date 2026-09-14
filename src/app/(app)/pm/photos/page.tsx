@@ -77,11 +77,15 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
             <Select
               name="projectId"
               required
-              defaultValue={filterProjectId ?? ""}
+              defaultValue={
+                filterProjectId ?? (projects.length === 1 ? projects[0]?.id : "")
+              }
             >
-              <option value="" disabled>
-                Select project
-              </option>
+              {projects.length !== 1 ? (
+                <option value="" disabled>
+                  {projects.length === 0 ? "No projects available" : "Select project"}
+                </option>
+              ) : null}
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}

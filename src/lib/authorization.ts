@@ -19,6 +19,11 @@ export const CAPABILITIES = {
     Role.OPERATIONS_ADMIN,
     Role.SALES_MANAGER,
   ] as Role[],
+  manageSoa: [
+    Role.OWNER,
+    Role.OPERATIONS_ADMIN,
+    Role.SALES_MANAGER,
+  ] as Role[],
   manageTasks: [
     Role.OWNER,
     Role.CEO,
