@@ -595,6 +595,12 @@ async function main() {
       name: "Sunview Custom Homes",
       brand: "Sunview",
       description: "Luxury custom home construction",
+      legalName: "SUNVIEW CUSTOM HOMES",
+      addressLine1: "Calgary, Alberta",
+      city: "Calgary",
+      province: "AB",
+      postalCode: "",
+      gstNumber: "GST # 123456789 RT0001",
       isActive: true,
     },
     create: {
@@ -602,6 +608,12 @@ async function main() {
       slug: "sunview-homes",
       brand: "Sunview",
       description: "Luxury custom home construction",
+      legalName: "SUNVIEW CUSTOM HOMES",
+      addressLine1: "Calgary, Alberta",
+      city: "Calgary",
+      province: "AB",
+      postalCode: "",
+      gstNumber: "GST # 123456789 RT0001",
     },
   });
 

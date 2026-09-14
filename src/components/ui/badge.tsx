@@ -49,6 +49,7 @@ export function statusTone(status: string): keyof typeof tones {
       "ACTIVE",
       "EXECUTED",
       "SIGNED",
+      "FINALIZED",
     ].includes(s)
   )
     return "success";

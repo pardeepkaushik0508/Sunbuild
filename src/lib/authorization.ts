@@ -105,6 +105,22 @@ export const CAPABILITIES = {
     Role.OPERATIONS_ADMIN,
     Role.PROJECT_MANAGER,
   ] as Role[],
+  /** Statement of Adjustments (closing) — view/preview/download */
+  viewStatementOfAdjustments: [
+    Role.OWNER,
+    Role.CEO,
+    Role.OPERATIONS_ADMIN,
+    Role.PROJECT_MANAGER,
+    Role.BOOKKEEPER,
+    Role.SALES_MANAGER,
+  ] as Role[],
+  /** Edit promo credit / finalize Statement of Adjustments */
+  manageStatementOfAdjustments: [
+    Role.OWNER,
+    Role.CEO,
+    Role.OPERATIONS_ADMIN,
+    Role.BOOKKEEPER,
+  ] as Role[],
   manageUsers: [Role.OWNER, Role.OPERATIONS_ADMIN] as Role[],
   manageSiteContent: [
     Role.OWNER,

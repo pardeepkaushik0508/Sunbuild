@@ -44,6 +44,7 @@ const MODULE_LINKS = [
   { label: "Photos", href: "photos" },
   { label: "Selections", href: "selections" },
   { label: "Change Orders", href: "change-orders" },
+  { label: "Statement of Adjustments", href: "statement-of-adjustments" },
   { label: "Warranty", href: "warranty" },
 ];
 
@@ -390,7 +391,25 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Schedule of Allowances (SOA) Breakdown */}
+        {/* Statement of Adjustments (closing) */}
+        <div className="flex flex-col gap-3 rounded-[14px] border border-sb-border bg-sb-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-sb-ink" />
+            <div>
+              <p className="text-sm font-semibold text-sb-ink">
+                Statement of Adjustments
+              </p>
+              <p className="text-xs text-sb-muted">
+                Closing settlement PDF from contract, approved COs &amp; deposits
+              </p>
+            </div>
+          </div>
+          <Link href={`/pm/projects/${project.id}/statement-of-adjustments`}>
+            <Button size="sm">Open SOA</Button>
+          </Link>
+        </div>
+
+        {/* Schedule of Allowances (budget) Breakdown */}
         {soa ? (
           <div className="pt-4">
             <div className="flex items-center justify-between mb-3">

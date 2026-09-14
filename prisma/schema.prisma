@@ -59,6 +59,8 @@ model User {
   whatsappMessagesSent      WhatsAppMessage[]           @relation("WhatsAppSender")
   sitePagesUpdated          SitePage[]                  @relation("SitePageUpdater")
   notifications             Notification[]
+  statementsOfAdjustmentsGenerated StatementOfAdjustments[] @relation("SoaGeneratedBy")
+  statementsOfAdjustmentsFinalized StatementOfAdjustments[] @relation("SoaFinalizedBy")
 }
 
 /// Better Auth two-factor secrets (never expose to the browser).
@@ -125,6 +127,14 @@ model Company {
   brand             String?
   /// Short public tagline shown on Owner Organization Management cards.
   description       String?
+  /// Legal letterhead for Statement of Adjustments / contracts.
+  legalName         String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  province          String?
+  postalCode        String?
+  gstNumber         String?
   isActive          Boolean  @default(true)
   /// JSON map: moduleKey → { Role: boolean }
   permissionMatrix  Json?
@@ -138,6 +148,7 @@ model Company {
   invitations Invitation[]
   contracts   PurchaseContract[]
   soas        ScheduleOfAllowances[]
+  statementsOfAdjustments StatementOfAdjustments[]
 }
 
 /// Typed key/value settings. Scopes must not be mixed:
@@ -415,6 +426,7 @@ model Project {
   warrantyTickets WarrantyTicket[]
   microsoftTodoLinks MicrosoftTodoProjectLink[]
   whatsappConversations WhatsAppConversation[]
+  statementsOfAdjustments StatementOfAdjustments[]
 
   @@index([companyId, status])
   @@index([companyId, updatedAt])
@@ -505,6 +517,7 @@ model PurchaseContract {
   conditions   Condition[]
   versions     PurchaseContractVersion[]
   scheduleOfAllowances ScheduleOfAllowances?
+  statementsOfAdjustments StatementOfAdjustments[]
 
   @@index([companyId, status])
   @@index([salesPersonId])
@@ -1313,5 +1326,48 @@ model SitePage {
   updatedAt   DateTime    @updatedAt
 
   updatedBy   User?       @relation("SitePageUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+// ─── Statement of Adjustments (closing settlement — NOT Schedule of Allowances) ─
+
+enum StatementOfAdjustmentsStatus {
+  DRAFT
+  FINALIZED
+}
+
+/// Closing Statement of Adjustments (SOA). Distinct from ScheduleOfAllowances.
+model StatementOfAdjustments {
+  id                 String                        @id @default(cuid())
+  companyId          String
+  projectId          String
+  purchaseContractId String?
+  statementNumber    String                        @unique
+  version            Int                           @default(1)
+  statementDate      DateTime                      @default(now())
+  status             StatementOfAdjustmentsStatus  @default(DRAFT)
+  /// Positive amount = promo credit toward approved Change Orders.
+  promoCreditAdjustment Float                      @default(0)
+  /// Frozen totals + line items when FINALIZED (JSON).
+  financialSnapshot  Json?
+  pdfPath            String?
+  pdfFileName        String?
+  pdfStoragePublicId String?
+  generatedById      String?
+  finalizedById      String?
+  finalizedAt        DateTime?
+  notes              String?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  purchaseContract PurchaseContract? @relation(fields: [purchaseContractId], references: [id], onDelete: SetNull)
+  generatedBy      User?             @relation("SoaGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+  finalizedBy      User?             @relation("SoaFinalizedBy", fields: [finalizedById], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, version])
+  @@index([companyId, status])
+  @@index([projectId, status])
+  @@index([purchaseContractId])
 }
 
