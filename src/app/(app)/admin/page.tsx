@@ -202,14 +202,15 @@ export default async function AdminOverviewPage() {
     getPublicConnection(session.user.id, companyId),
   ]);
 
+  const focusStatuses: ProjectStatus[] = [
+    ProjectStatus.IN_PROGRESS,
+    ProjectStatus.PRE_CONSTRUCTION,
+    ProjectStatus.SUBSTANTIAL_COMPLETION,
+  ];
   const focusProject =
-    projects.find((p) =>
-      [
-        ProjectStatus.IN_PROGRESS,
-        ProjectStatus.PRE_CONSTRUCTION,
-        ProjectStatus.SUBSTANTIAL_COMPLETION,
-      ].includes(p.status)
-    ) ?? projects[0] ?? null;
+    projects.find((p) => focusStatuses.includes(p.status)) ??
+    projects[0] ??
+    null;
 
   const scheduleForGantt = focusProject
     ? scheduleItems.filter((s) => s.projectId === focusProject.id)
