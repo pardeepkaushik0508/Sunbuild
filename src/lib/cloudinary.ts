@@ -15,6 +15,7 @@ export type CloudinaryAsset = {
 };
 
 let configured = false;
+let configuredFrom: string | null = null;
 
 function maskCloudinaryUrl(raw: string) {
   try {
@@ -43,6 +44,55 @@ export function normalizeCloudinaryUrl(raw: string): string {
   return url;
 }
 
+/** Parse cloudinary://API_KEY:API_SECRET@CLOUD_NAME into SDK config fields. */
+export function parseCloudinaryUrl(raw: string): {
+  cloud_name: string;
+  api_key: string;
+  api_secret: string;
+} {
+  const url = normalizeCloudinaryUrl(raw);
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new AppError(
+      "File storage configuration is invalid. Check CLOUDINARY_URL format.",
+      503,
+      "STORAGE_MISCONFIGURED"
+    );
+  }
+
+  if (parsed.protocol !== "cloudinary:") {
+    throw new AppError(
+      "CLOUDINARY_URL must start with cloudinary://API_KEY:API_SECRET@CLOUD_NAME",
+      503,
+      "STORAGE_MISCONFIGURED"
+    );
+  }
+
+  const cloud_name = parsed.hostname;
+  const api_key = decodeURIComponent(parsed.username || "");
+  const api_secret = decodeURIComponent(parsed.password || "");
+
+  if (!cloud_name || !api_key || !api_secret) {
+    throw new AppError(
+      "CLOUDINARY_URL is missing cloud name, API key, or API secret.",
+      503,
+      "STORAGE_MISCONFIGURED"
+    );
+  }
+
+  if (/[<>]/.test(api_key) || /[<>]/.test(api_secret)) {
+    throw new AppError(
+      "File storage configuration is invalid. Remove < > from CLOUDINARY_URL credentials.",
+      503,
+      "STORAGE_MISCONFIGURED"
+    );
+  }
+
+  return { cloud_name, api_key, api_secret };
+}
+
 /** Configure from CLOUDINARY_URL once. Never log the secret. */
 export function getCloudinary() {
   const raw = process.env.CLOUDINARY_URL?.trim();
@@ -56,19 +106,25 @@ export function getCloudinary() {
 
   const url = normalizeCloudinaryUrl(raw);
 
-  if (!configured) {
+  // Reconfigure when env changes (tests / hot reload).
+  if (!configured || configuredFrom !== url) {
     try {
-      cloudinary.config({ cloudinary_url: url, secure: true });
-      const cfg = cloudinary.config();
-      if (!cfg.cloud_name || !cfg.api_key || !cfg.api_secret) {
-        throw new Error("incomplete");
-      }
-      // Reject leftover placeholder wrappers that pass "truthy" checks but fail uploads.
-      if (/[<>]/.test(cfg.api_key) || /[<>]/.test(cfg.api_secret)) {
-        throw new Error("placeholder_brackets");
-      }
+      const parsed = parseCloudinaryUrl(url);
+      // Prefer explicit fields — `cloudinary_url` option is NOT applied by the SDK.
+      cloudinary.config({
+        cloud_name: parsed.cloud_name,
+        api_key: parsed.api_key,
+        api_secret: parsed.api_secret,
+        secure: true,
+      });
+      // Keep env in sync for any SDK internals that read CLOUDINARY_URL.
+      process.env.CLOUDINARY_URL = url;
       configured = true;
-    } catch {
+      configuredFrom = url;
+    } catch (err) {
+      configured = false;
+      configuredFrom = null;
+      if (err instanceof AppError) throw err;
       console.error(
         "[cloudinary] Invalid CLOUDINARY_URL",
         maskCloudinaryUrl(url)
@@ -87,8 +143,12 @@ export function getCloudinary() {
 export function isCloudinaryConfigured(): boolean {
   const raw = process.env.CLOUDINARY_URL?.trim();
   if (!raw) return false;
-  const url = normalizeCloudinaryUrl(raw);
-  return Boolean(url) && !/[<>]/.test(url);
+  try {
+    parseCloudinaryUrl(raw);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function cloudinaryRootFolder() {
@@ -198,10 +258,18 @@ export async function uploadBufferToCloudinary(opts: {
     });
     return toAsset(result);
   } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown";
     console.error("[cloudinary] upload failed", {
       folder,
-      message: err instanceof Error ? err.message : "unknown",
+      message,
     });
+    if (/invalid signature|invalid api_key|unauthorized/i.test(message)) {
+      throw new AppError(
+        "Cloudinary credentials are invalid. Update CLOUDINARY_URL on the server (API key + secret from Cloudinary Dashboard → Settings → API Keys).",
+        502,
+        "STORAGE_AUTH_FAILED"
+      );
+    }
     throw new AppError("Failed to upload file to storage", 502, "STORAGE_UPLOAD_FAILED");
   }
 }

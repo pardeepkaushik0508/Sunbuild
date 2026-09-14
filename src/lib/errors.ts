@@ -75,6 +75,8 @@ export function toSafeErrorMessage(error: unknown): string {
       msg.startsWith("File storage") ||
       msg.startsWith("Failed to upload") ||
       msg.startsWith("Failed to delete") ||
+      msg.startsWith("Cloudinary credentials") ||
+      msg.startsWith("CLOUDINARY_URL") ||
       msg.startsWith("Invalid ") ||
       msg.startsWith("Valid ") ||
       msg.startsWith("End date") ||

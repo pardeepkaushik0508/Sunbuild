@@ -89,6 +89,7 @@ export function CalendarWidget({
   const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [tasksScopeMissing, setTasksScopeMissing] = useState(false);
   const [reconnectNeeded, setReconnectNeeded] = useState(
     googleReconnectRequired
   );
@@ -141,6 +142,7 @@ export function CalendarWidget({
         if (data.reconnectRequired) {
           setReconnectNeeded(true);
           setGoogleEvents([]);
+          setTasksScopeMissing(false);
           setSyncError(
             "Reconnect Google Calendar in Settings (new permissions may be required)."
           );
@@ -149,12 +151,14 @@ export function CalendarWidget({
         if (data.error && (!data.events || data.events.length === 0)) {
           setSyncError("Could not load Google Calendar events. Try Sync again.");
           setGoogleEvents([]);
+          setTasksScopeMissing(false);
           return;
         }
         setReconnectNeeded(false);
+        setTasksScopeMissing(Boolean(data.tasksScopeMissing));
         setSyncError(
           data.tasksScopeMissing
-            ? "Reconnect Google Calendar to sync Google Tasks (Due: … items)."
+            ? "Reconnect Google to sync Tasks (Due: … items)."
             : null
         );
         setGoogleEvents(Array.isArray(data.events) ? data.events : []);
@@ -377,13 +381,22 @@ export function CalendarWidget({
       {syncError ? (
         <div className="mb-2 flex shrink-0 items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
           <span className="min-w-0 truncate">{syncError}</span>
-          <button
-            type="button"
-            className="shrink-0 font-medium underline"
-            onClick={handleSyncClick}
-          >
-            Sync
-          </button>
+          {tasksScopeMissing || reconnectNeeded ? (
+            <a
+              href={`/api/google/calendar/connect?returnTo=${encodeURIComponent(connectReturnPath)}`}
+              className="shrink-0 font-medium underline"
+            >
+              Reconnect
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="shrink-0 font-medium underline"
+              onClick={handleSyncClick}
+            >
+              Sync
+            </button>
+          )}
         </div>
       ) : null}
 
@@ -414,7 +427,7 @@ export function CalendarWidget({
                 if (!inMonth) setCursor(startOfMonth(day));
               }}
               className={cn(
-                "relative flex h-9 flex-col items-center justify-center rounded-lg text-sm transition",
+                "relative flex h-8 flex-col items-center justify-center rounded-lg text-sm transition",
                 !inMonth && "text-[#d1d5db]",
                 inMonth && !isSelected && !hasEvents && "text-sb-ink hover:bg-sb-canvas",
                 inMonth &&
@@ -453,19 +466,19 @@ export function CalendarWidget({
         })}
       </div>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-sb-border pt-3">
+      <div className="mt-3 flex min-h-[112px] flex-1 flex-col border-t border-sb-border pt-3">
         <p className="mb-1.5 shrink-0 text-[11px] font-medium uppercase tracking-wide text-sb-muted">
           {format(selected, "MMM d")}
         </p>
         {selectedEvents.length === 0 ? (
           <p className="text-[12px] text-sb-muted">No events this day.</p>
         ) : (
-          <ul className="min-h-0 max-h-36 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-1">
+          <ul className="min-h-[88px] max-h-[128px] flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
             {selectedEvents.map((ev) => {
               const fromGoogle =
                 ev.source === "google" || ev.type === "google";
               return (
-                <li key={ev.id} className="text-[12px] text-sb-ink">
+                <li key={ev.id} className="shrink-0 text-[12px] leading-snug text-sb-ink">
                   <div className="flex items-start gap-1.5">
                     {fromGoogle ? (
                       <span className="mt-0.5 shrink-0">

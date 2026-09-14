@@ -46,9 +46,19 @@ export function initials(name?: string | null) {
     .toUpperCase();
 }
 
+/** Legacy seed paths → public placeholders (no /api/files, works on Render). */
+const LEGACY_SEED_MEDIA: Record<string, string> = {
+  "seed/placeholder.txt": "/placeholders/site-progress.svg",
+  "seed/placeholder-client.txt": "/placeholders/client-update.svg",
+  "seed/schedule.txt": "/placeholders/schedule.txt",
+  "seed/costs.txt": "/placeholders/costs.txt",
+};
+
 /** Resolve a stored upload path or absolute URL for use in <img src> / downloads. */
 export function mediaUrl(path?: string | null) {
   if (!path) return null;
+  const legacy = LEGACY_SEED_MEDIA[path];
+  if (legacy) return legacy;
   if (
     path.startsWith("http://") ||
     path.startsWith("https://") ||

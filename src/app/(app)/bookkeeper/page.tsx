@@ -117,19 +117,30 @@ export default async function BookkeeperOverviewPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2 overflow-hidden p-0">
-          <div className="flex items-center justify-between border-b border-[#e5e7eb] px-5 py-4">
-            <h3 className="text-[16px] font-semibold">Recent invoices</h3>
-            <Link href="/bookkeeper/invoices" className="text-sm text-[#f97316]">
+        <Card className="xl:col-span-2 overflow-hidden p-0 shadow-[var(--sb-shadow)]">
+          <div className="flex items-center justify-between gap-3 border-b border-sb-border px-5 py-4">
+            <div>
+              <h3 className="text-[16px] font-semibold text-sb-ink">
+                Recent invoices
+              </h3>
+              <p className="mt-0.5 text-[12px] text-sb-muted">
+                Search and review recent billing activity
+              </p>
+            </div>
+            <Link
+              href="/bookkeeper/invoices"
+              className="shrink-0 text-sm font-medium text-sb-orange hover:underline"
+            >
               Manage all
             </Link>
           </div>
           <InteractiveDataTable
+            className="space-y-4 px-5 pt-4 pb-5"
             searchPlaceholder="Search invoices…"
             emptyMessage="No invoices found"
             defaultPageSize={5}
             pageSizeOptions={[5, 10, 25]}
-            tableClassName="border-0 shadow-none rounded-none"
+            tableClassName="shadow-none"
             columns={[
               { key: "invoice", label: "Invoice" },
               { key: "project", label: "Project" },
@@ -156,7 +167,7 @@ export default async function BookkeeperOverviewPage() {
                 <Td key="project">
                   <Link
                     href={`/pm/projects/${inv.project.id}`}
-                    className="hover:text-[#f97316]"
+                    className="hover:text-sb-orange"
                   >
                     {inv.project.name}
                   </Link>
@@ -173,27 +184,34 @@ export default async function BookkeeperOverviewPage() {
           />
         </Card>
 
-        <Card>
-          <h3 className="mb-3 text-[16px] font-semibold">Deposit schedule</h3>
-          <div className="space-y-2">
+        <Card className="shadow-[var(--sb-shadow)]">
+          <div className="mb-4">
+            <h3 className="text-[16px] font-semibold text-sb-ink">
+              Deposit schedule
+            </h3>
+            <p className="mt-0.5 text-[12px] text-sb-muted">
+              Upcoming client deposits
+            </p>
+          </div>
+          <div className="space-y-2.5">
             {deposits.length === 0 ? (
-              <p className="text-sm text-[#6b7280]">No pending deposits.</p>
+              <p className="text-sm text-sb-muted">No pending deposits.</p>
             ) : (
               deposits.map((d) => (
                 <div
                   key={d.id}
-                  className="rounded-xl border border-[#e5e7eb] px-3 py-3"
+                  className="rounded-[14px] border border-sb-border bg-sb-surface px-3.5 py-3"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">{d.label}</p>
+                    <p className="text-sm font-medium text-sb-ink">{d.label}</p>
                     <StatusBadge tone={statusTone(d.status)}>
                       {d.status}
                     </StatusBadge>
                   </div>
-                  <p className="mt-1 text-xs text-[#6b7280]">
+                  <p className="mt-1 text-xs text-sb-muted">
                     {d.project?.name || "—"} · Due {formatDate(d.dueDate)}
                   </p>
-                  <p className="mt-1 text-sm font-semibold">
+                  <p className="mt-1.5 text-sm font-semibold text-sb-ink">
                     {formatCurrency(d.amount)}
                   </p>
                 </div>

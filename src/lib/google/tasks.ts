@@ -66,7 +66,11 @@ export async function listGoogleTasksInRange(
     };
   }
 
-  if (!hasGoogleTasksScope(authed.scope)) {
+  // Prefer live API over stored scope string — older connections may have a
+  // stale/null scope column even after Google granted tasks access.
+  const skipScopeGate = !authed.scope;
+
+  if (!skipScopeGate && !hasGoogleTasksScope(authed.scope)) {
     const result = {
       tasks: [] as ListedGoogleEvent[],
       reconnectRequired: false,

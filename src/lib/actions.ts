@@ -1478,11 +1478,23 @@ export async function uploadPhotoAction(form: FormData) {
   await assertProjectAccess(session, projectId);
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) throw new AppError("File required");
-  const saved = await saveCompanyUpload(
-    session.membership.companyId,
-    file,
-    `photos/${projectId}`
-  );
+
+  let saved;
+  try {
+    saved = await saveCompanyUpload(
+      session.membership.companyId,
+      file,
+      `photos/${projectId}`
+    );
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.error("[photo-upload] storage failed", err);
+    throw new AppError(
+      "Failed to upload photo. Check CLOUDINARY_URL on the server.",
+      502,
+      "STORAGE_UPLOAD_FAILED"
+    );
+  }
 
   // Default: PM/staff uploads are client-visible so they appear on the client portal.
   // Subcontractors remain INTERNAL until a PM publishes.
@@ -1527,6 +1539,7 @@ export async function uploadPhotoAction(form: FormData) {
     throw err;
   }
   revalidatePath("/pm/photos");
+  revalidatePath(`/sub/jobs/${projectId}`);
   revalidatePath("/sub");
   revalidatePath("/client");
   revalidatePath("/client/photos");
@@ -3297,10 +3310,21 @@ export async function updateOwnProfileAction(form: FormData) {
   let nextPublicId: string | null | undefined;
 
   if (file instanceof File && file.size > 0) {
-    const uploaded = await saveUpload(file, `avatars/${session.user.id}`, {
-      maxUploadBytes: PROFILE_IMAGE_MAX_BYTES,
-      allowedExtensions: PROFILE_IMAGE_EXTENSIONS,
-    });
+    let uploaded;
+    try {
+      uploaded = await saveUpload(file, `avatars/${session.user.id}`, {
+        maxUploadBytes: PROFILE_IMAGE_MAX_BYTES,
+        allowedExtensions: PROFILE_IMAGE_EXTENSIONS,
+      });
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.error("[profile-upload] storage failed", err);
+      throw new AppError(
+        "Failed to upload profile image. Check CLOUDINARY_URL on the server.",
+        502,
+        "STORAGE_UPLOAD_FAILED"
+      );
+    }
     nextImage = uploaded.filePath;
     nextPublicId = uploaded.publicId;
 

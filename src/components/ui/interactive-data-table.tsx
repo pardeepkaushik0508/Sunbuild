@@ -132,10 +132,10 @@ export function InteractiveDataTable({
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative block w-full max-w-sm">
+        <label className="relative block w-full max-w-md">
           <Search
             size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sb-muted"
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sb-muted"
             aria-hidden
           />
           <input
@@ -143,7 +143,7 @@ export function InteractiveDataTable({
             value={query}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="h-10 w-full rounded-[10px] border border-sb-border bg-white pl-9 pr-3 text-sm text-sb-ink outline-none placeholder:text-sb-muted focus:border-sb-orange/50 focus:ring-2 focus:ring-sb-orange/20"
+            className="h-11 w-full rounded-[12px] border border-sb-border bg-sb-surface pl-10 pr-3 text-sm text-sb-ink outline-none placeholder:text-sb-muted focus:border-sb-orange/50 focus:ring-2 focus:ring-sb-orange/20"
             aria-label={searchPlaceholder}
           />
         </label>

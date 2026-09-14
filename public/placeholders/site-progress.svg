@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" role="img" aria-label="Site progress placeholder">
+  <rect width="640" height="400" fill="#e5e7eb"/>
+  <rect x="40" y="40" width="560" height="320" rx="16" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="320" y="190" text-anchor="middle" fill="#6b7280" font-family="system-ui,sans-serif" font-size="22" font-weight="600">Site progress</text>
+  <text x="320" y="225" text-anchor="middle" fill="#9ca3af" font-family="system-ui,sans-serif" font-size="14">Sunbuild placeholder</text>
+</svg>

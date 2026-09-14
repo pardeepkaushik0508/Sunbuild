@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
  * (Recent Jobs · To Do · Calendar). Keep identical across all roles.
  */
 export const DASHBOARD_WIDGET_SHELL =
-  "flex h-full min-h-[320px] max-h-[420px] flex-col overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)] xl:h-[420px]";
+  "flex h-full min-h-[360px] max-h-[480px] flex-col overflow-hidden rounded-[16px] border border-sb-border bg-sb-surface p-5 shadow-[var(--sb-shadow)] xl:h-[460px]";
 
 /** Canonical 3-column overview widget grid used on every role dashboard. */
 export function DashboardWidgetRow({ children }: { children: ReactNode }) {
