@@ -52,6 +52,8 @@ export type SoaCalculationInput = {
     dueDate?: Date | null;
     updatedAt?: Date;
   }>;
+  /** When false, GST is omitted from totals and the printable statement. Default true. */
+  includeGst?: boolean;
 };
 
 export type SoaCalculationResult = {
@@ -64,6 +66,7 @@ export type SoaCalculationResult = {
   totalClosingPrice: number;
   gstRate: number;
   gstRatePercent: number;
+  includeGst: boolean;
   totalGst: number;
   totalSalesPrice: number;
   deposits: SoaDepositLine[];
@@ -123,9 +126,17 @@ export function calculateStatementOfAdjustments(
     changeOrdersTotalWithoutGstCents
   );
 
-  const rate =
-    Number.isFinite(input.gstRate) && input.gstRate >= 0 ? input.gstRate : 0.05;
-  const totalGstCents = Math.round(totalClosingPriceCents * rate);
+  const includeGst = input.includeGst !== false;
+  let rate = 0;
+  if (includeGst) {
+    rate =
+      Number.isFinite(input.gstRate) && input.gstRate >= 0
+        ? input.gstRate
+        : 0.05;
+  }
+  const totalGstCents = includeGst
+    ? Math.round(totalClosingPriceCents * rate)
+    : 0;
   const totalSalesPriceCents = addCents(totalClosingPriceCents, totalGstCents);
 
   const received = input.deposits.filter((d) =>
@@ -159,6 +170,7 @@ export function calculateStatementOfAdjustments(
     totalClosingPrice: fromCents(totalClosingPriceCents),
     gstRate: rate,
     gstRatePercent: Math.round(rate * 10000) / 100,
+    includeGst,
     totalGst: fromCents(totalGstCents),
     totalSalesPrice: fromCents(totalSalesPriceCents),
     deposits: depositLines,

@@ -673,8 +673,11 @@ function StorageModal({
           </div>
         </div>
         <p className="text-xs text-sb-muted">
-          Uploads are stored in Cloudinary (CLOUDINARY_URL). Secrets are never
-          shown in the browser. Authorization still gates which assets each role can see.
+          Uploads must use Cloudinary (CLOUDINARY_URL on the server). On Render,
+          local disk is wiped on every deploy — files only survive when stored in
+          Cloudinary. If uploads fail with &quot;Invalid Signature&quot;, refresh
+          the API key + secret from the Cloudinary dashboard and update
+          CLOUDINARY_URL. Secrets are never shown in the browser.
         </p>
         <FormField label="Maximum upload size (MB)" required>
           <Input

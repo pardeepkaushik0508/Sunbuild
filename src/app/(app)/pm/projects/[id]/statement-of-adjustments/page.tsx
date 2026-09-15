@@ -21,6 +21,7 @@ import { loadStatementOfAdjustmentsForProject } from "@/lib/statement-of-adjustm
 import {
   finalizeStatementOfAdjustmentsAction,
   updateSoaPromoCreditAction,
+  updateSoaIncludeGstAction,
 } from "@/lib/statement-of-adjustments/actions";
 import { formatSoaCurrency } from "@/lib/statement-of-adjustments/money";
 
@@ -247,15 +248,19 @@ export default async function ProjectStatementOfAdjustmentsPage({
                   value={formatCurrency(calc.totalClosingPrice)}
                   bold
                 />
-                <SoaRow
-                  label={`GST ${calc.gstRatePercent}%`}
-                  value={formatCurrency(calc.totalGst)}
-                />
-                <SoaRow
-                  label="Total GST"
-                  value={formatCurrency(calc.totalGst)}
-                  bold
-                />
+                {calc.includeGst ? (
+                  <>
+                    <SoaRow
+                      label={`GST ${calc.gstRatePercent}%`}
+                      value={formatCurrency(calc.totalGst)}
+                    />
+                    <SoaRow
+                      label="Total GST"
+                      value={formatCurrency(calc.totalGst)}
+                      bold
+                    />
+                  </>
+                ) : null}
                 <SoaRow
                   label="TOTAL SALES PRICE"
                   value={formatCurrency(calc.totalSalesPrice)}
@@ -332,6 +337,51 @@ export default async function ProjectStatementOfAdjustmentsPage({
               </p>
             )}
           </Card>
+
+          {canManage && record && isDraft ? (
+            <Card className="space-y-3">
+              <h3 className="text-sm font-semibold">Include GST</h3>
+              <p className="text-xs text-sb-muted">
+                When checked, GST 5% is added to the closing price and shown on
+                the PDF. Uncheck to generate the statement without GST.
+              </p>
+              <ActionForm
+                action={updateSoaIncludeGstAction}
+                successMessage="GST setting saved"
+              >
+                <input type="hidden" name="statementId" value={record.id} />
+                <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-sb-border px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    name="includeGst"
+                    value="1"
+                    defaultChecked={record.includeGst}
+                    className="mt-0.5 h-4 w-4 rounded border-sb-border"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-sb-ink">
+                      Include GST
+                    </span>
+                    <span className="mt-0.5 block text-xs text-sb-muted">
+                      GST 5% on total closing price
+                    </span>
+                  </span>
+                </label>
+                <SubmitButton className="mt-2 w-full">
+                  Save GST setting
+                </SubmitButton>
+              </ActionForm>
+            </Card>
+          ) : (
+            <Card className="space-y-2">
+              <h3 className="text-sm font-semibold">GST</h3>
+              <p className="text-sm text-sb-ink">
+                {calc.includeGst
+                  ? `Included (${calc.gstRatePercent}%)`
+                  : "Not included"}
+              </p>
+            </Card>
+          )}
 
           {canManage && record && isDraft ? (
             <Card className="space-y-3">

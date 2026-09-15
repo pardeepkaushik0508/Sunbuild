@@ -1399,6 +1399,8 @@ model StatementOfAdjustments {
   status             StatementOfAdjustmentsStatus  @default(DRAFT)
   /// Positive amount = promo credit toward approved Change Orders.
   promoCreditAdjustment Float                      @default(0)
+  /// When true, GST 5% is added to closing price and shown on the PDF.
+  includeGst             Boolean                   @default(true)
   /// Frozen totals + line items when FINALIZED (JSON).
   financialSnapshot  Json?
   pdfPath            String?

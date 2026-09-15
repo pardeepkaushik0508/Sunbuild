@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
+import { isCloudinaryConfigured } from "@/lib/cloudinary";
 import {
   COMPANY_SETTING_DEFAULTS,
   DEFAULT_EMAIL_NOTIFICATIONS,
@@ -178,7 +179,7 @@ export async function getCompanySettings(
     transactionalAuthEmails: true,
   };
 
-  const cloudinaryReady = Boolean(process.env.CLOUDINARY_URL?.trim());
+  const cloudinaryReady = isCloudinaryConfigured();
   const fileStorage = fileStorageSchema.parse({
     ...fileStorageRaw,
     provider: cloudinaryReady ? "cloudinary" : (fileStorageRaw as FileStorageSettings).provider,
@@ -196,6 +197,8 @@ export async function getCompanySettings(
     emailNotifications: email,
     meta: {
       mfaPluginEnabled: true,
+      // "active" only when CLOUDINARY_URL parses. Invalid secrets still fail at upload
+      // with a clear error — never fall back to ephemeral local disk in production.
       storageStatus: cloudinaryReady ? "active" : "error",
       storageUsageBytes: usage,
     },
@@ -249,7 +252,7 @@ export async function getFileStorageSettings(
   const base = parsed.success
     ? (parsed.data as FileStorageSettings)
     : DEFAULT_FILE_STORAGE;
-  if (process.env.CLOUDINARY_URL?.trim()) {
+  if (isCloudinaryConfigured()) {
     return { ...base, provider: "cloudinary" };
   }
   return base;

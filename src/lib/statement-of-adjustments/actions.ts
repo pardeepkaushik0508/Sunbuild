@@ -132,6 +132,52 @@ export async function updateSoaPromoCreditAction(form: FormData) {
   );
 }
 
+export async function updateSoaIncludeGstAction(form: FormData) {
+  const session = await requireSession();
+  if (!EDIT_PROMO_ROLES.includes(session.membership.role)) {
+    throw new AppError("Not authorized to edit GST setting", 403);
+  }
+  requireCapability(session, "manageStatementOfAdjustments");
+
+  const statementId = formString(form, "statementId");
+  const includeGst =
+    form.get("includeGst") === "1" || form.get("includeGst") === "on";
+
+  const statement = await prisma.statementOfAdjustments.findFirst({
+    where: {
+      id: statementId,
+      companyId: session.membership.companyId,
+    },
+  });
+  if (!statement) throw new AppError("Statement not found", 404);
+  await assertProjectAccess(session, statement.projectId);
+
+  if (statement.status === StatementOfAdjustmentsStatus.FINALIZED) {
+    throw new AppError(
+      "Finalized statements cannot be edited. Create a new version."
+    );
+  }
+
+  await prisma.statementOfAdjustments.update({
+    where: { id: statement.id },
+    data: { includeGst },
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: statement.projectId,
+    action: "SOA_GST_UPDATE",
+    entityType: "StatementOfAdjustments",
+    entityId: statement.id,
+    metadata: { includeGst },
+  });
+
+  revalidatePath(
+    `/pm/projects/${statement.projectId}/statement-of-adjustments`
+  );
+}
+
 export async function finalizeStatementOfAdjustmentsAction(form: FormData) {
   const session = await requireSession();
   if (!FINALIZE_ROLES.includes(session.membership.role)) {
@@ -221,6 +267,7 @@ export async function finalizeStatementOfAdjustmentsAction(form: FormData) {
       statementDate: new Date(),
       status: StatementOfAdjustmentsStatus.DRAFT,
       promoCreditAdjustment: statement.promoCreditAdjustment,
+      includeGst: statement.includeGst,
       generatedById: session.user.id,
     },
   });

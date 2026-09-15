@@ -31,9 +31,9 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const logo = await embedSunviewLogo(pdfDoc);
 
   const ink = rgb(0, 0, 0);
-  const muted = rgb(0.28, 0.28, 0.28);
+  const muted = rgb(0.38, 0.38, 0.38);
   const rule = rgb(0.12, 0.12, 0.12);
-  const lightRule = rgb(0.55, 0.55, 0.55);
+  const amountRule = rgb(0.22, 0.22, 0.22);
   const white = rgb(1, 1, 1);
   const black = rgb(0, 0, 0);
 
@@ -42,13 +42,18 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const marginL = 54;
   const marginR = 54;
   const contentW = pageWidth - marginL - marginR;
-  const colGap = 36;
+  const colGap = 48;
   const colW = (contentW - colGap) / 2;
   const rightColX = marginL + colW + colGap;
   const amountX = pageWidth - marginR;
+  const amountColW = 132;
+  const labelValueGap = 42;
+  const labelRightX = amountX - amountColW - labelValueGap;
+  const sectionX = 184;
+  const lineItemX = 202;
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - 40;
+  let y = pageHeight - 36;
 
   const ensureSpace = (needed: number) => {
     if (y - needed < 48) {
@@ -88,7 +93,8 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     xRight: number,
     yPos: number,
     size: number,
-    bold = false
+    bold = false,
+    color = ink
   ) => {
     const font = bold ? fontBold : fontRegular;
     const w = font.widthOfTextAtSize(text, size);
@@ -97,7 +103,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       y: yPos,
       size,
       font,
-      color: ink,
+      color,
     });
   };
 
@@ -128,7 +134,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
         color: ink,
       });
     }
-    y -= 3;
+    y -= 4;
     page.drawLine({
       start: { x, y },
       end: { x: x + width, y },
@@ -142,57 +148,59 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     amount: string,
     opts?: {
       bold?: boolean;
-      indent?: number;
+      indent?: boolean;
+      muted?: boolean;
       size?: number;
-      ruleAbove?: boolean;
     }
   ) => {
-    if (opts?.ruleAbove) {
-      ensureSpace(22);
-      page.drawLine({
-        start: { x: marginL, y: y + 10 },
-        end: { x: amountX, y: y + 10 },
-        thickness: 0.6,
-        color: lightRule,
+    ensureSpace(22);
+    const size = opts?.size ?? 9;
+    const font = opts?.bold ? fontBold : fontRegular;
+    const labelColor = opts?.bold && !opts?.muted ? ink : muted;
+
+    if (opts?.indent) {
+      page.drawText(label, {
+        x: lineItemX,
+        y,
+        size,
+        font,
+        color: labelColor,
+      });
+    } else {
+      const w = font.widthOfTextAtSize(label, size);
+      page.drawText(label, {
+        x: labelRightX - w,
+        y,
+        size,
+        font,
+        color: labelColor,
       });
     }
-    ensureSpace(18);
-    const size = opts?.size ?? 10;
-    const font = opts?.bold ? fontBold : fontRegular;
-    const indent = opts?.indent ?? 0;
-    page.drawText(label, {
-      x: marginL + indent,
-      y,
-      size,
-      font,
-      color: ink,
+
+    drawTextRight(amount, amountX, y, size, !!opts?.bold, ink);
+    page.drawLine({
+      start: { x: amountX - amountColW, y: y - 3.5 },
+      end: { x: amountX, y: y - 3.5 },
+      thickness: 0.55,
+      color: amountRule,
     });
-    drawTextRight(amount, amountX, y, size, opts?.bold);
-    y -= 15;
+    y -= 14;
   };
 
   // ── Letterhead: logo top-left, address + GST under logo (client reference) ──
   let headerBottom = y;
   if (logo) {
-    const maxH = 44;
+    const maxH = 42;
     const scale = maxH / logo.height;
     const logoW = Math.min(logo.width * scale, 210);
     const logoH = logo.height * (logoW / logo.width);
-    // Tight black pad so black-background logo art remains legible on white paper.
-    page.drawRectangle({
-      x: marginL - 2,
-      y: y - logoH - 4,
-      width: logoW + 4,
-      height: logoH + 6,
-      color: black,
-    });
     page.drawImage(logo, {
       x: marginL,
-      y: y - logoH - 1,
+      y: y - logoH,
       width: logoW,
       height: logoH,
     });
-    headerBottom = y - logoH - 10;
+    headerBottom = y - logoH - 16;
   } else {
     page.drawText(data.companyLegal.legalName, {
       x: marginL,
@@ -201,7 +209,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       font: fontBold,
       color: ink,
     });
-    headerBottom = y - 16;
+    headerBottom = y - 18;
   }
 
   y = headerBottom;
@@ -229,15 +237,15 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       font: fontRegular,
       color: ink,
     });
-    y -= 14;
+    y -= 18;
   } else {
-    y -= 4;
+    y -= 8;
   }
 
   // Centered title
-  y -= 6;
+  y -= 4;
   const title = "Statement of Adjustments";
-  const titleSize = 16;
+  const titleSize = 13;
   const titleW = fontBold.widthOfTextAtSize(title, titleSize);
   page.drawText(title, {
     x: (pageWidth - titleW) / 2,
@@ -246,7 +254,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     font: fontBold,
     color: ink,
   });
-  y -= 22;
+  y -= 28;
 
   // ── Party fields: Municipal Address full width, then two columns ──
   drawInlineField(
@@ -255,14 +263,14 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     marginL,
     contentW
   );
-  y -= 14;
+  y -= 20;
 
   const leftStartY = y;
   let leftY = y;
   const drawLeft = (label: string, value: string) => {
     y = leftY;
     drawInlineField(label, value, marginL, colW);
-    leftY = y - 12;
+    leftY = y - 22;
   };
   drawLeft("Buyer Name", data.party.buyerName || "");
   drawLeft("Phone", data.party.phone || "");
@@ -273,7 +281,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const drawRight = (label: string, value: string) => {
     y = rightY;
     drawInlineField(label, value, rightColX, colW);
-    rightY = y - 12;
+    rightY = y - 22;
   };
   drawRight("Date", formatDate(data.party.statementDate) || "");
   drawRight("Contract #", data.party.contractNumber || "");
@@ -283,7 +291,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     formatDate(data.party.possessionDate) || ""
   );
 
-  y = Math.min(leftY, rightY) - 4;
+  y = Math.min(leftY, rightY) - 6;
 
   // Thick separator before financial body
   page.drawLine({
@@ -292,25 +300,22 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     thickness: 1.4,
     color: rule,
   });
-  y -= 18;
+  y -= 22;
 
-  // ── Financial body (client reference order, with GST) ──
+  // ── Financial body (client reference order, with optional GST) ──
   const calc = data.calculations;
 
   drawMoneyRow(
     "Base Home Price (Including Lot Cost)",
     money(calc.baseHomePrice)
   );
-  drawMoneyRow("Subtotal", money(calc.subtotal), {
-    bold: true,
-    ruleAbove: true,
-  });
+  drawMoneyRow("Subtotal", money(calc.subtotal), { bold: true });
   y -= 4;
 
   page.drawText("Approved Change Orders", {
-    x: marginL,
+    x: sectionX,
     y,
-    size: 10,
+    size: 9,
     font: fontBold,
     color: ink,
   });
@@ -318,72 +323,66 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
 
   if (calc.changeOrders.length === 0) {
     page.drawText("None", {
-      x: marginL + 12,
+      x: lineItemX,
       y,
-      size: 10,
+      size: 9,
       font: fontRegular,
       color: muted,
     });
     y -= 15;
   } else {
     for (const co of calc.changeOrders) {
-      drawMoneyRow(co.label, money(co.amount), { indent: 12 });
+      drawMoneyRow(co.label, money(co.amount), { indent: true, muted: true });
     }
   }
 
   drawMoneyRow("Change Orders Subtotal", money(calc.changeOrdersSubtotal), {
     bold: true,
-    ruleAbove: true,
   });
   drawMoneyRow(
     "Allowance (Promo credit towards Change Orders)",
-    money(calc.promoCreditAdjustment, true)
+    money(calc.promoCreditAdjustment, true),
+    { muted: true }
   );
   drawMoneyRow(
     "Change Orders Total (Without GST)",
     money(calc.changeOrdersTotalWithoutGst),
-    { bold: true, ruleAbove: true }
+    { bold: true }
   );
   drawMoneyRow("TOTAL CLOSING PRICE", money(calc.totalClosingPrice), {
     bold: true,
-    ruleAbove: true,
   });
 
-  // GST block (client reference)
-  const gstLabel =
-    calc.gstRatePercent > 0
-      ? `GST ${calc.gstRatePercent % 1 === 0 ? String(calc.gstRatePercent) : calc.gstRatePercent.toFixed(2)}%`
-      : "GST";
-  drawMoneyRow(gstLabel, money(calc.totalGst));
-  drawMoneyRow("Total GST", money(calc.totalGst), {
-    bold: true,
-    ruleAbove: true,
-  });
+  if (calc.includeGst) {
+    const gstLabel =
+      calc.gstRatePercent > 0
+        ? `GST ${calc.gstRatePercent % 1 === 0 ? String(calc.gstRatePercent) : calc.gstRatePercent.toFixed(2)}%`
+        : "GST";
+    drawMoneyRow(gstLabel, money(calc.totalGst), { muted: true });
+    drawMoneyRow("Total GST", money(calc.totalGst), { bold: true });
+  }
 
   drawMoneyRow("TOTAL SALES PRICE", money(calc.totalSalesPrice), {
     bold: true,
-    ruleAbove: true,
   });
   y -= 4;
 
-  if (calc.deposits.length === 0) {
-    // Still list deposits section only when present; reference always shows deposit lines.
-  } else {
+  if (calc.deposits.length > 0) {
     for (const dep of calc.deposits) {
-      drawMoneyRow(dep.label, money(dep.amount), { indent: 0 });
+      drawMoneyRow(dep.label, money(dep.amount), { indent: true, muted: true });
     }
   }
 
   drawMoneyRow(
     "Deposits to Date to Sunview",
     money(calc.depositsToDate, true),
-    { bold: true, ruleAbove: true }
+    { bold: true }
   );
 
-  y -= 10;
-  ensureSpace(36);
+  y -= 24;
+  ensureSpace(40);
 
-  const barHeight = 26;
+  const barHeight = 24;
   const barY = y - barHeight + 6;
   page.drawRectangle({
     x: marginL,
@@ -395,16 +394,16 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   page.drawText("CASH TO CLOSE (Balance as of today)", {
     x: marginL + 10,
     y: barY + 8,
-    size: 11,
+    size: 9,
     font: fontBold,
     color: white,
   });
   const cashText = money(calc.cashToClose);
-  const cashW = fontBold.widthOfTextAtSize(cashText, 12);
+  const cashW = fontBold.widthOfTextAtSize(cashText, 10);
   page.drawText(cashText, {
     x: amountX - 10 - cashW,
     y: barY + 8,
-    size: 12,
+    size: 10,
     font: fontBold,
     color: white,
   });
@@ -422,13 +421,17 @@ export function generateStatementOfAdjustmentsHtml(
     calc.gstRatePercent > 0
       ? `GST ${calc.gstRatePercent % 1 === 0 ? String(calc.gstRatePercent) : calc.gstRatePercent.toFixed(2)}%`
       : "GST";
+  const gstRows = calc.includeGst
+    ? `<tr class="muted"><td>${escapeHtml(gstLabel)}</td><td class="amt">${money(calc.totalGst)}</td></tr>
+    <tr class="bold"><td>Total GST</td><td class="amt">${money(calc.totalGst)}</td></tr>`
+    : "";
   const coRows =
     calc.changeOrders.length === 0
       ? `<tr><td colspan="2" class="muted indent">None</td></tr>`
       : calc.changeOrders
           .map(
             (co) =>
-              `<tr><td class="indent">${escapeHtml(co.label)}</td><td class="amt">${money(co.amount)}</td></tr>`
+              `<tr class="lineitem"><td>${escapeHtml(co.label)}</td><td class="amt">${money(co.amount)}</td></tr>`
           )
           .join("");
   const depRows =
@@ -437,7 +440,7 @@ export function generateStatementOfAdjustmentsHtml(
       : calc.deposits
           .map(
             (d) =>
-              `<tr><td>${escapeHtml(d.label)}</td><td class="amt">${money(d.amount)}</td></tr>`
+              `<tr class="lineitem"><td>${escapeHtml(d.label)}</td><td class="amt">${money(d.amount)}</td></tr>`
           )
           .join("");
 
@@ -448,31 +451,40 @@ export function generateStatementOfAdjustmentsHtml(
 <title>Statement of Adjustments – ${escapeHtml(data.statementNumber)}</title>
 <style>
   @page { size: letter; margin: 14mm 14mm; }
-  body { font-family: Helvetica, Arial, sans-serif; color: #000; font-size: 12px; margin: 0; padding: 20px 24px; }
-  .letterhead { margin-bottom: 6px; }
-  .logo-wrap { display: inline-block; background: #000; padding: 4px 6px; }
+  body { font-family: Helvetica, Arial, sans-serif; color: #000; font-size: 11px; margin: 0; padding: 20px 24px; }
+  .letterhead { margin-bottom: 14px; }
+  .logo-wrap { display: inline-block; padding: 0; }
   .logo-wrap img { height: 42px; width: auto; display: block; }
-  .addr { margin-top: 8px; font-size: 11px; line-height: 1.45; }
-  h1 { text-align: center; font-size: 18px; margin: 18px 0 16px; font-weight: 700; }
-  .field { margin-bottom: 12px; }
+  .addr { margin-top: 14px; font-size: 11px; line-height: 1.45; }
+  h1 { text-align: center; font-size: 15px; margin: 16px 0 22px; font-weight: 700; }
+  .field { margin-bottom: 20px; }
   .field .line {
-    border-bottom: 1px solid #111; padding: 2px 0 3px; min-height: 16px; font-size: 12px;
+    border-bottom: 1px solid #111; padding: 2px 0 4px; min-height: 16px; font-size: 12px;
   }
   .field .line .lbl { margin-right: 6px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 36px; margin-bottom: 8px; }
-  .thick { border: none; border-top: 1.5px solid #111; margin: 10px 0 16px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 4px 0; vertical-align: top; }
-  td.amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .bold td, td.bold, tr.bold td { font-weight: 700; }
-  .indent { padding-left: 14px; }
-  .section { font-weight: 700; padding-top: 6px; }
-  .rule td { border-top: 1px solid #999; padding-top: 6px; }
-  .muted { color: #555; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 48px; margin-bottom: 8px; }
+  .thick { border: none; border-top: 1.5px solid #111; margin: 14px 0 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 7px 0; vertical-align: top; border: none; }
+  td:first-child {
+    text-align: right; padding-right: 36px; color: #616161; width: auto;
+  }
+  td.amt {
+    text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
+    width: 140px; border-bottom: 1px solid #333; color: #000;
+  }
+  .bold td, td.bold, tr.bold td { font-weight: 700; color: #000; }
+  tr.bold td:first-child { color: #000; }
+  tr.muted td:first-child, .muted { color: #6b6b6b; }
+  tr.lineitem td:first-child {
+    text-align: left; padding-left: 72px; color: #6b6b6b;
+  }
+  .indent { padding-left: 72px; text-align: left !important; }
+  .section { font-weight: 700; padding-top: 8px; text-align: left !important; color: #000 !important; }
   .cash-bar {
-    margin-top: 14px; background: #000; color: #fff; display: flex;
+    margin-top: 28px; background: #000; color: #fff; display: flex;
     justify-content: space-between; align-items: center;
-    padding: 9px 12px; font-weight: 700; font-size: 13px;
+    padding: 8px 12px; font-weight: 700; font-size: 11px;
   }
 </style>
 </head>
@@ -505,19 +517,18 @@ export function generateStatementOfAdjustmentsHtml(
   <hr class="thick" />
 
   <table>
-    <tr><td>Base Home Price (Including Lot Cost)</td><td class="amt">${money(calc.baseHomePrice)}</td></tr>
-    <tr class="bold rule"><td>Subtotal</td><td class="amt">${money(calc.subtotal)}</td></tr>
+    <tr class="muted"><td>Base Home Price (Including Lot Cost)</td><td class="amt">${money(calc.baseHomePrice)}</td></tr>
+    <tr class="bold"><td>Subtotal</td><td class="amt">${money(calc.subtotal)}</td></tr>
     <tr><td class="section" colspan="2">Approved Change Orders</td></tr>
     ${coRows}
-    <tr class="bold rule"><td>Change Orders Subtotal</td><td class="amt">${money(calc.changeOrdersSubtotal)}</td></tr>
-    <tr><td>Allowance (Promo credit towards Change Orders)</td><td class="amt">${money(calc.promoCreditAdjustment, true)}</td></tr>
-    <tr class="bold rule"><td>Change Orders Total (Without GST)</td><td class="amt">${money(calc.changeOrdersTotalWithoutGst)}</td></tr>
-    <tr class="bold rule"><td>TOTAL CLOSING PRICE</td><td class="amt">${money(calc.totalClosingPrice)}</td></tr>
-    <tr><td>${escapeHtml(gstLabel)}</td><td class="amt">${money(calc.totalGst)}</td></tr>
-    <tr class="bold rule"><td>Total GST</td><td class="amt">${money(calc.totalGst)}</td></tr>
-    <tr class="bold rule"><td>TOTAL SALES PRICE</td><td class="amt">${money(calc.totalSalesPrice)}</td></tr>
+    <tr class="bold"><td>Change Orders Subtotal</td><td class="amt">${money(calc.changeOrdersSubtotal)}</td></tr>
+    <tr class="muted"><td>Allowance (Promo credit towards Change Orders)</td><td class="amt">${money(calc.promoCreditAdjustment, true)}</td></tr>
+    <tr class="bold"><td>Change Orders Total (Without GST)</td><td class="amt">${money(calc.changeOrdersTotalWithoutGst)}</td></tr>
+    <tr class="bold"><td>TOTAL CLOSING PRICE</td><td class="amt">${money(calc.totalClosingPrice)}</td></tr>
+    ${gstRows}
+    <tr class="bold"><td>TOTAL SALES PRICE</td><td class="amt">${money(calc.totalSalesPrice)}</td></tr>
     ${depRows}
-    <tr class="bold rule"><td>Deposits to Date to Sunview</td><td class="amt">${money(calc.depositsToDate, true)}</td></tr>
+    <tr class="bold"><td>Deposits to Date to Sunview</td><td class="amt">${money(calc.depositsToDate, true)}</td></tr>
   </table>
   <div class="cash-bar">
     <span>CASH TO CLOSE (Balance as of today)</span>

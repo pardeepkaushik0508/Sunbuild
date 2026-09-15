@@ -56,6 +56,41 @@ describe("Statement of Adjustments calculations", () => {
     assert.equal(result.totalSalesPrice, 1_212_806.74);
     assert.equal(result.depositsToDate, 150_000);
     assert.equal(result.cashToClose, 1_062_806.74);
+    assert.equal(result.includeGst, true);
+  });
+
+  it("omits GST from totals when includeGst is false", () => {
+    const result = calculateStatementOfAdjustments({
+      baseHomePrice: 1_000_000,
+      gstRate: 0.05,
+      includeGst: false,
+      promoCreditAdjustment: 0,
+      changeOrders: [
+        {
+          id: "1",
+          title: "CO1",
+          amount: 100_000,
+          status: ChangeOrderStatus.APPROVED,
+          createdAt: new Date("2026-01-01"),
+        },
+      ],
+      deposits: [
+        {
+          id: "d1",
+          label: "Deposits 1",
+          amount: 50_000,
+          status: DepositStatus.RECEIVED,
+        },
+      ],
+    });
+
+    assert.equal(result.includeGst, false);
+    assert.equal(result.totalClosingPrice, 1_100_000);
+    assert.equal(result.totalGst, 0);
+    assert.equal(result.gstRate, 0);
+    assert.equal(result.totalSalesPrice, 1_100_000);
+    assert.equal(result.depositsToDate, 50_000);
+    assert.equal(result.cashToClose, 1_050_000);
   });
 
   it("applies GST when rate provided and filters pending COs/deposits", () => {

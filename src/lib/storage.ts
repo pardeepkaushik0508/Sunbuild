@@ -142,8 +142,9 @@ export async function ensureUploadDir(...segments: string[]) {
 
 /**
  * Persist an upload to Cloudinary when configured.
- * Falls back to local `uploads/` when Cloudinary is missing or rejects credentials
- * (common local misconfig) so image upload/update keeps working.
+ * In production, local disk is NEVER used — Render (and similar hosts) wipe
+ * the filesystem on every deploy, which would make images appear "deleted".
+ * Local `uploads/` fallback is development-only (or explicit opt-in).
  */
 export async function saveUpload(
   file: File,
@@ -159,6 +160,19 @@ export async function saveUpload(
   const safeName = sanitizeOriginalName(file.name);
   const displayName = path.basename(file.name).slice(0, 200);
 
+  const isProd = process.env.NODE_ENV === "production";
+  const allowLocalFallback =
+    process.env.FILE_STORAGE_ALLOW_LOCAL_FALLBACK === "1" ||
+    (!isProd && process.env.REQUIRE_CLOUDINARY !== "1");
+
+  if (isProd && !isCloudinaryConfigured()) {
+    throw new AppError(
+      "File storage is not configured. Set a valid CLOUDINARY_URL on Render (Environment → CLOUDINARY_URL = cloudinary://API_KEY:API_SECRET@CLOUD_NAME). Local disk uploads are wiped on every deploy.",
+      503,
+      "STORAGE_NOT_CONFIGURED"
+    );
+  }
+
   if (isCloudinaryConfigured()) {
     try {
       const asset = await uploadBufferToCloudinary({
@@ -166,6 +180,11 @@ export async function saveUpload(
         folder: safeFolder,
         originalFilename: safeName,
         mimeType: mime || file.type,
+      });
+
+      console.info("[storage] uploaded to Cloudinary", {
+        folder: safeFolder,
+        publicId: asset.publicId,
       });
 
       return {
@@ -180,20 +199,15 @@ export async function saveUpload(
         height: asset.height,
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : "unknown";
-      // Production must not silently fall back to ephemeral local disk (Render).
-      // Local fallback is for development only, or an explicit opt-in.
-      const canFallback =
-        process.env.FILE_STORAGE_ALLOW_LOCAL_FALLBACK === "1" ||
-        (process.env.NODE_ENV !== "production" &&
-          process.env.REQUIRE_CLOUDINARY !== "1");
-      if (!canFallback) throw err;
+      if (!allowLocalFallback) throw err;
       console.warn(
-        "[storage] Cloudinary upload failed — using local uploads fallback",
-        { message }
+        "[storage] Cloudinary upload failed — using local uploads fallback (dev only)",
+        {
+          message: err instanceof Error ? err.message : "unknown",
+        }
       );
     }
-  } else if (process.env.NODE_ENV === "production") {
+  } else if (!allowLocalFallback) {
     throw new AppError(
       "File storage is not configured. Set CLOUDINARY_URL on the server (Render → Environment).",
       503,
@@ -201,7 +215,7 @@ export async function saveUpload(
     );
   } else {
     console.warn(
-      "[storage] Cloudinary is not configured — using local uploads fallback"
+      "[storage] Cloudinary is not configured — using local uploads fallback (dev only)"
     );
   }
 

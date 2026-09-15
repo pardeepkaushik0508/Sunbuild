@@ -207,8 +207,9 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
     project.purchasePrice ??
     0;
 
-  // Sunview Statement of Adjustments client format includes GST 5%.
-  const gstRate = 0.05;
+  // Sunview Statement of Adjustments client format includes GST 5% when enabled.
+  const includeGst = record?.includeGst ?? true;
+  const gstRate = includeGst ? 0.05 : 0;
 
   const promo =
     record?.status === StatementOfAdjustmentsStatus.FINALIZED &&
@@ -225,10 +226,17 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
     typeof record.financialSnapshot === "object"
   ) {
     calculations = record.financialSnapshot as unknown as SoaCalculationResult;
+    if (calculations.includeGst === undefined) {
+      calculations = {
+        ...calculations,
+        includeGst: (calculations.totalGst ?? 0) > 0,
+      };
+    }
   } else {
     calculations = calculateStatementOfAdjustments({
       baseHomePrice,
       gstRate,
+      includeGst,
       promoCreditAdjustment: promo,
       changeOrders: project.changeOrders.map((co) => ({
         id: co.id,
