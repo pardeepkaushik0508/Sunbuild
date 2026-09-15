@@ -9,7 +9,7 @@ import {
   assertProjectAccess,
 } from "@/lib/session";
 import { requireCapability } from "@/lib/authorization";
-import { AppError } from "@/lib/errors";
+import { AppError, toSafeErrorMessage } from "@/lib/errors";
 import { saveCompanyUpload, deleteUpload, storageMeta } from "@/lib/storage";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -436,40 +436,49 @@ export async function createSelectionSectionAction(form: FormData) {
 }
 
 export async function uploadSelectionImagesAction(form: FormData) {
-  const session = await requireSession();
-  requireCapability(session, "manageSelectionsStaff");
-  await rateLimit(session.user.id, "selection-images", true);
+  try {
+    const session = await requireSession();
+    requireCapability(session, "manageSelectionsStaff");
+    await rateLimit(session.user.id, "selection-images", true);
 
-  const sectionId = formString(form, "sectionId");
-  if (!sectionId) throw new AppError("Selection is required");
+    const sectionId = formString(form, "sectionId");
+    if (!sectionId) throw new AppError("Selection is required");
 
-  const section = await prisma.selectionSection.findUnique({
-    where: { id: sectionId },
-    include: { package: true },
-  });
-  if (!section) throw new AppError("Selection not found");
-  await assertProjectAccess(session, section.package.projectId);
+    const section = await prisma.selectionSection.findUnique({
+      where: { id: sectionId },
+      include: { package: true },
+    });
+    if (!section) throw new AppError("Selection not found");
+    await assertProjectAccess(session, section.package.projectId);
 
-  if (
-    section.status === SelectionSectionStatus.LOCKED ||
-    section.status === SelectionSectionStatus.APPROVED
-  ) {
-    throw new AppError("Approved/locked selections cannot add images");
+    if (
+      section.status === SelectionSectionStatus.LOCKED ||
+      section.status === SelectionSectionStatus.APPROVED
+    ) {
+      throw new AppError("Approved/locked selections cannot add images");
+    }
+
+    const files = collectUploadFiles(form);
+    if (files.length === 0) {
+      throw new AppError("Please select an image to upload");
+    }
+
+    await attachSelectionImages({
+      companyId: session.membership.companyId,
+      projectId: section.package.projectId,
+      sectionId: section.id,
+      files,
+    });
+
+    revalidateProjectSelections(section.package.projectId);
+    revalidatePath(`/pm/selections/${section.packageId}`);
+    return { success: true as const };
+  } catch (err) {
+    // Return a serializable error so the client toast shows the real cause
+    // instead of a masked React digest / 500.
+    console.error("[selections] image upload failed", err);
+    return { error: toSafeErrorMessage(err) };
   }
-
-  const files = collectUploadFiles(form);
-  if (files.length === 0) throw new AppError("Please select an image to upload");
-
-  await attachSelectionImages({
-    companyId: session.membership.companyId,
-    projectId: section.package.projectId,
-    sectionId: section.id,
-    files,
-  });
-
-  revalidateProjectSelections(section.package.projectId);
-  revalidatePath(`/pm/selections/${section.packageId}`);
-  return { success: true };
 }
 
 export async function addSelectionItemAction(form: FormData) {

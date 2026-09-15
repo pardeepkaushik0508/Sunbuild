@@ -207,8 +207,8 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
     project.purchasePrice ??
     0;
 
-  // Sunview Statement of Adjustments: no GST (client format).
-  const gstRate = 0;
+  // Sunview Statement of Adjustments client format includes GST 5%.
+  const gstRate = 0.05;
 
   const promo =
     record?.status === StatementOfAdjustmentsStatus.FINALIZED &&

@@ -1,5 +1,6 @@
 /**
  * Single source of truth for company letterhead on Statement of Adjustments.
+ * Defaults match the Sunview Custom Homes client reference document.
  */
 
 export type CompanyLegalInfo = {
@@ -16,14 +17,13 @@ export type CompanyLegalInfo = {
 
 const SUNVIEW_DEFAULTS: CompanyLegalInfo = {
   legalName: "SUNVIEW CUSTOM HOMES",
-  addressLine1: "Calgary, Alberta",
+  addressLine1: "204, 110 Country Hills Landing NW",
   addressLine2: null,
   city: "Calgary",
   province: "AB",
-  postalCode: "",
-  /** SOA letterhead does not print GST — kept empty for client format. */
-  gstNumber: "",
-  cityLine: "Calgary, Alberta",
+  postalCode: "T3K 5P3",
+  gstNumber: "GST # 85809-6498 RT 0001",
+  cityLine: "Calgary, AB T3K 5P3",
 };
 
 export function resolveCompanyLegalInfo(company: {
@@ -50,47 +50,27 @@ export function resolveCompanyLegalInfo(company: {
   const addressLine2 = company.addressLine2?.trim() || null;
   const city = company.city?.trim() || SUNVIEW_DEFAULTS.city;
   const province = company.province?.trim() || SUNVIEW_DEFAULTS.province;
-  const postalCode = company.postalCode?.trim() || "";
-  // Do not invent a GST # for SOA letterhead when company has none.
-  const gstNumber = company.gstNumber?.trim() || "";
+  const postalCode =
+    company.postalCode?.trim() || SUNVIEW_DEFAULTS.postalCode;
+  const rawGst = company.gstNumber?.trim() || "";
+  const gstNumber = !rawGst
+    ? SUNVIEW_DEFAULTS.gstNumber
+    : rawGst.startsWith("GST")
+      ? rawGst
+      : `GST # ${rawGst}`;
 
-  const cityParts = [city, province, postalCode].filter(Boolean);
-  const cityLine =
-    cityParts.length > 0
-      ? cityParts.join(cityParts.length === 3 ? "  " : ", ").replace(
-          /^([^,]+),\s*([^,\s]+)\s+(.+)$/,
-          "$1, $2  $3"
-        )
-      : SUNVIEW_DEFAULTS.cityLine;
-
-  // Prefer explicit addressLine1; if DB only has city fields, compose.
-  const composedCity =
-    [city, province].filter(Boolean).join(", ") +
-    (postalCode ? `  ${postalCode}` : "");
+  const cityLine = [city, province, postalCode].filter(Boolean).join(" ");
 
   return {
     legalName: legalName.toUpperCase().includes("SUNVIEW")
       ? legalName.toUpperCase().replace(/\s+/g, " ")
       : legalName,
-    addressLine1:
-      company.addressLine1?.trim() ||
-      (company.city ? composedCity : addressLine1),
+    addressLine1,
     addressLine2,
     city,
     province,
     postalCode,
-    gstNumber: !gstNumber
-      ? ""
-      : gstNumber.startsWith("GST")
-        ? gstNumber
-        : `GST # ${gstNumber}`,
-    cityLine: company.addressLine1?.trim()
-      ? [
-          [city, province].filter(Boolean).join(", "),
-          postalCode,
-        ]
-          .filter(Boolean)
-          .join("  ") || cityLine
-      : composedCity || cityLine,
+    gstNumber,
+    cityLine: cityLine || SUNVIEW_DEFAULTS.cityLine,
   };
 }

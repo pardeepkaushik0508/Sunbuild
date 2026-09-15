@@ -19,8 +19,8 @@ function money(n: number, asCredit = false) {
 }
 
 /**
- * Statement of Adjustments PDF — Sunview Custom Homes client format.
- * Letter size, logo letterhead, underline party fields, **no GST**.
+ * Statement of Adjustments PDF — matches Sunview Custom Homes client reference:
+ * logo + address + GST letterhead, underline party fields, GST 5%, cash-to-close bar.
  */
 export async function generateStatementOfAdjustmentsPdfBuffer(
   data: PrintableStatementOfAdjustments
@@ -30,25 +30,25 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const logo = await embedSunviewLogo(pdfDoc);
 
-  const ink = rgb(0.05, 0.05, 0.05);
-  const muted = rgb(0.35, 0.35, 0.35);
-  const rule = rgb(0.15, 0.15, 0.15);
+  const ink = rgb(0, 0, 0);
+  const muted = rgb(0.28, 0.28, 0.28);
+  const rule = rgb(0.12, 0.12, 0.12);
+  const lightRule = rgb(0.55, 0.55, 0.55);
   const white = rgb(1, 1, 1);
   const black = rgb(0, 0, 0);
-  const accent = rgb(0.95, 0.55, 0.05);
 
   const pageWidth = 612;
   const pageHeight = 792;
-  const marginL = 48;
-  const marginR = 48;
+  const marginL = 54;
+  const marginR = 54;
   const contentW = pageWidth - marginL - marginR;
-  const colGap = 28;
+  const colGap = 36;
   const colW = (contentW - colGap) / 2;
   const rightColX = marginL + colW + colGap;
   const amountX = pageWidth - marginR;
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - 36;
+  let y = pageHeight - 40;
 
   const ensureSpace = (needed: number) => {
     if (y - needed < 48) {
@@ -62,25 +62,25 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     page.drawText(data.companyLegal.legalName, {
       x: marginL,
       y,
-      size: 11,
+      size: 10,
       font: fontBold,
       color: ink,
     });
     page.drawText("Statement of Adjustments (continued)", {
       x: marginL,
-      y: y - 14,
+      y: y - 13,
       size: 9,
       font: fontRegular,
       color: muted,
     });
-    y -= 28;
+    y -= 26;
     page.drawLine({
       start: { x: marginL, y },
       end: { x: amountX, y },
       thickness: 0.75,
       color: rule,
     });
-    y -= 18;
+    y -= 16;
   };
 
   const drawTextRight = (
@@ -101,33 +101,38 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     });
   };
 
-  const drawUnderlineField = (
+  /** Label + value on one underline (client form style). */
+  const drawInlineField = (
     label: string,
     value: string,
     x: number,
     width: number
   ) => {
-    page.drawText(label, {
+    const labelText = label.includes(":") ? label : `${label}:`;
+    const labelSize = 9;
+    page.drawText(labelText, {
       x,
       y,
-      size: 8,
-      font: fontRegular,
-      color: muted,
-    });
-    y -= 14;
-    const display = value || " ";
-    page.drawText(display.slice(0, 48), {
-      x,
-      y,
-      size: 10,
+      size: labelSize,
       font: fontRegular,
       color: ink,
     });
-    y -= 4;
+    const labelW = fontRegular.widthOfTextAtSize(labelText, labelSize) + 6;
+    const display = (value || "").slice(0, 52);
+    if (display) {
+      page.drawText(display, {
+        x: x + labelW,
+        y,
+        size: 10,
+        font: fontRegular,
+        color: ink,
+      });
+    }
+    y -= 3;
     page.drawLine({
       start: { x, y },
       end: { x: x + width, y },
-      thickness: 0.6,
+      thickness: 0.7,
       color: rule,
     });
   };
@@ -135,8 +140,22 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const drawMoneyRow = (
     label: string,
     amount: string,
-    opts?: { bold?: boolean; indent?: number; size?: number }
+    opts?: {
+      bold?: boolean;
+      indent?: number;
+      size?: number;
+      ruleAbove?: boolean;
+    }
   ) => {
+    if (opts?.ruleAbove) {
+      ensureSpace(22);
+      page.drawLine({
+        start: { x: marginL, y: y + 10 },
+        end: { x: amountX, y: y + 10 },
+        thickness: 0.6,
+        color: lightRule,
+      });
+    }
     ensureSpace(18);
     const size = opts?.size ?? 10;
     const font = opts?.bold ? fontBold : fontRegular;
@@ -149,110 +168,74 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       color: ink,
     });
     drawTextRight(amount, amountX, y, size, opts?.bold);
-    y -= 16;
+    y -= 15;
   };
 
-  const drawSectionRule = () => {
-    ensureSpace(12);
-    page.drawLine({
-      start: { x: marginL, y },
-      end: { x: amountX, y },
-      thickness: 0.5,
-      color: rgb(0.7, 0.7, 0.7),
-    });
-    y -= 14;
-  };
-
-  // ── Logo + letterhead (Sunview branding) ──
+  // ── Letterhead: logo top-left, address + GST under logo (client reference) ──
+  let headerBottom = y;
   if (logo) {
-    const maxH = 52;
+    const maxH = 44;
     const scale = maxH / logo.height;
-    const logoW = logo.width * scale;
-    const logoH = logo.height * scale;
-    // Dark band so black-background logo art reads correctly on white paper.
+    const logoW = Math.min(logo.width * scale, 210);
+    const logoH = logo.height * (logoW / logo.width);
+    // Tight black pad so black-background logo art remains legible on white paper.
     page.drawRectangle({
-      x: marginL - 4,
-      y: y - logoH - 6,
-      width: logoW + 8,
-      height: logoH + 10,
+      x: marginL - 2,
+      y: y - logoH - 4,
+      width: logoW + 4,
+      height: logoH + 6,
       color: black,
     });
     page.drawImage(logo, {
       x: marginL,
-      y: y - logoH - 2,
+      y: y - logoH - 1,
       width: logoW,
       height: logoH,
     });
-    const textX = marginL + logoW + 16;
-    page.drawText(data.companyLegal.legalName, {
-      x: textX,
-      y: y - 14,
-      size: 13,
-      font: fontBold,
-      color: ink,
-    });
-    page.drawText(data.companyLegal.addressLine1, {
-      x: textX,
-      y: y - 28,
-      size: 9,
-      font: fontRegular,
-      color: muted,
-    });
-    let addrY = y - 40;
-    if (
-      data.companyLegal.cityLine &&
-      data.companyLegal.cityLine !== data.companyLegal.addressLine1
-    ) {
-      page.drawText(data.companyLegal.cityLine, {
-        x: textX,
-        y: addrY,
-        size: 9,
-        font: fontRegular,
-        color: muted,
-      });
-      addrY -= 12;
-    }
-    y = Math.min(y - logoH - 14, addrY - 4);
+    headerBottom = y - logoH - 10;
   } else {
     page.drawText(data.companyLegal.legalName, {
       x: marginL,
       y,
-      size: 14,
+      size: 13,
       font: fontBold,
       color: ink,
     });
-    y -= 14;
-    page.drawText(data.companyLegal.addressLine1, {
+    headerBottom = y - 16;
+  }
+
+  y = headerBottom;
+  page.drawText(data.companyLegal.addressLine1, {
+    x: marginL,
+    y,
+    size: 9,
+    font: fontRegular,
+    color: ink,
+  });
+  y -= 12;
+  page.drawText(data.companyLegal.cityLine, {
+    x: marginL,
+    y,
+    size: 9,
+    font: fontRegular,
+    color: ink,
+  });
+  y -= 12;
+  if (data.companyLegal.gstNumber) {
+    page.drawText(data.companyLegal.gstNumber, {
       x: marginL,
       y,
       size: 9,
       font: fontRegular,
-      color: muted,
+      color: ink,
     });
-    y -= 12;
-    if (
-      data.companyLegal.cityLine &&
-      data.companyLegal.cityLine !== data.companyLegal.addressLine1
-    ) {
-      page.drawText(data.companyLegal.cityLine, {
-        x: marginL,
-        y,
-        size: 9,
-        font: fontRegular,
-        color: muted,
-      });
-      y -= 12;
-    }
+    y -= 14;
+  } else {
+    y -= 4;
   }
 
-  page.drawLine({
-    start: { x: marginL, y },
-    end: { x: amountX, y },
-    thickness: 2,
-    color: accent,
-  });
-  y -= 22;
-
+  // Centered title
+  y -= 6;
   const title = "Statement of Adjustments";
   const titleSize = 16;
   const titleW = fontBold.widthOfTextAtSize(title, titleSize);
@@ -263,46 +246,65 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     font: fontBold,
     color: ink,
   });
+  y -= 22;
 
-  y -= 28;
+  // ── Party fields: Municipal Address full width, then two columns ──
+  drawInlineField(
+    "Municipal Address",
+    data.party.municipalAddress || "",
+    marginL,
+    contentW
+  );
+  y -= 14;
 
-  // ── Party fields (two columns) ──
+  const leftStartY = y;
   let leftY = y;
-  const saveY = y;
-
   const drawLeft = (label: string, value: string) => {
     y = leftY;
-    drawUnderlineField(label, value, marginL, colW);
-    leftY = y - 10;
+    drawInlineField(label, value, marginL, colW);
+    leftY = y - 12;
   };
-  drawLeft("Municipal Address", data.party.municipalAddress || "");
   drawLeft("Buyer Name", data.party.buyerName || "");
   drawLeft("Phone", data.party.phone || "");
   drawLeft("Email", data.party.email || "");
 
-  y = saveY;
-  let rightY = saveY;
+  y = leftStartY;
+  let rightY = leftStartY;
   const drawRight = (label: string, value: string) => {
     y = rightY;
-    drawUnderlineField(label, value, rightColX, colW);
-    rightY = y - 10;
+    drawInlineField(label, value, rightColX, colW);
+    rightY = y - 12;
   };
   drawRight("Date", formatDate(data.party.statementDate) || "");
   drawRight("Contract #", data.party.contractNumber || "");
   drawRight("Legal Description", data.party.legalDescription || "");
-  drawRight("Possession Date", formatDate(data.party.possessionDate) || "");
+  drawRight(
+    "Possession Date: (Firm)",
+    formatDate(data.party.possessionDate) || ""
+  );
 
-  y = Math.min(leftY, rightY) - 8;
-  drawSectionRule();
+  y = Math.min(leftY, rightY) - 4;
 
-  // ── Financial body (no GST) ──
+  // Thick separator before financial body
+  page.drawLine({
+    start: { x: marginL, y },
+    end: { x: amountX, y },
+    thickness: 1.4,
+    color: rule,
+  });
+  y -= 18;
+
+  // ── Financial body (client reference order, with GST) ──
   const calc = data.calculations;
 
   drawMoneyRow(
     "Base Home Price (Including Lot Cost)",
     money(calc.baseHomePrice)
   );
-  drawMoneyRow("Subtotal", money(calc.subtotal), { bold: true });
+  drawMoneyRow("Subtotal", money(calc.subtotal), {
+    bold: true,
+    ruleAbove: true,
+  });
   y -= 4;
 
   page.drawText("Approved Change Orders", {
@@ -312,7 +314,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     font: fontBold,
     color: ink,
   });
-  y -= 16;
+  y -= 15;
 
   if (calc.changeOrders.length === 0) {
     page.drawText("None", {
@@ -322,7 +324,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       font: fontRegular,
       color: muted,
     });
-    y -= 16;
+    y -= 15;
   } else {
     for (const co of calc.changeOrders) {
       drawMoneyRow(co.label, money(co.amount), { indent: 12 });
@@ -331,60 +333,58 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
 
   drawMoneyRow("Change Orders Subtotal", money(calc.changeOrdersSubtotal), {
     bold: true,
+    ruleAbove: true,
   });
   drawMoneyRow(
     "Allowance (Promo credit towards Change Orders)",
     money(calc.promoCreditAdjustment, true)
   );
   drawMoneyRow(
-    "Change Orders Total",
+    "Change Orders Total (Without GST)",
     money(calc.changeOrdersTotalWithoutGst),
-    { bold: true }
+    { bold: true, ruleAbove: true }
   );
-  y -= 4;
   drawMoneyRow("TOTAL CLOSING PRICE", money(calc.totalClosingPrice), {
     bold: true,
+    ruleAbove: true,
   });
+
+  // GST block (client reference)
+  const gstLabel =
+    calc.gstRatePercent > 0
+      ? `GST ${calc.gstRatePercent % 1 === 0 ? String(calc.gstRatePercent) : calc.gstRatePercent.toFixed(2)}%`
+      : "GST";
+  drawMoneyRow(gstLabel, money(calc.totalGst));
+  drawMoneyRow("Total GST", money(calc.totalGst), {
+    bold: true,
+    ruleAbove: true,
+  });
+
   drawMoneyRow("TOTAL SALES PRICE", money(calc.totalSalesPrice), {
     bold: true,
+    ruleAbove: true,
   });
-  y -= 6;
-
-  page.drawText("Deposits", {
-    x: marginL,
-    y,
-    size: 10,
-    font: fontBold,
-    color: ink,
-  });
-  y -= 16;
+  y -= 4;
 
   if (calc.deposits.length === 0) {
-    page.drawText("None", {
-      x: marginL + 12,
-      y,
-      size: 10,
-      font: fontRegular,
-      color: muted,
-    });
-    y -= 16;
+    // Still list deposits section only when present; reference always shows deposit lines.
   } else {
     for (const dep of calc.deposits) {
-      drawMoneyRow(dep.label, money(dep.amount), { indent: 12 });
+      drawMoneyRow(dep.label, money(dep.amount), { indent: 0 });
     }
   }
 
   drawMoneyRow(
     "Deposits to Date to Sunview",
     money(calc.depositsToDate, true),
-    { bold: true }
+    { bold: true, ruleAbove: true }
   );
 
   y -= 10;
   ensureSpace(36);
 
-  const barHeight = 28;
-  const barY = y - barHeight + 8;
+  const barHeight = 26;
+  const barY = y - barHeight + 6;
   page.drawRectangle({
     x: marginL,
     y: barY,
@@ -394,7 +394,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   });
   page.drawText("CASH TO CLOSE (Balance as of today)", {
     x: marginL + 10,
-    y: barY + 9,
+    y: barY + 8,
     size: 11,
     font: fontBold,
     color: white,
@@ -403,7 +403,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const cashW = fontBold.widthOfTextAtSize(cashText, 12);
   page.drawText(cashText, {
     x: amountX - 10 - cashW,
-    y: barY + 9,
+    y: barY + 8,
     size: 12,
     font: fontBold,
     color: white,
@@ -418,6 +418,10 @@ export function generateStatementOfAdjustmentsHtml(
   data: PrintableStatementOfAdjustments
 ): string {
   const calc = data.calculations;
+  const gstLabel =
+    calc.gstRatePercent > 0
+      ? `GST ${calc.gstRatePercent % 1 === 0 ? String(calc.gstRatePercent) : calc.gstRatePercent.toFixed(2)}%`
+      : "GST";
   const coRows =
     calc.changeOrders.length === 0
       ? `<tr><td colspan="2" class="muted indent">None</td></tr>`
@@ -429,11 +433,11 @@ export function generateStatementOfAdjustmentsHtml(
           .join("");
   const depRows =
     calc.deposits.length === 0
-      ? `<tr><td colspan="2" class="muted indent">None</td></tr>`
+      ? ""
       : calc.deposits
           .map(
             (d) =>
-              `<tr><td class="indent">${escapeHtml(d.label)}</td><td class="amt">${money(d.amount)}</td></tr>`
+              `<tr><td>${escapeHtml(d.label)}</td><td class="amt">${money(d.amount)}</td></tr>`
           )
           .join("");
 
@@ -443,74 +447,77 @@ export function generateStatementOfAdjustmentsHtml(
 <meta charset="UTF-8" />
 <title>Statement of Adjustments – ${escapeHtml(data.statementNumber)}</title>
 <style>
-  @page { size: letter; margin: 14mm 12mm; }
-  body { font-family: Helvetica, Arial, sans-serif; color: #111; font-size: 12px; margin: 0; padding: 24px; }
-  .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
-  .brand-logo { background: #000; padding: 6px 8px; }
-  .brand-logo img { height: 48px; width: auto; display: block; }
-  .legal-name { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
-  .muted { color: #555; font-size: 11px; }
-  .accent-rule { border: none; border-top: 2px solid #f28c0c; margin: 12px 0 18px; }
-  h1 { text-align: center; font-size: 18px; margin: 8px 0 20px; font-weight: 700; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; margin-bottom: 18px; }
-  .field label { display: block; font-size: 10px; color: #555; }
-  .field .value { border-bottom: 1px solid #222; padding: 4px 0 3px; min-height: 18px; }
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 5px 0; vertical-align: top; }
-  td.amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .bold td, td.bold { font-weight: 700; }
-  .indent { padding-left: 14px; }
-  .section { font-weight: 700; padding-top: 8px; }
-  .cash-bar {
-    margin-top: 16px; background: #000; color: #fff; display: flex;
-    justify-content: space-between; align-items: center;
-    padding: 10px 12px; font-weight: 700; font-size: 13px;
+  @page { size: letter; margin: 14mm 14mm; }
+  body { font-family: Helvetica, Arial, sans-serif; color: #000; font-size: 12px; margin: 0; padding: 20px 24px; }
+  .letterhead { margin-bottom: 6px; }
+  .logo-wrap { display: inline-block; background: #000; padding: 4px 6px; }
+  .logo-wrap img { height: 42px; width: auto; display: block; }
+  .addr { margin-top: 8px; font-size: 11px; line-height: 1.45; }
+  h1 { text-align: center; font-size: 18px; margin: 18px 0 16px; font-weight: 700; }
+  .field { margin-bottom: 12px; }
+  .field .line {
+    border-bottom: 1px solid #111; padding: 2px 0 3px; min-height: 16px; font-size: 12px;
   }
-  hr { border: none; border-top: 1px solid #ccc; margin: 10px 0 14px; }
+  .field .line .lbl { margin-right: 6px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 36px; margin-bottom: 8px; }
+  .thick { border: none; border-top: 1.5px solid #111; margin: 10px 0 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 4px 0; vertical-align: top; }
+  td.amt { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .bold td, td.bold, tr.bold td { font-weight: 700; }
+  .indent { padding-left: 14px; }
+  .section { font-weight: 700; padding-top: 6px; }
+  .rule td { border-top: 1px solid #999; padding-top: 6px; }
+  .muted { color: #555; }
+  .cash-bar {
+    margin-top: 14px; background: #000; color: #fff; display: flex;
+    justify-content: space-between; align-items: center;
+    padding: 9px 12px; font-weight: 700; font-size: 13px;
+  }
 </style>
 </head>
 <body>
-  <div class="brand">
-    <div class="brand-logo">
+  <div class="letterhead">
+    <div class="logo-wrap">
       <img src="/branding/sunview-logo.png" alt="Sunview Custom Homes" />
     </div>
-    <div>
-      <div class="legal-name">${escapeHtml(data.companyLegal.legalName)}</div>
-      <div class="muted">${escapeHtml(data.companyLegal.addressLine1)}</div>
-      ${
-        data.companyLegal.cityLine &&
-        data.companyLegal.cityLine !== data.companyLegal.addressLine1
-          ? `<div class="muted">${escapeHtml(data.companyLegal.cityLine)}</div>`
-          : ""
-      }
+    <div class="addr">
+      ${escapeHtml(data.companyLegal.addressLine1)}<br />
+      ${escapeHtml(data.companyLegal.cityLine)}<br />
+      ${escapeHtml(data.companyLegal.gstNumber)}
     </div>
   </div>
-  <hr class="accent-rule" />
   <h1>Statement of Adjustments</h1>
-  <div class="grid">
-    <div class="field"><label>Municipal Address</label><div class="value">${escapeHtml(data.party.municipalAddress || "")}</div></div>
-    <div class="field"><label>Date</label><div class="value">${escapeHtml(formatDate(data.party.statementDate) || "")}</div></div>
-    <div class="field"><label>Buyer Name</label><div class="value">${escapeHtml(data.party.buyerName || "")}</div></div>
-    <div class="field"><label>Contract #</label><div class="value">${escapeHtml(data.party.contractNumber || "")}</div></div>
-    <div class="field"><label>Phone</label><div class="value">${escapeHtml(data.party.phone || "")}</div></div>
-    <div class="field"><label>Legal Description</label><div class="value">${escapeHtml(data.party.legalDescription || "")}</div></div>
-    <div class="field"><label>Email</label><div class="value">${escapeHtml(data.party.email || "")}</div></div>
-    <div class="field"><label>Possession Date</label><div class="value">${escapeHtml(formatDate(data.party.possessionDate) || "")}</div></div>
+
+  <div class="field">
+    <div class="line"><span class="lbl">Municipal Address:</span>${escapeHtml(data.party.municipalAddress || "")}</div>
   </div>
-  <hr />
+  <div class="grid">
+    <div class="field"><div class="line"><span class="lbl">Buyer Name:</span>${escapeHtml(data.party.buyerName || "")}</div></div>
+    <div class="field"><div class="line"><span class="lbl">Date:</span>${escapeHtml(formatDate(data.party.statementDate) || "")}</div></div>
+    <div class="field"><div class="line"><span class="lbl">Phone:</span>${escapeHtml(data.party.phone || "")}</div></div>
+    <div class="field"><div class="line"><span class="lbl">Contract #:</span>${escapeHtml(data.party.contractNumber || "")}</div></div>
+    <div class="field"><div class="line"><span class="lbl">Email:</span>${escapeHtml(data.party.email || "")}</div></div>
+    <div class="field"><div class="line"><span class="lbl">Legal Description:</span>${escapeHtml(data.party.legalDescription || "")}</div></div>
+    <div></div>
+    <div class="field"><div class="line"><span class="lbl">Possession Date: (Firm)</span> ${escapeHtml(formatDate(data.party.possessionDate) || "")}</div></div>
+  </div>
+  <hr class="thick" />
+
   <table>
     <tr><td>Base Home Price (Including Lot Cost)</td><td class="amt">${money(calc.baseHomePrice)}</td></tr>
-    <tr class="bold"><td>Subtotal</td><td class="amt">${money(calc.subtotal)}</td></tr>
+    <tr class="bold rule"><td>Subtotal</td><td class="amt">${money(calc.subtotal)}</td></tr>
     <tr><td class="section" colspan="2">Approved Change Orders</td></tr>
     ${coRows}
-    <tr class="bold"><td>Change Orders Subtotal</td><td class="amt">${money(calc.changeOrdersSubtotal)}</td></tr>
+    <tr class="bold rule"><td>Change Orders Subtotal</td><td class="amt">${money(calc.changeOrdersSubtotal)}</td></tr>
     <tr><td>Allowance (Promo credit towards Change Orders)</td><td class="amt">${money(calc.promoCreditAdjustment, true)}</td></tr>
-    <tr class="bold"><td>Change Orders Total</td><td class="amt">${money(calc.changeOrdersTotalWithoutGst)}</td></tr>
-    <tr class="bold"><td>TOTAL CLOSING PRICE</td><td class="amt">${money(calc.totalClosingPrice)}</td></tr>
-    <tr class="bold"><td>TOTAL SALES PRICE</td><td class="amt">${money(calc.totalSalesPrice)}</td></tr>
-    <tr><td class="section" colspan="2">Deposits</td></tr>
+    <tr class="bold rule"><td>Change Orders Total (Without GST)</td><td class="amt">${money(calc.changeOrdersTotalWithoutGst)}</td></tr>
+    <tr class="bold rule"><td>TOTAL CLOSING PRICE</td><td class="amt">${money(calc.totalClosingPrice)}</td></tr>
+    <tr><td>${escapeHtml(gstLabel)}</td><td class="amt">${money(calc.totalGst)}</td></tr>
+    <tr class="bold rule"><td>Total GST</td><td class="amt">${money(calc.totalGst)}</td></tr>
+    <tr class="bold rule"><td>TOTAL SALES PRICE</td><td class="amt">${money(calc.totalSalesPrice)}</td></tr>
     ${depRows}
-    <tr class="bold"><td>Deposits to Date to Sunview</td><td class="amt">${money(calc.depositsToDate, true)}</td></tr>
+    <tr class="bold rule"><td>Deposits to Date to Sunview</td><td class="amt">${money(calc.depositsToDate, true)}</td></tr>
   </table>
   <div class="cash-bar">
     <span>CASH TO CLOSE (Balance as of today)</span>

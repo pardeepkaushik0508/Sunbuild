@@ -74,14 +74,14 @@ export type SoaCalculationResult = {
 /**
  * Authoritative Statement of Adjustments math (integer cents).
  *
- * Sunview SOA (client format) does **not** include GST:
+ * Sunview SOA (client reference):
  * Base Home Price
- * + Change Orders Total (approved COs − promo credit)
- * = Total Closing / Sales Price
+ * + Change Orders Total (Without GST)  [= approved COs − promo credit]
+ * = Total Closing Price
+ * + GST 5%
+ * = Total Sales Price
  * − Deposits to Date
  * = Cash to Close
- *
- * Pass gstRate > 0 only if a future company requires GST on SOA.
  */
 export function calculateStatementOfAdjustments(
   input: SoaCalculationInput
@@ -100,7 +100,7 @@ export function calculateStatementOfAdjustments(
 
   const changeOrderLines: SoaChangeOrderLine[] = approved.map((co, idx) => ({
     id: co.id,
-    label: `Change Order #${idx + 1}`,
+    label: `Change Order # ${idx + 1}`,
     title: co.title,
     amount: fromCents(toCents(co.amount)),
     status: co.status,
@@ -123,9 +123,8 @@ export function calculateStatementOfAdjustments(
     changeOrdersTotalWithoutGstCents
   );
 
-  // Default 0 — Sunview Statement of Adjustments has no GST lines.
   const rate =
-    Number.isFinite(input.gstRate) && input.gstRate >= 0 ? input.gstRate : 0;
+    Number.isFinite(input.gstRate) && input.gstRate >= 0 ? input.gstRate : 0.05;
   const totalGstCents = Math.round(totalClosingPriceCents * rate);
   const totalSalesPriceCents = addCents(totalClosingPriceCents, totalGstCents);
 
@@ -134,7 +133,7 @@ export function calculateStatementOfAdjustments(
   );
   const depositLines: SoaDepositLine[] = received.map((d, idx) => ({
     id: d.id,
-    label: d.label?.trim() || `Deposit ${idx + 1}`,
+    label: d.label?.trim() || `Deposits ${idx + 1}`,
     amount: fromCents(toCents(d.amount)),
     status: d.status,
     receivedOrDue: (d.dueDate ?? d.updatedAt)?.toISOString() ?? null,

@@ -231,6 +231,20 @@ function toAsset(result: UploadApiResponse): CloudinaryAsset {
   };
 }
 
+/** Cloudinary SDK often rejects with plain `{ message, http_code }` objects. */
+function cloudinaryErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (err && typeof err === "object") {
+    const o = err as { message?: unknown; error?: { message?: unknown } };
+    if (typeof o.message === "string" && o.message.trim()) return o.message;
+    if (typeof o.error?.message === "string" && o.error.message.trim()) {
+      return o.error.message;
+    }
+  }
+  if (typeof err === "string" && err.trim()) return err;
+  return "unknown";
+}
+
 export async function uploadBufferToCloudinary(opts: {
   buffer: Buffer;
   folder: string;
@@ -261,19 +275,31 @@ export async function uploadBufferToCloudinary(opts: {
     });
     return toAsset(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown";
+    const message = cloudinaryErrorMessage(err);
+    const httpCode =
+      err && typeof err === "object" && "http_code" in err
+        ? Number((err as { http_code?: number }).http_code)
+        : undefined;
     console.error("[cloudinary] upload failed", {
       folder,
       message,
+      httpCode,
     });
-    if (/invalid signature|invalid api_key|unauthorized/i.test(message)) {
+    if (
+      httpCode === 401 ||
+      /invalid signature|invalid api_key|unauthorized|api_secret/i.test(message)
+    ) {
       throw new AppError(
         "Cloudinary credentials are invalid. Update CLOUDINARY_URL on the server (API key + secret from Cloudinary Dashboard → Settings → API Keys).",
         502,
         "STORAGE_AUTH_FAILED"
       );
     }
-    throw new AppError("Failed to upload file to storage", 502, "STORAGE_UPLOAD_FAILED");
+    throw new AppError(
+      "Failed to upload file to storage. Check Cloudinary configuration and server logs.",
+      502,
+      "STORAGE_UPLOAD_FAILED"
+    );
   }
 }
 

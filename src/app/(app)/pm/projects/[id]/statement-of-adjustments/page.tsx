@@ -232,19 +232,28 @@ export default async function ProjectStatementOfAdjustmentsPage({
                   bold
                 />
                 <SoaRow
-                  label="Allowance (Promo credit)"
+                  label="Allowance (Promo credit towards Change Orders)"
                   value={formatSoaCurrency(calc.promoCreditAdjustment, {
                     asCredit: true,
                   })}
                 />
                 <SoaRow
-                  label="Change Orders Total"
+                  label="Change Orders Total (Without GST)"
                   value={formatCurrency(calc.changeOrdersTotalWithoutGst)}
                   bold
                 />
                 <SoaRow
                   label="TOTAL CLOSING PRICE"
                   value={formatCurrency(calc.totalClosingPrice)}
+                  bold
+                />
+                <SoaRow
+                  label={`GST ${calc.gstRatePercent}%`}
+                  value={formatCurrency(calc.totalGst)}
+                />
+                <SoaRow
+                  label="Total GST"
+                  value={formatCurrency(calc.totalGst)}
                   bold
                 />
                 <SoaRow
@@ -257,7 +266,7 @@ export default async function ProjectStatementOfAdjustmentsPage({
                     colSpan={2}
                     className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-sb-muted"
                   >
-                    Deposits (received)
+                    Deposits
                   </td>
                 </tr>
                 {calc.deposits.length === 0 ? (
