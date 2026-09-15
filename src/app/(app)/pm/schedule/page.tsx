@@ -184,7 +184,7 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
   const clientItems = [
     {
       id: "deposit",
-      label: "Sales Deposit",
+      label: "Client Deposit",
       value: primary?.deposits[0]
         ? `$${primary.deposits[0].amount.toLocaleString()}`
         : "—",

@@ -213,6 +213,7 @@ function navForRole(
         [
           { label: "Overview", href: "/bookkeeper", icon: LayoutDashboard },
           { label: "Invoices", href: "/bookkeeper/invoices", icon: Receipt },
+          { label: "Payments", href: "/bookkeeper/payments", icon: Receipt },
           { label: "Settings", href: "/settings", icon: Settings },
         ],
         { usersAt: 2 }
@@ -221,6 +222,9 @@ function navForRole(
       return withOptionalModules(
         [
           { label: "Jobs", href: "/sub", icon: Briefcase },
+          { label: "Assigned Tasks", href: "/sub/tasks", icon: CheckSquare },
+          { label: "RFIs", href: "/sub/rfis", icon: MessageCircle },
+          { label: "Payments", href: "/sub/payments", icon: Receipt },
           { label: "Daily Logs", href: "/sub/daily-logs", icon: ClipboardList },
         ],
         { usersAt: 2 }

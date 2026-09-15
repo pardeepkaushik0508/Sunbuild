@@ -123,7 +123,7 @@ function parseSort(
   ) {
     return value;
   }
-  return "name";
+  return "created";
 }
 
 export async function loadManageUsersData(

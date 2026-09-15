@@ -42,5 +42,6 @@ export type JobsStatusFilter =
   | "all"
   | "active"
   | "planning"
+  | "approved"
   | "completed"
   | "on_hold";

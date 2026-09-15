@@ -4,6 +4,10 @@ import { Role } from "@prisma/client";
 import { PageHeader, Card } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { addWarrantyCommentAction } from "@/lib/actions";
+import { ActionForm } from "@/components/ui/action-form";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { FormField, Textarea } from "@/components/ui/form";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, mediaUrl } from "@/lib/utils";
@@ -126,6 +130,34 @@ export default async function ClientWarrantyDetailPage({ params }: PageProps) {
               </li>
             ))}
           </ul>
+        )}
+        {ticket.status !== "CLOSED" ? (
+          <ActionForm
+            action={addWarrantyCommentAction.bind(null, ticket.id)}
+            successMessage="Comment added"
+            className="mt-4 space-y-3"
+          >
+            <FormField
+              label={
+                ticket.status === "RESOLVED"
+                  ? "Comment (resolved tickets stay open for follow-up)"
+                  : "Add comment"
+              }
+            >
+              <Textarea
+                name="content"
+                required
+                placeholder="The issue is still happening."
+              />
+            </FormField>
+            <SubmitButton size="sm" pendingLabel="Saving…">
+              Add comment
+            </SubmitButton>
+          </ActionForm>
+        ) : (
+          <p className="mt-4 text-sm text-sb-muted">
+            This ticket is closed. Contact your project manager for a new request.
+          </p>
         )}
       </Card>
     </div>

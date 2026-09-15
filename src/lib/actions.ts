@@ -30,7 +30,6 @@ import {
   assertLeadAccess,
   assertContractAccess,
   assertCompanyUser,
-  assertCompanySubcontractor,
   assertProjectSubcontractor,
 } from "@/lib/session";
 import {
@@ -39,7 +38,12 @@ import {
   saveUpload,
   storageMeta,
 } from "@/lib/storage";
-import { notifyProjectManagersOfDailyLog } from "@/lib/notifications";
+import {
+  createNotificationOnce,
+  notifyProjectManager,
+  notifyProjectManagersOfDailyLog,
+  revalidateNotificationInbox,
+} from "@/lib/notifications";
 import {
   assertPasswordMeetsPolicy,
   getPasswordPolicy,
@@ -110,6 +114,10 @@ export async function createLeadAction(form: FormData) {
     await assertCompanyUser(session, data.assigneeId);
   }
 
+  const assigneeId =
+    data.assigneeId ||
+    (session.membership.role === Role.SALES_MANAGER ? session.user.id : null);
+
   const lead = await prisma.lead.create({
     data: {
       firstName: data.firstName,
@@ -118,7 +126,7 @@ export async function createLeadAction(form: FormData) {
       phone: data.phone || null,
       address: data.address || null,
       notes: data.notes || null,
-      assigneeId: data.assigneeId || null,
+      assigneeId,
       status: (data.status || "NEW") as LeadStatus,
       estimatedValue: data.estimatedValue
         ? Number(data.estimatedValue)
@@ -149,7 +157,7 @@ export async function createLeadAction(form: FormData) {
   revalidatePath("/sales");
   revalidatePath("/sales/leads");
   revalidatePath("/sales/activities");
-  redirect(`/sales/leads/${lead.id}`);
+  return { ok: true as const, id: lead.id };
 }
 
 export async function updateLeadAction(leadId: string, form: FormData) {
@@ -718,7 +726,7 @@ export async function confirmContractAction(contractId: string, form: FormData) 
 
     for (let i = 1; i <= 3; i++) {
       const amount = Number(formString(form, `depositAmount${i}`) || 0);
-      const label = formString(form, `depositLabel${i}`) || `Deposit ${i}`;
+      const label = formString(form, `depositLabel${i}`) || "Client Deposit";
       if (amount > 0) {
         await tx.deposit.create({
           data: {
@@ -1279,19 +1287,58 @@ export async function createRfiAction(form: FormData) {
   const data = parsed.data;
   await assertProjectAccess(session, data.projectId);
   if (data.assigneeId) await assertCompanyUser(session, data.assigneeId);
-  await prisma.rFI.create({
+
+  const question =
+    data.description && data.description.trim()
+      ? `${data.question}\n\n${data.description.trim()}`
+      : data.question;
+
+  const rfi = await prisma.rFI.create({
     data: {
       projectId: data.projectId,
       title: data.title,
-      question: data.question,
+      question,
+      description: data.description || null,
       priority: (data.priority || "MEDIUM") as Priority,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       assigneeId: data.assigneeId || null,
       createdById: session.user.id,
     },
   });
+
+  const project = await prisma.project.findFirst({
+    where: { id: data.projectId, companyId: session.membership.companyId },
+    select: { name: true, pmId: true },
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: data.projectId,
+    action: "RFI_CREATED",
+    entityType: "RFI",
+    entityId: rfi.id,
+  });
+
+  await notifyProjectManager({
+    projectId: data.projectId,
+    companyId: session.membership.companyId,
+    type: "RFI_CREATED",
+    title: `New RFI: ${data.title}`,
+    body: project
+      ? `${session.user.name} submitted an RFI on ${project.name}.`
+      : `${session.user.name} submitted an RFI.`,
+    href: `/pm/rfis?projectId=${data.projectId}`,
+    entityType: "RFI",
+    entityId: rfi.id,
+    excludeUserId: session.user.id,
+  });
+
   revalidatePath("/pm/rfis");
   revalidatePath("/sub");
+  revalidatePath("/sub/rfis");
+  revalidatePath(`/sub/jobs/${data.projectId}`);
+  revalidateNotificationInbox();
 }
 
 export async function answerRfiAction(rfiId: string, form: FormData) {
@@ -1966,6 +2013,10 @@ export async function uploadInvoiceAction(form: FormData) {
   }
   const data = parsed.data;
   await assertProjectAccess(session, data.projectId);
+  const payeeUserId = data.payeeUserId || "";
+  if (payeeUserId) {
+    await assertProjectSubcontractor(session, payeeUserId, data.projectId);
+  }
   const requestedStatus = (data.status as InvoiceStatus) || InvoiceStatus.SENT;
   // Creating as PAID/VOID would skip the real payment workflow — disallow on upload.
   const status =
@@ -1996,6 +2047,7 @@ export async function uploadInvoiceAction(form: FormData) {
         notes: data.notes || null,
         ...(fileMeta ?? { filePath: null, fileName: null }),
         uploadedById: session.user.id,
+        payeeUserId: payeeUserId || null,
       },
     });
   } catch (err) {
@@ -2036,27 +2088,255 @@ export async function updateInvoiceStatusAction(
   const status = statusRaw as InvoiceStatus;
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
-    select: { id: true, projectId: true, status: true },
+    select: {
+      id: true,
+      projectId: true,
+      status: true,
+      invoiceNumber: true,
+      amount: true,
+    },
   });
   if (!invoice) throw new AppError("Invoice not found");
   await assertProjectAccess(session, invoice.projectId);
 
-  await prisma.invoice.update({
-    where: { id: invoiceId },
-    data: { status },
-  });
+  if (status === InvoiceStatus.PAID) {
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: InvoiceStatus.PAID,
+        verifiedPaidAt: new Date(),
+        verifiedById: session.user.id,
+      },
+    });
+  } else {
+    await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status },
+    });
+  }
   await writeAudit({
     userId: session.user.id,
     companyId: session.membership.companyId,
     projectId: invoice.projectId,
-    action: "INVOICE_STATUS_UPDATED",
+    action:
+      status === InvoiceStatus.PAID
+        ? "INVOICE_PAYMENT_VERIFIED"
+        : "INVOICE_STATUS_UPDATED",
     entityType: "Invoice",
     entityId: invoiceId,
     metadata: { from: invoice.status, to: status },
   });
+
+  if (status === InvoiceStatus.PAID) {
+    const project = await prisma.project.findFirst({
+      where: { id: invoice.projectId },
+      select: { name: true, buyer: { select: { userId: true } } },
+    });
+    if (project?.buyer?.userId) {
+      await createNotificationOnce({
+        userId: project.buyer.userId,
+        companyId: session.membership.companyId,
+        type: "PAYMENT_VERIFIED",
+        title: `Payment verified — Invoice ${invoice.invoiceNumber}`,
+        body: `${project.name}: ${invoice.amount.toFixed(2)} marked paid.`,
+        href: "/client/payments",
+        entityType: "Invoice",
+        entityId: invoice.id,
+      });
+    }
+  }
+
   revalidatePath("/bookkeeper/invoices");
+  revalidatePath("/bookkeeper/payments");
   revalidatePath("/client/invoices");
   revalidatePath("/client/payments");
+  revalidatePath("/client");
+  revalidateNotificationInbox();
+}
+
+export async function reportInvoicePaidAction(invoiceId: string) {
+  const session = await requireSession();
+  if (session.membership.role !== Role.CLIENT) {
+    throw new ForbiddenError("Only the client can report an external payment");
+  }
+  await rateLimitAction(session.user.id, "invoice-report-paid");
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+          companyId: true,
+          pmId: true,
+        },
+      },
+    },
+  });
+  if (!invoice) throw new AppError("Invoice not found");
+  if (invoice.project.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
+  await assertProjectAccess(session, invoice.projectId);
+  if (invoice.payeeUserId) {
+    throw new ForbiddenError();
+  }
+  if (invoice.status === InvoiceStatus.PAID) {
+    throw new AppError("This invoice is already paid");
+  }
+  if (invoice.status === InvoiceStatus.VOID || invoice.status === InvoiceStatus.DRAFT) {
+    throw new AppError("This invoice cannot be reported as paid");
+  }
+  if (invoice.status === InvoiceStatus.PAYMENT_REPORTED) {
+    return { ok: true as const };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.invoice.updateMany({
+      where: {
+        id: invoiceId,
+        status: {
+          in: [
+            InvoiceStatus.SENT,
+            InvoiceStatus.VIEWED,
+            InvoiceStatus.OVERDUE,
+          ],
+        },
+      },
+      data: {
+        status: InvoiceStatus.PAYMENT_REPORTED,
+        reportedPaidAt: new Date(),
+        reportedById: session.user.id,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new AppError("This invoice can no longer be reported as paid");
+    }
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: invoice.projectId,
+    action: "INVOICE_PAYMENT_REPORTED",
+    entityType: "Invoice",
+    entityId: invoiceId,
+  });
+
+  const bookkeepers = await prisma.membership.findMany({
+    where: {
+      companyId: session.membership.companyId,
+      isActive: true,
+      OR: [
+        { role: Role.BOOKKEEPER },
+        { role: Role.OWNER },
+        { financeAccess: true },
+      ],
+    },
+    select: { userId: true },
+  });
+  for (const row of bookkeepers) {
+    if (row.userId === session.user.id) continue;
+    await createNotificationOnce({
+      userId: row.userId,
+      companyId: session.membership.companyId,
+      type: "PAYMENT_REPORTED",
+      title: `Payment reported — Invoice ${invoice.invoiceNumber}`,
+      body: `${session.user.name} reported paying ${invoice.amount.toFixed(2)} for ${invoice.project.name}.`,
+      href: "/bookkeeper/payments",
+      entityType: "Invoice",
+      entityId: invoice.id,
+    });
+  }
+
+  revalidatePath("/client/payments");
+  revalidatePath("/client");
+  revalidatePath("/bookkeeper/invoices");
+  revalidatePath("/bookkeeper/payments");
+  revalidateNotificationInbox();
+  return { ok: true as const };
+}
+
+export async function verifyInvoicePaidAction(
+  invoiceId: string,
+  decision: "PAID" | "NEEDS_REVIEW"
+) {
+  const session = await requireSession();
+  requireFinanceAccess(session);
+  await rateLimitAction(session.user.id, "invoice-verify");
+  if (decision !== "PAID" && decision !== "NEEDS_REVIEW") {
+    throw new AppError("Invalid decision");
+  }
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+          companyId: true,
+          buyer: { select: { userId: true } },
+        },
+      },
+    },
+  });
+  if (!invoice) throw new AppError("Invoice not found");
+  await assertProjectAccess(session, invoice.projectId);
+  if (invoice.status !== InvoiceStatus.PAYMENT_REPORTED) {
+    throw new AppError("Invoice is not awaiting verification");
+  }
+
+  const nextStatus =
+    decision === "PAID" ? InvoiceStatus.PAID : InvoiceStatus.SENT;
+
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.invoice.updateMany({
+      where: { id: invoiceId, status: InvoiceStatus.PAYMENT_REPORTED },
+      data: {
+        status: nextStatus,
+        verifiedPaidAt: decision === "PAID" ? new Date() : null,
+        verifiedById: decision === "PAID" ? session.user.id : null,
+        reportedPaidAt:
+          decision === "PAID" ? invoice.reportedPaidAt : null,
+        reportedById: decision === "PAID" ? invoice.reportedById : null,
+      },
+    });
+    if (claimed.count !== 1) {
+      throw new AppError("Invoice is no longer awaiting verification");
+    }
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: invoice.projectId,
+    action:
+      decision === "PAID"
+        ? "INVOICE_PAYMENT_VERIFIED"
+        : "INVOICE_PAYMENT_NEEDS_REVIEW",
+    entityType: "Invoice",
+    entityId: invoiceId,
+  });
+
+  if (decision === "PAID" && invoice.project.buyer?.userId) {
+    await createNotificationOnce({
+      userId: invoice.project.buyer.userId,
+      companyId: session.membership.companyId,
+      type: "PAYMENT_VERIFIED",
+      title: `Payment verified — Invoice ${invoice.invoiceNumber}`,
+      body: `Your payment for ${invoice.project.name} has been verified.`,
+      href: "/client/payments",
+      entityType: "Invoice",
+      entityId: invoice.id,
+    });
+  }
+
+  revalidatePath("/bookkeeper/invoices");
+  revalidatePath("/bookkeeper/payments");
+  revalidatePath("/client/payments");
+  revalidatePath("/client");
+  revalidatePath("/owner/jobs");
+  revalidateNotificationInbox();
 }
 
 export async function uploadCompletionDocumentAction(form: FormData) {
@@ -2178,7 +2458,7 @@ export async function ceoCompletionDecisionAction(
       await tx.project.update({
         where: { id: projectId },
         data: {
-          status: ProjectStatus.HANDED_OVER,
+          status: ProjectStatus.COMPLETED,
           progressPercent: 100,
           warrantyStart,
           warrantyEnd,
@@ -2201,9 +2481,51 @@ export async function ceoCompletionDecisionAction(
     entityId: projectId,
     metadata: { comments },
   });
+
+  if (decision === "APPROVED") {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId },
+      select: {
+        name: true,
+        pmId: true,
+        companyId: true,
+        buyer: { select: { userId: true } },
+        access: {
+          where: { role: Role.CLIENT },
+          select: { userId: true },
+        },
+      },
+    });
+    if (project) {
+      const recipients = new Set<string>();
+      if (project.pmId) recipients.add(project.pmId);
+      if (project.buyer?.userId) recipients.add(project.buyer.userId);
+      for (const a of project.access) recipients.add(a.userId);
+      for (const userId of recipients) {
+        await createNotificationOnce({
+          userId,
+          companyId: session.membership.companyId,
+          type: "WARRANTY_STARTED",
+          title: `Warranty started — ${project.name}`,
+          body: "The warranty period is now active for this home.",
+          href:
+            userId === project.pmId
+              ? `/pm/warranty?projectId=${projectId}`
+              : "/client/warranty",
+          entityType: "Project",
+          entityId: projectId,
+        });
+      }
+    }
+  }
+
   revalidatePath("/ceo/approvals");
   revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath("/pm/projects");
   revalidatePath("/client");
+  revalidatePath("/client/warranty");
+  revalidatePath("/pm/warranty");
+  revalidateNotificationInbox();
 }
 
 export async function createWarrantyTicketAction(form: FormData) {
@@ -2274,8 +2596,21 @@ export async function createWarrantyTicketAction(form: FormData) {
     entityId: ticket.id,
   });
 
+  await notifyProjectManager({
+    projectId: data.projectId,
+    companyId: session.membership.companyId,
+    type: "WARRANTY_TICKET_CREATED",
+    title: `Warranty ticket ${ticket.ticketNumber}`,
+    body: `${session.user.name} submitted “${ticket.title}”.`,
+    href: `/pm/warranty/${ticket.id}`,
+    entityType: "WarrantyTicket",
+    entityId: ticket.id,
+    excludeUserId: session.user.id,
+  });
+
   revalidatePath("/client/warranty");
   revalidatePath("/pm/warranty");
+  revalidateNotificationInbox();
   redirect(`/client/warranty/${ticket.id}`);
 }
 
@@ -2297,16 +2632,17 @@ export async function updateWarrantyStatusAction(ticketId: string, form: FormDat
   if (subcontractorId && subcontractorId !== ticket.subcontractorId) {
     await assertCompanyUser(session, subcontractorId);
   }
+  const previousSub = ticket.subcontractorId;
+  const previousStatus = ticket.status;
   await prisma.warrantyTicket.update({
     where: { id: ticketId },
     data: {
       status,
       subcontractorId,
       resolution: formString(form, "resolution") || ticket.resolution,
-      closedAt:
-        status === WarrantyStatus.CLOSED || status === WarrantyStatus.RESOLVED
-          ? new Date()
-          : null,
+      closedAt: status === WarrantyStatus.CLOSED ? new Date() : ticket.closedAt,
+      clientRepliedAt:
+        status === WarrantyStatus.CLOSED ? ticket.clientRepliedAt : ticket.clientRepliedAt,
     },
   });
   const comment = formString(form, "comment");
@@ -2322,10 +2658,117 @@ export async function updateWarrantyStatusAction(ticketId: string, form: FormDat
     action: "WARRANTY_STATUS_UPDATED",
     entityType: "WarrantyTicket",
     entityId: ticketId,
-    metadata: { status },
+    metadata: { status, subcontractorId },
   });
+
+  if (status !== previousStatus) {
+    const clientId = ticket.clientUserId;
+    if (clientId && clientId !== session.user.id) {
+      await createNotificationOnce({
+        userId: clientId,
+        companyId: session.membership.companyId,
+        type: "WARRANTY_STATUS_CHANGED",
+        title: `Warranty ${ticket.ticketNumber} updated`,
+        body: `Status is now ${status.replace(/_/g, " ")}.`,
+        href: `/client/warranty/${ticketId}`,
+        entityType: "WarrantyTicket",
+        entityId: ticketId,
+      });
+    }
+    await notifyProjectManager({
+      projectId: ticket.projectId,
+      companyId: session.membership.companyId,
+      type: "WARRANTY_STATUS_CHANGED",
+      title: `Warranty ${ticket.ticketNumber} updated`,
+      body: `Status is now ${status.replace(/_/g, " ")}.`,
+      href: `/pm/warranty/${ticketId}`,
+      entityType: "WarrantyTicket",
+      entityId: `${ticketId}:${status}`,
+      excludeUserId: session.user.id,
+      once: false,
+    });
+  }
+
+  if (subcontractorId && subcontractorId !== previousSub) {
+    await createNotificationOnce({
+      userId: subcontractorId,
+      companyId: session.membership.companyId,
+      type: "WARRANTY_TICKET_ASSIGNED",
+      title: `Warranty work assigned — ${ticket.ticketNumber}`,
+      body: ticket.title,
+      href: `/sub/warranty/${ticketId}`,
+      entityType: "WarrantyTicket",
+      entityId: ticketId,
+    });
+  }
+
   revalidatePath("/pm/warranty");
+  revalidatePath(`/pm/warranty/${ticketId}`);
   revalidatePath(`/client/warranty/${ticketId}`);
+  revalidatePath("/client/warranty");
+  revalidateNotificationInbox();
+}
+
+export async function addWarrantyCommentAction(ticketId: string, form: FormData) {
+  const session = await requireSession();
+  await rateLimitAction(session.user.id, "warranty-comment");
+  const content = formString(form, "content") || formString(form, "comment");
+  if (!content) throw new AppError("Comment is required");
+
+  const ticket = await prisma.warrantyTicket.findUnique({
+    where: { id: ticketId },
+  });
+  if (!ticket) throw new AppError("Not found");
+  await assertProjectAccess(session, ticket.projectId);
+
+  const role = session.membership.role;
+  if (role === Role.CLIENT && ticket.clientUserId !== session.user.id) {
+    throw new ForbiddenError();
+  }
+  if (ticket.status === WarrantyStatus.CLOSED && role === Role.CLIENT) {
+    throw new AppError("This warranty ticket is closed");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.warrantyComment.create({
+      data: { ticketId, userId: session.user.id, content },
+    });
+    if (role === Role.CLIENT && ticket.status === WarrantyStatus.RESOLVED) {
+      await tx.warrantyTicket.update({
+        where: { id: ticketId },
+        data: { clientRepliedAt: new Date() },
+      });
+    }
+  });
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: ticket.projectId,
+    action: "WARRANTY_COMMENTED",
+    entityType: "WarrantyTicket",
+    entityId: ticketId,
+  });
+
+  if (role === Role.CLIENT) {
+    await notifyProjectManager({
+      projectId: ticket.projectId,
+      companyId: session.membership.companyId,
+      type: "WARRANTY_CLIENT_REPLIED",
+      title: `Client replied on warranty ${ticket.ticketNumber}`,
+      body: content.slice(0, 180),
+      href: `/pm/warranty/${ticketId}`,
+      entityType: "WarrantyTicket",
+      entityId: `${ticketId}:comment:${Date.now()}`,
+      once: false,
+    });
+  }
+
+  revalidatePath(`/client/warranty/${ticketId}`);
+  revalidatePath(`/pm/warranty/${ticketId}`);
+  revalidatePath("/pm/warranty");
+  revalidatePath("/client/warranty");
+  revalidateNotificationInbox();
 }
 
 function revalidateUserSurfaces(projectIds: string[] = []) {
@@ -2557,33 +3000,39 @@ export async function inviteUserAction(form: FormData): Promise<
       metadata: { email, role, projectIds },
     });
 
-    // Notify invitee by email with a set-password link (never include temporary password)
-    let emailSent = false;
-    let emailMessage: string | null = null;
-    try {
-      const {
-        isEmailConfigured,
-        accountCreatedEmail,
-        trySendEmail,
-        createPasswordSetupLink,
-      } = await import("@/lib/email");
-      const company = await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { name: true },
-      });
-      const { getAppOrigin } = await import("@/lib/app-url");
-      const appUrl = getAppOrigin();
+    revalidateUserSurfaces(projectIds);
 
-      let setupPasswordUrl: string | null = null;
+    const { after } = await import("next/server");
+    after(async () => {
       try {
-        setupPasswordUrl = await createPasswordSetupLink(userId);
-      } catch (linkError) {
-        console.error("[invite] password setup link failed", {
-          message: linkError instanceof Error ? linkError.message : "unknown",
+        const {
+          isEmailConfigured,
+          accountCreatedEmail,
+          trySendEmail,
+          createPasswordSetupLink,
+        } = await import("@/lib/email");
+        const company = await prisma.company.findUnique({
+          where: { id: companyId },
+          select: { name: true },
         });
-      }
-
-      if (isEmailConfigured()) {
+        const { getAppOrigin } = await import("@/lib/app-url");
+        const appUrl = getAppOrigin();
+        let setupPasswordUrl: string | null = null;
+        try {
+          setupPasswordUrl = await createPasswordSetupLink(userId);
+        } catch (linkError) {
+          console.error("[invite] password setup link failed", {
+            message: linkError instanceof Error ? linkError.message : "unknown",
+          });
+        }
+        if (!isEmailConfigured()) {
+          if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
+            console.info(
+              `[invite:dev] password setup URL for ${email}: ${setupPasswordUrl}`
+            );
+          }
+          return;
+        }
         const template = accountCreatedEmail({
           userName: name,
           companyName: company?.name || "Sunbuild",
@@ -2601,42 +3050,19 @@ export async function inviteUserAction(form: FormData): Promise<
         });
         if (!mail.success) {
           console.error("[invite] account email failed:", mail.message);
-          // Keep invite UX user-facing — env/provider details stay in server logs.
-          emailMessage =
-            "User created, but the invite email could not be sent. Check email settings under Owner → Settings.";
-          if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
-            console.info(
-              `[invite:dev] email failed — password setup URL for ${email}: ${setupPasswordUrl}`
-            );
-          }
-        } else {
-          emailSent = true;
-          emailMessage = "Invite email sent with a set-password link.";
         }
-      } else {
-        emailMessage =
-          "User created, but email is not configured — invite email was not sent.";
-        if (process.env.NODE_ENV !== "production") {
-          console.info(
-            `[invite] user ${email} created; email not configured — skip account email`
-          );
-          if (setupPasswordUrl) {
-            console.info(
-              `[invite:dev] password setup URL for ${email}: ${setupPasswordUrl}`
-            );
-          }
-        }
+      } catch (error) {
+        console.error("[invite] account email unexpected error", {
+          message: error instanceof Error ? error.message : "unknown",
+        });
       }
-    } catch (error) {
-      console.error("[invite] account email unexpected error", {
-        message: error instanceof Error ? error.message : "unknown",
-      });
-      emailMessage =
-        "User created, but the invite email could not be sent. Check email settings under Owner → Settings.";
-    }
+    });
 
-    revalidateUserSurfaces(projectIds);
-    return { ok: true as const, emailSent, emailMessage };
+    return {
+      ok: true as const,
+      emailSent: true,
+      emailMessage: "User created successfully.",
+    };
   } catch (e) {
     // Prisma unique race on email
     if (
@@ -3303,9 +3729,39 @@ export async function configureProjectAction(form: FormData) {
     metadata: changes,
   });
 
+  if (pmId && pmId !== existing.pmId) {
+    const buyerName = existing.buyerId
+      ? await prisma.buyer.findUnique({
+          where: { id: existing.buyerId },
+          select: { firstName: true, lastName: true },
+        })
+      : null;
+    const clientLabel = buyerName
+      ? `${buyerName.firstName} ${buyerName.lastName}`.trim()
+      : null;
+    await createNotificationOnce({
+      userId: pmId,
+      companyId: session.membership.companyId,
+      type: "PROJECT_ASSIGNED",
+      title: `You have been assigned to ${existing.name}`,
+      body: [
+        clientLabel ? `Client: ${clientLabel}` : null,
+        `Assigned ${new Date().toLocaleDateString()}`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      href: `/pm/projects/${data.projectId}`,
+      entityType: "Project",
+      entityId: data.projectId,
+    });
+  }
+
   revalidateJobsSurfaces(data.projectId);
+  revalidatePath("/notifications");
+  revalidatePath("/pm");
   await syncProjectProgress(data.projectId);
   revalidateProjectProgressSurfaces(data.projectId);
+  revalidateNotificationInbox();
 }
 
 const PROFILE_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];

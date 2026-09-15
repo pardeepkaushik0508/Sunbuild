@@ -7,6 +7,7 @@ import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { LeadCreateDialog } from "@/components/sales/lead-create-form";
 import { requireRole } from "@/lib/session";
+import { salesLeadAccessWhere } from "@/lib/leads/visibility";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
 import { toPersonOption } from "@/lib/users/person-label";
@@ -39,10 +40,9 @@ export default async function SalesLeadsPage({ searchParams }: PageProps) {
   staleCutoff.setDate(staleCutoff.getDate() - 14);
 
   const andFilters: Prisma.LeadWhereInput[] = [];
-  if (session.membership.role === Role.SALES_MANAGER) {
-    andFilters.push({
-      OR: [{ assigneeId: session.user.id }, { assigneeId: null }],
-    });
+  const leadScope = salesLeadAccessWhere(session);
+  if (leadScope) {
+    andFilters.push(leadScope);
   }
   if (statuses) {
     andFilters.push({ status: { in: statuses } });

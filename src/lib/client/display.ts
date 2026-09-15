@@ -51,6 +51,9 @@ export function invoicePaymentBadge(
 } {
   const s = String(status).toUpperCase();
   if (s === "PAID") return { label: "Paid", tone: "success" };
+  if (s === "PAYMENT_REPORTED") {
+    return { label: "Payment reported — awaiting verification", tone: "info" };
+  }
   if (s === "VOID") return { label: "Void", tone: "default" };
   if (s === "DRAFT") return { label: "Draft", tone: "default" };
 

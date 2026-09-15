@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireSession } from "@/lib/session";
 import { requireFinanceAccess } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
+import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
 import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 
 export default async function BookkeeperInvoicesPage() {
@@ -22,7 +23,7 @@ export default async function BookkeeperInvoicesPage() {
   requireFinanceAccess(session);
   const companyId = session.membership.companyId;
 
-  const [invoices, projects] = await Promise.all([
+  const [invoices, projects, subcontractors] = await Promise.all([
     prisma.invoice.findMany({
       where: { project: { companyId } },
       include: {
@@ -36,6 +37,7 @@ export default async function BookkeeperInvoicesPage() {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    loadCompanySubcontractors(companyId),
   ]);
 
   return (
@@ -44,11 +46,18 @@ export default async function BookkeeperInvoicesPage() {
         title="Invoices"
         description="Upload and track project invoices"
         actions={
-          <Link href="/bookkeeper">
-            <Button variant="outline" size="sm">
-              Overview
-            </Button>
-          </Link>
+          <>
+            <Link href="/bookkeeper/payments">
+              <Button variant="outline" size="sm">
+                Awaiting verification
+              </Button>
+            </Link>
+            <Link href="/bookkeeper">
+              <Button variant="outline" size="sm">
+                Overview
+              </Button>
+            </Link>
+          </>
         }
       />
 
@@ -90,6 +99,16 @@ export default async function BookkeeperInvoicesPage() {
           </FormField>
           <FormField label="Due date">
             <Input name="dueDate" type="date" />
+          </FormField>
+          <FormField label="Payee">
+            <Select name="payeeUserId" defaultValue="">
+              <option value="">Client invoice</option>
+              {subcontractors.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
           </FormField>
           <FormField label="Status">
             <Select name="status" defaultValue={InvoiceStatus.SENT}>

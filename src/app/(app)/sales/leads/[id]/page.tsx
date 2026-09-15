@@ -13,6 +13,7 @@ import { FormField, Input, Select, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole } from "@/lib/session";
+import { salesLeadAccessWhere } from "@/lib/leads/visibility";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, whatsappLink } from "@/lib/utils";
 import { formatPersonOptionLabel } from "@/lib/users/person-label";
@@ -30,14 +31,7 @@ export default async function LeadDetailPage({ params }: PageProps) {
     where: {
       id,
       companyId,
-      ...(session.membership.role === Role.SALES_MANAGER
-        ? {
-            OR: [
-              { assigneeId: session.user.id },
-              { assigneeId: null },
-            ],
-          }
-        : {}),
+      ...(salesLeadAccessWhere(session) ?? {}),
     },
     include: {
       assignee: { select: { id: true, name: true } },

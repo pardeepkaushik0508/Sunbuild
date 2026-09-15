@@ -125,6 +125,7 @@ export const invoiceFormSchema = z.object({
   dueDate: z.string().optional().or(z.literal("")),
   notes: optionalText("Notes", 2000),
   status: requiredText("Status"),
+  payeeUserId: z.string().optional().or(z.literal("")),
 });
 
 export const warrantyFormSchema = z.object({
@@ -148,9 +149,11 @@ export const rfiFormSchema = z.object({
   projectId: requiredText("Project"),
   title: requiredText("Title", 1, 160),
   question: requiredText("Question", 5, 4000),
+  description: optionalText("Description", 4000),
   priority: requiredText("Priority"),
   dueDate: z.string().optional().or(z.literal("")),
   assigneeId: z.string().optional().or(z.literal("")),
+  taskId: z.string().optional().or(z.literal("")),
 });
 
 export const changeOrderFormSchema = z.object({

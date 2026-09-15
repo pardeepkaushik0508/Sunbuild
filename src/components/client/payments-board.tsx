@@ -11,6 +11,8 @@ import { FormField, Textarea } from "@/components/ui/form";
 import { useOptionalToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { clientChangeOrderDecisionAction } from "@/lib/client/actions";
+import { reportInvoicePaidAction } from "@/lib/actions";
+import { canClientReportPayment } from "@/lib/payments/invoice-flow";
 import { toSafeErrorMessage } from "@/lib/errors";
 
 export type ClientInvoiceCardData = {
@@ -60,6 +62,8 @@ export function ClientPaymentsBoard({
   const [coDetail, setCoDetail] = useState<ClientCoCardData | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] =
+    useState<ClientInvoiceCardData | null>(null);
 
   function decide(id: string, decision: "APPROVED" | "REJECTED", form: FormData) {
     setError(null);
@@ -77,6 +81,22 @@ export function ClientPaymentsBoard({
         const message =
           e instanceof Error ? e.message : "Could not update change order";
         setError(message);
+        toast?.error(toSafeErrorMessage(e));
+      }
+    });
+  }
+
+  function confirmReportedPaid() {
+    if (!reportTarget) return;
+    const invoiceId = reportTarget.id;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await reportInvoicePaidAction(invoiceId);
+        setReportTarget(null);
+        toast?.success("Payment reported — awaiting verification");
+        router.refresh();
+      } catch (e) {
         toast?.error(toSafeErrorMessage(e));
       }
     });
@@ -129,6 +149,16 @@ export function ClientPaymentsBoard({
                   </div>
                 </dl>
                 <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                  {canClientReportPayment(inv.status) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => setReportTarget(inv)}
+                    >
+                      I have paid
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
@@ -254,6 +284,39 @@ export function ClientPaymentsBoard({
           </div>
         )}
       </section>
+
+      {reportTarget ? (
+        <ModalShell
+          title="Have you already sent this payment?"
+          onClose={() => setReportTarget(null)}
+        >
+          <p className="text-sm text-sb-muted">
+            Confirm only if you already paid outside SUNBUILD. This does not
+            mark the invoice as paid until bookkeeping verifies it.
+          </p>
+          <p className="mt-3 text-sm font-medium">
+            {reportTarget.title} · {formatCurrency(reportTarget.amount)}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={pending}
+              onClick={confirmReportedPaid}
+            >
+              Confirm
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setReportTarget(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </ModalShell>
+      ) : null}
 
       {payInfo ? (
         <ModalShell

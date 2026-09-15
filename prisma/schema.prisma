@@ -44,7 +44,10 @@ model User {
   dailyLogs         DailyLog[]
   documents         Document[]
   photos            Photo[]
-  invoices          Invoice[]
+  invoices          Invoice[]           @relation("InvoiceUploader")
+  reportedInvoices  Invoice[]           @relation("InvoiceReportedBy")
+  verifiedInvoices  Invoice[]           @relation("InvoiceVerifiedBy")
+  payeeInvoices     Invoice[]           @relation("InvoicePayee")
   warrantyTickets   WarrantyTicket[]    @relation("WarrantyClient")
   assignedWarranties WarrantyTicket[]   @relation("WarrantyPM")
   warrantySubWork   WarrantyTicket[]    @relation("WarrantySub")
@@ -997,6 +1000,7 @@ model RFI {
   projectId   String
   title       String
   question    String
+  description String?
   response    String?
   status      RfiStatus @default(OPEN)
   priority    Priority  @default(MEDIUM)
@@ -1127,6 +1131,7 @@ enum InvoiceStatus {
   DRAFT
   SENT
   VIEWED
+  PAYMENT_REPORTED
   PAID
   OVERDUE
   VOID
@@ -1151,14 +1156,25 @@ model Invoice {
   mediaResourceType String?
   notes        String?
   uploadedById String
+  /// Subcontractor payee for project vendor bills. Null = client invoice.
+  payeeUserId  String?
+  reportedPaidAt DateTime?
+  reportedById   String?
+  verifiedPaidAt DateTime?
+  verifiedById   String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+  uploadedBy User    @relation("InvoiceUploader", fields: [uploadedById], references: [id])
+  payee      User?   @relation("InvoicePayee", fields: [payeeUserId], references: [id])
+  reportedBy User?   @relation("InvoiceReportedBy", fields: [reportedById], references: [id])
+  verifiedBy User?   @relation("InvoiceVerifiedBy", fields: [verifiedById], references: [id])
 
   @@index([projectId, status])
   @@index([projectId, dueDate])
+  @@index([payeeUserId, status])
+  @@index([status, reportedPaidAt])
 }
 
 enum CompletionDocStatus {
@@ -1211,6 +1227,7 @@ model WarrantyTicket {
   subcontractorId String?
   resolution      String?
   closedAt        DateTime?
+  clientRepliedAt DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 

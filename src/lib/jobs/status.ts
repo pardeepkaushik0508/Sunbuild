@@ -10,7 +10,7 @@ export function projectStatusLabel(status: ProjectStatus | string): string {
     case ProjectStatus.SUBSTANTIAL_COMPLETION:
       return "Substantial Completion";
     case ProjectStatus.PENDING_CEO_APPROVAL:
-      return "Pending CEO Approval";
+      return "Approved — pending completion";
     case ProjectStatus.COMPLETED:
       return "Completed";
     case ProjectStatus.HANDED_OVER:

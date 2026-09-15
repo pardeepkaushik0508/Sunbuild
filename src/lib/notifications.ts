@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { AppSession } from "@/lib/session";
@@ -28,9 +29,13 @@ export type CreateNotificationInput = {
   entityId?: string | null;
 };
 
+export function revalidateNotificationInbox() {
+  revalidatePath("/notifications");
+}
+
 export async function createNotification(input: CreateNotificationInput) {
   if (!input.userId) return null;
-  return prisma.notification.create({
+  const row = await prisma.notification.create({
     data: {
       userId: input.userId,
       companyId: input.companyId,
@@ -43,12 +48,33 @@ export async function createNotification(input: CreateNotificationInput) {
       entityId: input.entityId ?? null,
     },
   });
+  revalidateNotificationInbox();
+  return row;
+}
+
+/** Skip if the same unread notification already exists for this user + entity. */
+export async function createNotificationOnce(input: CreateNotificationInput) {
+  if (!input.userId) return null;
+  if (!input.entityId) return createNotification(input);
+  const existing = await prisma.notification.findFirst({
+    where: {
+      userId: input.userId,
+      companyId: input.companyId,
+      type: input.type,
+      entityType: input.entityType ?? undefined,
+      entityId: input.entityId,
+      readAt: null,
+    },
+    select: { id: true },
+  });
+  if (existing) return null;
+  return createNotification(input);
 }
 
 export async function createNotifications(inputs: CreateNotificationInput[]) {
   const rows = inputs.filter((i) => i.userId);
   if (rows.length === 0) return { count: 0 };
-  return prisma.notification.createMany({
+  const result = await prisma.notification.createMany({
     data: rows.map((input) => ({
       userId: input.userId,
       companyId: input.companyId,
@@ -61,6 +87,40 @@ export async function createNotifications(inputs: CreateNotificationInput[]) {
       entityId: input.entityId ?? null,
     })),
   });
+  if (result.count > 0) revalidateNotificationInbox();
+  return result;
+}
+
+export async function notifyProjectManager(opts: {
+  projectId: string;
+  companyId: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  href: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  excludeUserId?: string;
+  once?: boolean;
+}) {
+  const project = await prisma.project.findFirst({
+    where: { id: opts.projectId, companyId: opts.companyId },
+    select: { pmId: true, name: true },
+  });
+  if (!project?.pmId || project.pmId === opts.excludeUserId) return null;
+  const payload = {
+    userId: project.pmId,
+    companyId: opts.companyId,
+    type: opts.type,
+    title: opts.title,
+    body: opts.body ?? null,
+    href: opts.href,
+    entityType: opts.entityType ?? "Project",
+    entityId: opts.entityId ?? opts.projectId,
+  };
+  return opts.once === false
+    ? createNotification(payload)
+    : createNotificationOnce(payload);
 }
 
 /** Notify project PM (and co-PMs via ProjectAccess) about a daily log submission. */

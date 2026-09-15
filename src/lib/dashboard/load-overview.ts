@@ -10,6 +10,7 @@ import {
   depositOpenStatuses,
 } from "@/lib/insights";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
+import { depositDisplayLabel } from "@/lib/labels";
 import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import {
   loadCompanyOverviewStats,
@@ -536,7 +537,7 @@ function buildClientItems(
   return [
     {
       id: "deposit",
-      label: deposit?.label || "Sales Deposit",
+      label: depositDisplayLabel(deposit?.label),
       value: deposit
         ? `${formatCurrency(deposit.amount)} · ${deposit.status}`
         : "No open deposits",

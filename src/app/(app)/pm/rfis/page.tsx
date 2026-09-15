@@ -148,6 +148,9 @@ export default async function PMRfisPage({ searchParams }: PageProps) {
           <FormField label="Question" className="md:col-span-2">
             <Textarea name="question" required />
           </FormField>
+          <FormField label="Description" className="md:col-span-2">
+            <Textarea name="description" placeholder="Additional context (optional)" />
+          </FormField>
           <div className="md:col-span-2">
             <SubmitButton pendingLabel="Creating…">Create RFI</SubmitButton>
           </div>

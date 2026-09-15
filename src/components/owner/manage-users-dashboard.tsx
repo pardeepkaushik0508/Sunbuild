@@ -144,7 +144,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
           v &&
           v !== "ALL" &&
           !(k === "page" && v === "1") &&
-          !(k === "sort" && v === "name") &&
+          !(k === "sort" && v === "created") &&
           !(k === "pageSize" && v === "20")
         ) {
           params.set(k, v);
@@ -692,6 +692,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
               }
               setDialog(null);
               setSelectedUser(null);
+              pushQuery({ sort: "created", page: "1" });
               router.refresh();
               return { ok: true as const };
             }

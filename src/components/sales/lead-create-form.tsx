@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LeadStatus } from "@prisma/client";
 import { Plus, X } from "lucide-react";
@@ -22,11 +23,13 @@ export function LeadCreateForm({
   onSuccess?: () => void;
   onCancel?: () => void;
 }) {
+  const router = useRouter();
   const { onSubmit, errors, formError, pending } = useValidatedAction(
     leadFormSchema,
     async (fd) => {
       await createLeadAction(fd);
       onSuccess?.();
+      router.refresh();
     },
     { successMessage: "Lead created" }
   );

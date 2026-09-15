@@ -265,6 +265,7 @@ export async function assertLeadAccess(session: AppSession, leadId: string) {
         ? {
             OR: [
               { assigneeId: session.user.id },
+              { createdById: session.user.id },
               { assigneeId: null },
             ],
           }

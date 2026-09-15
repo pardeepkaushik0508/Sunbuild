@@ -186,6 +186,16 @@ function statusWhere(
       return { status: { in: PLANNING_PROJECT_STATUSES } };
     case "completed":
       return { status: { in: COMPLETED_PROJECT_STATUSES } };
+    case "approved":
+      return {
+        status: {
+          in: [
+            ProjectStatus.PENDING_CEO_APPROVAL,
+            ProjectStatus.COMPLETED,
+            ProjectStatus.HANDED_OVER,
+          ],
+        },
+      };
     case "on_hold":
       return { status: ProjectStatus.ON_HOLD };
     default:

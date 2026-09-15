@@ -25,6 +25,8 @@ import {
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
+import { loadProjectSubcontractorPayments } from "@/lib/payments/subcontractor-summary";
+import { financeRolesCanSeeAllSubPayments } from "@/lib/payments/invoice-flow";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
@@ -69,6 +71,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
     projectTasks,
     progressSources,
     approvedChangeOrders,
+    subPayments,
   ] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
@@ -133,6 +136,9 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       select: { title: true, amount: true },
       orderBy: { clientActionAt: "asc" },
     }),
+    financeRolesCanSeeAllSubPayments(session.membership.role)
+      ? loadProjectSubcontractorPayments({ session, projectId: id })
+      : Promise.resolve([]),
   ]);
 
   if (!project) notFound();
@@ -293,7 +299,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
         items={[
           {
             id: "deposit",
-            label: "Sales Deposit",
+            label: "Client Deposit",
             value: deposits[0]
               ? `$${deposits[0].amount.toLocaleString()}`
               : "ÎÃÃ¶",
@@ -330,6 +336,35 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
         ]}
         viewAllHref="/pm/contracts"
       />
+
+      {subPayments.length > 0 ? (
+        <Card>
+          <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-ink">
+            Subcontractor payments
+          </h2>
+          <ul className="mt-4 divide-y divide-sb-border">
+            {subPayments.map((row) => (
+              <li
+                key={row.subcontractorId}
+                className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{row.name}</p>
+                  <p className="text-xs text-sb-muted">
+                    {row.trade || "Subcontractor"}
+                    {row.lastPaymentAt
+                      ? ` · Last payment ${formatDate(row.lastPaymentAt)}`
+                      : ""}
+                  </p>
+                </div>
+                <p className="font-semibold">
+                  Paid: {formatCurrency(row.paidAmount)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       {/* Contract & Allowance Financial Summary (Read-Only for PM) */}
       <Card className="border-l-4 border-l-sb-blue">
