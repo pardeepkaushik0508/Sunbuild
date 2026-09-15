@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/session";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { isGoogleCalendarConfigured } from "@/lib/google/config";
 import { UnauthorizedError } from "@/lib/errors";
 

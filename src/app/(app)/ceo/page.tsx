@@ -26,7 +26,7 @@ import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
 import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import { computeProjectProgress } from "@/lib/dashboard/progress";

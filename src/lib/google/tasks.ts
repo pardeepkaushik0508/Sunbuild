@@ -1,10 +1,8 @@
 import "server-only";
 
-import { google } from "googleapis";
-import {
-  getAuthedCalendarClient,
-  type ListedGoogleEvent,
-} from "@/lib/google/calendar";
+import { tasks as googleTasks } from "@googleapis/tasks";
+import { getAuthedGoogleClient } from "@/lib/google/auth-client";
+import type { ListedGoogleEvent } from "@/lib/google/listed-event";
 import { hasGoogleTasksScope } from "@/lib/google/config";
 import {
   getGoogleCache,
@@ -56,7 +54,7 @@ export async function listGoogleTasksInRange(
     invalidateGoogleCacheForUser(userId);
   }
 
-  const authed = await getAuthedCalendarClient(userId, companyId);
+  const authed = await getAuthedGoogleClient(userId, companyId);
   if (!authed) {
     return {
       tasks: [],
@@ -82,7 +80,7 @@ export async function listGoogleTasksInRange(
   }
 
   try {
-    const tasksApi = google.tasks({ version: "v1", auth: authed.auth });
+    const tasksApi = googleTasks({ version: "v1", auth: authed.auth });
     const listsRes = await tasksApi.tasklists.list({ maxResults: 100 });
     const lists = listsRes.data.items ?? [];
     const tasks: ListedGoogleEvent[] = [];

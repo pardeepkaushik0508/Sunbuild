@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/ui/card";
 import { GoogleCalendarSettingsCard } from "@/components/settings/google-calendar-card";
 import { MicrosoftTodoSettingsCard } from "@/components/settings/microsoft-todo-card";
 import { requireSession } from "@/lib/session";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { getPublicMicrosoftConnection } from "@/lib/microsoft/todo";
 import { ROLE_HOME } from "@/lib/permissions";
 

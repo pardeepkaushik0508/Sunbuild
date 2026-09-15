@@ -19,7 +19,7 @@ import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree"
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
 
 export type PmOverviewStat = {

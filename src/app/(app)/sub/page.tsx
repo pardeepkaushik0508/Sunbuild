@@ -22,7 +22,7 @@ import { prisma } from "@/lib/db";
 import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
 import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 
 export default async function SubDashboardPage() {

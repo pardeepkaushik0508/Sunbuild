@@ -14,7 +14,7 @@ import type { InsightCard } from "@/components/dashboard/ai-insights";
 import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
 import type { AppSession } from "@/lib/session";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { toPersonOption, type PersonOption } from "@/lib/users/person-label";
 
 export type SalesKpi = {

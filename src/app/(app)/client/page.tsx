@@ -28,7 +28,7 @@ import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { buildGanttTree } from "@/lib/dashboard/gantt-tree";
 import { loadProgressByProjectIds } from "@/lib/dashboard/sync-project-progress";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 import type { TodoItem } from "@/components/dashboard/todo-widget";
 import { ProjectPhotoGallery } from "@/components/client/project-photo-gallery";

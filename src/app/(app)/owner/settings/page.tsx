@@ -8,7 +8,7 @@ import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { getCompanySettings } from "@/lib/settings/store";
 import { canEditSettings } from "@/lib/permissions";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { getPublicMicrosoftConnection } from "@/lib/microsoft/todo";
 
 export default async function OwnerSettingsPage({

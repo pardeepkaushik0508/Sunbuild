@@ -31,7 +31,7 @@ import type { TodoItem } from "@/components/dashboard/todo-widget";
 import type { GanttTask } from "@/lib/schedule/gantt-status";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
-import { getPublicConnection } from "@/lib/google/calendar";
+import { getPublicConnection } from "@/lib/google/auth-client";
 import { getPublicMicrosoftConnection } from "@/lib/microsoft/todo";
 import type { PublicMicrosoftTodoConnection } from "@/lib/microsoft/types";
 import { loadProjectSubcontractors } from "@/lib/users/subcontractors";

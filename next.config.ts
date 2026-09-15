@@ -63,12 +63,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "25mb",
     },
-    // Render (and similar hosts) report many CPUs; default worker count can OOM
-    // during "Generating static pages". Cap concurrency for reliable deploys.
-    cpus: 2,
+    // Render Free reports many CPUs; default worker count can OOM.
+    // Cap hard for constrained build environments (TypeScript + static gen).
+    cpus: 1,
     workerThreads: false,
-    staticGenerationMaxConcurrency: 4,
-    staticGenerationMinPagesPerWorker: 25,
+    staticGenerationMaxConcurrency: 2,
+    staticGenerationMinPagesPerWorker: 50,
   },
   async headers() {
     return [
