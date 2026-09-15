@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { PhotoVisibility, Role } from "@prisma/client";
-import { PageHeader, Card, EmptyState } from "@/components/ui/card";
+import { PageHeader, EmptyState } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ClientPortalBanner } from "@/components/client/portal-banner";
+import { ProjectPhotoGallery } from "@/components/client/project-photo-gallery";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { formatDate, mediaUrl } from "@/lib/utils";
-import { MediaImage } from "@/components/ui/media-image";
 import { resolveClientProject } from "@/lib/client/project";
 
 export default async function ClientPhotosPage({
@@ -42,7 +41,6 @@ export default async function ClientPhotosPage({
       projectId: project.id,
       visibility: PhotoVisibility.CLIENT_VISIBLE,
     },
-    include: { project: { select: { name: true } } },
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     take: 100,
   });
@@ -67,41 +65,17 @@ export default async function ClientPhotosPage({
         }
       />
 
-      {photos.length === 0 ? (
-        <EmptyState
-          title="No photos yet"
-          description="When your project manager uploads progress photos, they will appear here."
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {photos.map((photo) => (
-            <Card key={photo.id} className="overflow-hidden p-0">
-              <a
-                href={mediaUrl(photo.filePath) ?? "#"}
-                target="_blank"
-                rel="noreferrer"
-                className="block"
-              >
-                <MediaImage
-                  src={photo.filePath}
-                  alt={photo.caption ?? photo.fileName}
-                  width={photo.mediaWidth ?? 480}
-                  height={photo.mediaHeight ?? 320}
-                />
-              </a>
-              <div className="p-4">
-                <p className="font-medium">{photo.caption ?? photo.fileName}</p>
-                <p className="mt-1 text-xs text-sb-muted">
-                  {photo.project.name}
-                  {photo.publishedAt
-                    ? ` · ${formatDate(photo.publishedAt)}`
-                    : ` · ${formatDate(photo.createdAt)}`}
-                </p>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+      <ProjectPhotoGallery
+        title="Project Photos"
+        cap={100}
+        photos={photos.map((photo) => ({
+          id: photo.id,
+          src: photo.filePath,
+          alt: photo.caption ?? photo.fileName,
+          caption: photo.caption ?? photo.fileName,
+          createdAt: photo.publishedAt ?? photo.createdAt,
+        }))}
+      />
     </div>
   );
 }

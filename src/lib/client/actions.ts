@@ -21,6 +21,7 @@ import {
 import { requireClientProjectAccess } from "@/lib/client/project";
 import { computeAllowanceUsage } from "@/lib/client/allowance";
 import { revalidateJobsSurfaces } from "@/lib/jobs/revalidate-jobs";
+import { isSectionClientVisible } from "@/lib/selections/query";
 
 function formString(form: FormData, key: string) {
   const v = form.get(key);
@@ -74,6 +75,9 @@ export async function clientApproveSelectionSectionAction(sectionId: string) {
   });
   if (!section) throw new AppError("Selection not found");
   await requireClientProjectAccess(session, section.package.projectId);
+  if (!(await isSectionClientVisible(section.id))) {
+    throw new AppError("Selection not found");
+  }
 
   if (
     section.status === SelectionSectionStatus.LOCKED ||

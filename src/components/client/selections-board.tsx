@@ -11,11 +11,15 @@ import { dueBadgeLabel, type DueBadge } from "@/lib/client/due";
 import { clientApproveSelectionSectionAction } from "@/lib/client/actions";
 import { useOptionalToast } from "@/components/ui/toast";
 import { toSafeErrorMessage } from "@/lib/errors";
+import { ImageLightboxTrigger } from "@/components/ui/image-lightbox";
+import { MediaImage } from "@/components/ui/media-image";
+import Link from "next/link";
 
 export type ClientSelectionCardData = {
   id: string;
   name: string;
   description: string | null;
+  category?: string | null;
   priority: Priority;
   status: SelectionSectionStatus;
   dueDate: string | null;
@@ -26,6 +30,8 @@ export type ClientSelectionCardData = {
   packageTitle: string;
   askQuestionHref: string | null;
   canApprove: boolean;
+  href?: string;
+  images?: Array<{ id: string; src: string; alt: string }>;
 };
 
 const FILTERS = [
@@ -94,8 +100,8 @@ export function ClientSelectionsBoard({
   if (cards.length === 0) {
     return (
       <EmptyState
-        title="No selections yet"
-        description="Your project manager will open selection packages when they are ready for you."
+        title="No selections are available yet."
+        description="Your project manager will share selections for this home when they are ready."
       />
     );
   }
@@ -200,6 +206,38 @@ export function ClientSelectionsBoard({
                   {card.description || "Review and confirm this selection category."}
                 </p>
 
+                {card.images && card.images.length > 0 ? (
+                  <ImageLightboxTrigger
+                    images={card.images.map((img) => ({
+                      id: img.id,
+                      src: img.src,
+                      alt: img.alt,
+                    }))}
+                  >
+                    {(open) => (
+                      <div className="mt-3 grid grid-cols-3 gap-1.5">
+                        {card.images!.slice(0, 3).map((img, index) => (
+                          <button
+                            key={img.id}
+                            type="button"
+                            onClick={() => open(index)}
+                            className="overflow-hidden rounded-[8px] border border-sb-border"
+                            aria-label={`View ${img.alt} larger`}
+                          >
+                            <MediaImage
+                              src={img.src}
+                              alt={img.alt}
+                              aspectClassName="aspect-square"
+                              width={160}
+                              height={160}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </ImageLightboxTrigger>
+                ) : null}
+
                 <div className="mt-4">
                   <div className="mb-1 flex items-center justify-between text-xs">
                     <span className="font-medium text-sb-ink">Allowance used</span>
@@ -235,6 +273,13 @@ export function ClientSelectionsBoard({
                 </div>
 
                 <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                  {card.href ? (
+                    <Link href={card.href}>
+                      <Button type="button" size="sm" variant="outline">
+                        View
+                      </Button>
+                    </Link>
+                  ) : null}
                   {card.canApprove ? (
                     <Button
                       type="button"

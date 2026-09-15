@@ -2,15 +2,19 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Role, SelectionSectionStatus } from "@prisma/client";
 import { reviewSelectionSectionAction } from "@/lib/actions";
+import { uploadSelectionImagesAction } from "@/lib/pm/selection-actions";
 import { PageHeader, Card } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { ImageUploadField } from "@/components/ui/image-upload-field";
+import { ProjectPhotoGallery } from "@/components/client/project-photo-gallery";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { getSelectionImagesBySectionIds } from "@/lib/selections/query";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -44,6 +48,16 @@ export default async function PMSelectionDetailPage({ params }: PageProps) {
   });
 
   if (!pkg) notFound();
+
+  const imageRows = await getSelectionImagesBySectionIds(
+    pkg.sections.map((s) => s.id)
+  );
+  const imagesBySection = new Map<string, typeof imageRows>();
+  for (const img of imageRows) {
+    const list = imagesBySection.get(img.sectionId) ?? [];
+    list.push(img);
+    imagesBySection.set(img.sectionId, list);
+  }
 
   return (
     <div>
@@ -86,6 +100,37 @@ export default async function PMSelectionDetailPage({ params }: PageProps) {
                 {section.status.replace(/_/g, " ")}
               </StatusBadge>
             </div>
+            {imagesBySection.get(section.id)?.length ? (
+              <div className="mt-4">
+                <ProjectPhotoGallery
+                  title="Images"
+                  cap={12}
+                  photos={(imagesBySection.get(section.id) ?? []).map((img) => ({
+                    id: img.id,
+                    src: img.filePath,
+                    alt: img.caption || section.name,
+                    caption: img.caption,
+                    createdAt: img.createdAt,
+                  }))}
+                />
+              </div>
+            ) : null}
+
+            {section.status !== SelectionSectionStatus.LOCKED &&
+            section.status !== SelectionSectionStatus.APPROVED ? (
+              <ActionForm
+                action={uploadSelectionImagesAction}
+                successMessage="Images uploaded"
+                encType="multipart/form-data"
+                className="mt-4 space-y-3"
+              >
+                <input type="hidden" name="sectionId" value={section.id} />
+                <ImageUploadField name="images" multiple label="Add images" />
+                <SubmitButton size="sm" pendingLabel="Uploading…">
+                  Upload images
+                </SubmitButton>
+              </ActionForm>
+            ) : null}
 
             <div className="mt-4 space-y-3">
               {section.items.map((item) => (

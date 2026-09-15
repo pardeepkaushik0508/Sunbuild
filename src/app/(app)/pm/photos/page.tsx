@@ -110,7 +110,13 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
             </Select>
           </FormField>
           <div className="md:col-span-2">
-            <ImageUploadField name="file" required label="Image" />
+            <ImageUploadField
+              name="photos"
+              multiple
+              required
+              label="Images"
+              maxFiles={10}
+            />
           </div>
           <div className="md:col-span-2">
             <SubmitButton pendingLabel="Uploading…">Upload</SubmitButton>

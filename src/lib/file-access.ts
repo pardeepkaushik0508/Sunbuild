@@ -16,6 +16,7 @@ import {
 } from "@/lib/session";
 import { sessionHasFinanceAccess } from "@/lib/authorization";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { getClientVisibleSectionIds } from "@/lib/selections/query";
 
 function normalizePath(filePath: string) {
   return filePath.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -203,9 +204,55 @@ export async function assertFileDownloadAccess(
     return;
   }
 
+  // Selection images — SQL so this works before a full Prisma regenerate
+  const selectionImageRows = await prisma.$queryRaw<
+    Array<{ projectId: string; clientVisible: boolean }>
+  >`
+    SELECT p."projectId" as "projectId", s."clientVisible" as "clientVisible"
+    FROM "SelectionImage" i
+    INNER JOIN "SelectionSection" s ON s.id = i."sectionId"
+    INNER JOIN "SelectionPackage" p ON p.id = s."packageId"
+    WHERE i."filePath" = ${filePath}
+    LIMIT 1
+  `.catch(() => [] as Array<{ projectId: string; clientVisible: boolean }>);
+  const selectionImage = selectionImageRows[0];
+  if (selectionImage) {
+    await assertProjectAccess(session, selectionImage.projectId);
+    if (isClient && !selectionImage.clientVisible) {
+      throw new ForbiddenError();
+    }
+    if (isSub) throw new ForbiddenError();
+    return;
+  }
+
+  const selectionItem = await prisma.selectionItem.findFirst({
+    where: { OR: [{ imageUrl: filePath }, { attachmentPath: filePath }] },
+    select: {
+      sectionId: true,
+      section: {
+        select: {
+          package: { select: { projectId: true } },
+        },
+      },
+    },
+  });
+  if (selectionItem) {
+    await assertProjectAccess(session, selectionItem.section.package.projectId);
+    if (isClient) {
+      const visible = await getClientVisibleSectionIds([
+        selectionItem.section.package.projectId,
+      ]);
+      if (!visible.includes(selectionItem.sectionId)) {
+        throw new ForbiddenError();
+      }
+    }
+    if (isSub) throw new ForbiddenError();
+    return;
+  }
+
   // Fallback: path-prefixed folders like documents/{projectId}/...
   const projectMatch = filePath.match(
-    /^(?:documents|photos|invoices|completion|warranty|materials)\/([^/]+)\//
+    /^(?:documents|photos|invoices|completion|warranty|materials|selections)\/([^/]+)\//
   );
   if (projectMatch?.[1]) {
     const maybeProjectId = projectMatch[1];
@@ -227,6 +274,9 @@ export async function assertFileDownloadAccess(
       throw new ForbiddenError();
     }
     if (filePath.startsWith("materials/") && (isClient || isSub)) {
+      throw new ForbiddenError();
+    }
+    if (filePath.startsWith("selections/") && (isClient || isSub)) {
       throw new ForbiddenError();
     }
     return;

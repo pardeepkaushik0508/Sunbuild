@@ -10,7 +10,7 @@ import {
 } from "@/lib/session";
 import { requireCapability } from "@/lib/authorization";
 import { AppError } from "@/lib/errors";
-import { saveCompanyUpload, deleteUpload } from "@/lib/storage";
+import { saveCompanyUpload, deleteUpload, storageMeta } from "@/lib/storage";
 import { writeAudit } from "@/lib/audit";
 import {
   ACTION_RATE,
@@ -18,6 +18,15 @@ import {
   assertRateLimit,
   clientKeyFromHeaders,
 } from "@/lib/rate-limit";
+import {
+  collectUploadFiles,
+  parseClientVisibleFlag,
+} from "@/lib/media/collect-upload-files";
+import { revalidateProjectSelections } from "@/lib/photos/revalidate";
+import {
+  parseSelectionPriority,
+  parseSelectionStatus,
+} from "@/lib/selections/query";
 
 function formString(form: FormData, key: string) {
   const v = form.get(key);
@@ -122,20 +131,204 @@ export async function setSectionBudgetAction(form: FormData) {
     entityId: sectionId,
   });
 
-  revalidatePath("/pm/selections");
+  revalidateProjectSelections(section.package.projectId);
   revalidatePath(`/pm/selections/${section.packageId}`);
-  revalidatePath("/client/selections");
+}
+
+async function ensureOpenSelectionPackage(projectId: string) {
+  const existing = await prisma.selectionPackage.findFirst({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) {
+    if (existing.status === SelectionPackageStatus.LOCKED) {
+      throw new AppError("This project's selection package is locked");
+    }
+    if (existing.status === SelectionPackageStatus.DRAFT) {
+      return prisma.selectionPackage.update({
+        where: { id: existing.id },
+        data: { status: SelectionPackageStatus.OPEN },
+      });
+    }
+    return existing;
+  }
+  return prisma.selectionPackage.create({
+    data: {
+      projectId,
+      title: "Home Selections",
+      status: SelectionPackageStatus.OPEN,
+    },
+  });
+}
+
+async function attachSelectionImages(opts: {
+  companyId: string;
+  projectId: string;
+  sectionId: string;
+  files: File[];
+}) {
+  if (opts.files.length === 0) return;
+  const maxSortRows = await prisma.$queryRaw<Array<{ max: number | null }>>`
+    SELECT MAX("sortOrder") as max FROM "SelectionImage" WHERE "sectionId" = ${opts.sectionId}
+  `.catch(() => [{ max: 0 }]);
+  let sort = Number(maxSortRows[0]?.max ?? 0);
+  const uploaded: Array<{
+    publicId: string | null;
+    resourceType: string | null;
+    filePath: string;
+  }> = [];
+  try {
+    for (const file of opts.files) {
+      const saved = await saveCompanyUpload(
+        opts.companyId,
+        file,
+        `selections/${opts.projectId}`
+      );
+      uploaded.push({
+        publicId: saved.publicId,
+        resourceType: saved.resourceType,
+        filePath: saved.filePath,
+      });
+      sort += 1;
+      const meta = storageMeta(saved);
+      const imageId = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      await prisma.$executeRaw`
+        INSERT INTO "SelectionImage" (
+          id, "sectionId", "filePath", "fileName", "storageProvider", "storagePublicId",
+          "mediaWidth", "mediaHeight", "mediaFormat", "mediaBytes", "mediaResourceType",
+          "sortOrder", "createdAt"
+        ) VALUES (
+          ${imageId}, ${opts.sectionId}, ${meta.filePath}, ${meta.fileName},
+          ${meta.storageProvider}, ${meta.storagePublicId},
+          ${meta.mediaWidth}, ${meta.mediaHeight}, ${meta.mediaFormat}, ${meta.mediaBytes},
+          ${meta.mediaResourceType}, ${sort}, ${new Date()}
+        )
+      `;
+    }
+  } catch (err) {
+    for (const u of uploaded) {
+      try {
+        await deleteUpload(u.filePath, {
+          publicId: u.publicId,
+          resourceType: u.resourceType || "image",
+        });
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Create a project-scoped selection (SelectionSection on the project's package).
+ * One record is shared by PM tools and the client portal.
+ */
+export async function createSelectionAction(form: FormData) {
+  const session = await requireSession();
+  requireCapability(session, "manageSelectionsStaff");
+  await rateLimit(session.user.id, "selection-create", true);
+
+  const projectId = formString(form, "projectId");
+  if (!projectId) throw new AppError("Project is required");
+  await assertProjectAccess(session, projectId);
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, companyId: session.membership.companyId },
+    select: { id: true },
+  });
+  if (!project) throw new AppError("Project not found");
+
+  const name = formString(form, "name") || formString(form, "title");
+  if (!name) throw new AppError("Selection title is required");
+
+  const pkg = await ensureOpenSelectionPackage(projectId);
+  const maxSort = await prisma.selectionSection.aggregate({
+    where: { packageId: pkg.id },
+    _max: { sortOrder: true },
+  });
+
+  const dueRaw = formString(form, "dueDate");
+  const statusParsed = parseSelectionStatus(formString(form, "status"));
+  const clientVisible = parseClientVisibleFlag(
+    formString(form, "clientVisible"),
+    true
+  );
+
+  const optionLabel = formString(form, "optionLabel");
+  const created = await prisma.selectionSection.create({
+    data: {
+      packageId: pkg.id,
+      name,
+      sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
+      notes: formString(form, "notes") || formString(form, "description") || null,
+      allowance: formString(form, "budgetAmount")
+        ? Number(formString(form, "budgetAmount"))
+        : null,
+      dueDate: dueRaw ? new Date(dueRaw) : null,
+      priority: parseSelectionPriority(formString(form, "priority")),
+      status: statusParsed ?? SelectionSectionStatus.DRAFT,
+      items: {
+        create: [
+          {
+            label: optionLabel || "Primary selection",
+            optionValue: formString(form, "specification") || null,
+            notes: formString(form, "itemNotes") || null,
+            sortOrder: 1,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.$executeRaw`
+    UPDATE "SelectionSection"
+    SET "clientVisible" = ${clientVisible},
+        category = ${formString(form, "category") || null},
+        instructions = ${formString(form, "instructions") || null}
+    WHERE id = ${created.id}
+  `.catch(() => undefined);
+
+  const files = collectUploadFiles(form);
+  if (files.length > 0) {
+    await attachSelectionImages({
+      companyId: session.membership.companyId,
+      projectId,
+      sectionId: created.id,
+      files,
+    });
+  }
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId,
+    action: "SELECTION_CREATED",
+    entityType: "SelectionSection",
+    entityId: created.id,
+  });
+
+  revalidateProjectSelections(projectId);
+  revalidatePath(`/pm/selections/${pkg.id}`);
+  return { success: true, sectionId: created.id, packageId: pkg.id };
 }
 
 export async function createSelectionSectionAction(form: FormData) {
   const session = await requireSession();
   requireCapability(session, "manageSelectionsStaff");
-  await rateLimit(session.user.id, "selection-section");
+  await rateLimit(session.user.id, "selection-section", true);
 
-  const packageId = formString(form, "packageId");
-  const name = formString(form, "name");
+  let packageId = formString(form, "packageId");
+  const projectIdInput = formString(form, "projectId");
+  const name = formString(form, "name") || formString(form, "title");
+  if (!name) throw new AppError("Selection title is required");
+
+  if (!packageId && projectIdInput) {
+    await assertProjectAccess(session, projectIdInput);
+    const pkg = await ensureOpenSelectionPackage(projectIdInput);
+    packageId = pkg.id;
+  }
   if (!packageId) throw new AppError("Package is required");
-  if (!name) throw new AppError("Category name is required");
 
   const pkg = await prisma.selectionPackage.findUnique({
     where: { id: packageId },
@@ -152,38 +345,85 @@ export async function createSelectionSectionAction(form: FormData) {
   });
 
   const dueRaw = formString(form, "dueDate");
-  const priorityRaw = formString(form, "priority").toUpperCase();
-  const priority =
-    priorityRaw === "HIGH" || priorityRaw === "LOW" || priorityRaw === "MEDIUM"
-      ? priorityRaw
-      : "MEDIUM";
+  const clientVisible = parseClientVisibleFlag(
+    formString(form, "clientVisible"),
+    true
+  );
 
   const created = await prisma.selectionSection.create({
     data: {
       packageId,
       name,
       sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
-      notes: formString(form, "notes") || null,
+      notes: formString(form, "notes") || formString(form, "description") || null,
       allowance: formString(form, "budgetAmount")
         ? Number(formString(form, "budgetAmount"))
         : null,
+      dueDate: dueRaw ? new Date(dueRaw) : null,
+      priority: parseSelectionPriority(formString(form, "priority")),
       items: {
         create: [{ label: "Primary selection", sortOrder: 1 }],
       },
     },
   });
 
-  // Persist dueDate/priority even if Prisma Client typings lag behind schema push
   await prisma.$executeRaw`
-    UPDATE SelectionSection
-    SET dueDate = ${dueRaw ? new Date(dueRaw) : null},
-        priority = ${priority}
+    UPDATE "SelectionSection"
+    SET "clientVisible" = ${clientVisible},
+        category = ${formString(form, "category") || null},
+        instructions = ${formString(form, "instructions") || null}
     WHERE id = ${created.id}
-  `;
+  `.catch(() => undefined);
 
-  revalidatePath("/pm/selections");
+  const files = collectUploadFiles(form);
+  if (files.length > 0) {
+    await attachSelectionImages({
+      companyId: session.membership.companyId,
+      projectId: pkg.projectId,
+      sectionId: created.id,
+      files,
+    });
+  }
+
+  revalidateProjectSelections(pkg.projectId);
   revalidatePath(`/pm/selections/${packageId}`);
-  revalidatePath("/client/selections");
+}
+
+export async function uploadSelectionImagesAction(form: FormData) {
+  const session = await requireSession();
+  requireCapability(session, "manageSelectionsStaff");
+  await rateLimit(session.user.id, "selection-images", true);
+
+  const sectionId = formString(form, "sectionId");
+  if (!sectionId) throw new AppError("Selection is required");
+
+  const section = await prisma.selectionSection.findUnique({
+    where: { id: sectionId },
+    include: { package: true },
+  });
+  if (!section) throw new AppError("Selection not found");
+  await assertProjectAccess(session, section.package.projectId);
+
+  if (
+    section.status === SelectionSectionStatus.LOCKED ||
+    section.status === SelectionSectionStatus.APPROVED
+  ) {
+    throw new AppError("Approved/locked selections cannot add images");
+  }
+
+  const files = collectUploadFiles(form);
+  if (files.length === 0) throw new AppError("Please select an image to upload");
+
+  await attachSelectionImages({
+    companyId: session.membership.companyId,
+    projectId: section.package.projectId,
+    sectionId: section.id,
+    files,
+  });
+
+  revalidateProjectSelections(section.package.projectId);
+  revalidatePath(`/pm/selections/${section.packageId}`);
+  return { success: true };
 }
 
 export async function addSelectionItemAction(form: FormData) {
@@ -248,7 +488,7 @@ export async function addSelectionItemAction(form: FormData) {
     },
   });
 
-  revalidatePath("/pm/selections");
+  revalidateProjectSelections(section.package.projectId);
   revalidatePath(`/pm/selections/${section.packageId}`);
 }
 

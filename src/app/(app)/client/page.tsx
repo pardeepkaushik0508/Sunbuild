@@ -23,7 +23,6 @@ import { GanttChartLazy as GanttChart } from "@/components/schedule/gantt-chart-
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, mediaUrl, whatsappLink } from "@/lib/utils";
-import { MediaImage } from "@/components/ui/media-image";
 import { resolveClientProject } from "@/lib/client/project";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { buildGanttTree } from "@/lib/dashboard/gantt-tree";
@@ -32,6 +31,12 @@ import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/calendar";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 import type { TodoItem } from "@/components/dashboard/todo-widget";
+import { ProjectPhotoGallery } from "@/components/client/project-photo-gallery";
+import {
+  CLIENT_SELECTION_PACKAGE_STATUS_WHERE,
+  getClientVisibleSectionIds,
+  idInFilter,
+} from "@/lib/selections/query";
 
 export default async function ClientHomePage({
   searchParams,
@@ -52,6 +57,9 @@ export default async function ClientHomePage({
     );
   }
 
+  const visibleSectionIds = await getClientVisibleSectionIds([project.id]);
+  const visibleSectionFilter = idInFilter(visibleSectionIds);
+
   const [full, projects, scheduleItems, milestones, openTasks] =
     await Promise.all([
       prisma.project.findFirst({
@@ -70,17 +78,21 @@ export default async function ClientHomePage({
           photos: {
             where: { visibility: PhotoVisibility.CLIENT_VISIBLE },
             orderBy: { createdAt: "desc" },
-            take: 6,
+            take: 24,
           },
           changeOrders: {
             where: { status: ChangeOrderStatus.PENDING_CLIENT },
             take: 8,
           },
           selectionPackages: {
-            where: { status: { not: "DRAFT" } },
+            where: {
+              ...CLIENT_SELECTION_PACKAGE_STATUS_WHERE,
+              sections: { some: visibleSectionFilter },
+            },
             include: {
               sections: {
                 where: {
+                  ...visibleSectionFilter,
                   status: {
                     in: ["DRAFT", "CHANGES_REQUESTED", "SUBMITTED"],
                   },
@@ -274,6 +286,18 @@ export default async function ClientHomePage({
         activeProjectId={full.id}
       />
 
+      <ProjectPhotoGallery
+        title="Project Photos"
+        photos={full.photos.map((ph) => ({
+          id: ph.id,
+          src: ph.filePath,
+          alt: ph.caption || "Project photo",
+          caption: ph.caption,
+          createdAt: ph.createdAt,
+        }))}
+        viewAllHref={`/client/photos?projectId=${full.id}`}
+      />
+
       <DashboardWidgetRow>
         <RecentJobsCard
           jobs={projects.map((p) => ({
@@ -322,41 +346,6 @@ export default async function ClientHomePage({
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <Card>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold">Build Feed</h3>
-            <Link
-              href={`/client/photos?projectId=${full.id}`}
-              className="text-xs font-medium text-sb-ink underline"
-            >
-              All photos
-            </Link>
-          </div>
-          {full.photos.length === 0 ? (
-            <p className="text-sm text-sb-muted">
-              Progress photos from your project manager will appear here.
-            </p>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {full.photos.map((ph) => (
-                <Link
-                  key={ph.id}
-                  href={`/client/photos?projectId=${full.id}`}
-                  className="block overflow-hidden rounded-lg"
-                >
-                  <MediaImage
-                    src={ph.filePath}
-                    alt={ph.caption || ""}
-                    aspectClassName="aspect-square"
-                    width={200}
-                    height={200}
-                  />
-                </Link>
-              ))}
-            </div>
-          )}
-        </Card>
-
         <Card>
           <h3 className="mb-3 text-base font-semibold">Project Documents</h3>
           <div className="space-y-2">

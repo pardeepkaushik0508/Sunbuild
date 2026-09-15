@@ -184,6 +184,9 @@ export function toCloudinaryFolder(appFolder: string) {
   const materials = cleaned.match(/^materials\/([^/]+)$/);
   if (materials) return `${root}/projects/${materials[1]}/documents`;
 
+  const selections = cleaned.match(/^selections\/([^/]+)$/);
+  if (selections) return `${root}/projects/${selections[1]}/selections`;
+
   const warranty = cleaned.match(/^warranty\/([^/]+)$/);
   if (warranty) return `${root}/projects/warranty/${warranty[1]}`;
 

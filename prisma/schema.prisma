@@ -848,6 +848,8 @@ model SelectionPackage {
 
   project  Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sections SelectionSection[]
+
+  @@index([projectId])
 }
 
 enum SelectionSectionStatus {
@@ -863,11 +865,17 @@ model SelectionSection {
   packageId   String
   allowanceItemId String?
   name        String
+  /// Optional grouping label (Flooring, Cabinets, Lighting). Title stays in `name`.
+  category    String?
   sortOrder   Int                    @default(0)
   status      SelectionSectionStatus @default(DRAFT)
   allowance   Float?
   /// Client-facing description shown on Your Selections cards.
   notes       String?
+  /// Internal/client instructions for completing the selection.
+  instructions String?
+  /// When false, staff can prepare the selection; clients never see it.
+  clientVisible Boolean              @default(true)
   dueDate     DateTime?
   priority    Priority               @default(MEDIUM)
   createdAt   DateTime               @default(now())
@@ -877,6 +885,32 @@ model SelectionSection {
   allowanceItem AllowanceItem?       @relation(fields: [allowanceItemId], references: [id], onDelete: SetNull)
   items         SelectionItem[]
   approvals     SelectionApproval[]
+  images        SelectionImage[]
+
+  @@index([packageId, clientVisible])
+}
+
+/// Cloudinary (or legacy) images attached to a selection section — not a duplicate selection record.
+model SelectionImage {
+  id                String   @id @default(cuid())
+  sectionId         String
+  filePath          String
+  fileName          String
+  storageProvider   String?
+  storagePublicId   String?
+  mediaWidth        Int?
+  mediaHeight       Int?
+  mediaFormat       String?
+  mediaBytes        Int?
+  mediaResourceType String?
+  caption           String?
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  section SelectionSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId, sortOrder])
+  @@index([storagePublicId])
 }
 
 model SelectionItem {
@@ -1083,6 +1117,7 @@ model Photo {
   uploadedBy User    @relation(fields: [uploadedById], references: [id])
 
   @@index([projectId, visibility])
+  @@index([projectId, visibility, createdAt])
   @@index([storagePublicId])
 }
 

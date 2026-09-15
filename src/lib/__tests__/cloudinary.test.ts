@@ -31,10 +31,10 @@ describe("cloudinary url helpers", () => {
     assert.equal(parsed.api_secret, "abc~secret");
   });
 
-  it("maps photo folders under projects/", () => {
+  it("maps selection folders under projects/", () => {
     assert.equal(
-      toCloudinaryFolder("photos/proj123"),
-      "sunbuild/projects/proj123/photos"
+      toCloudinaryFolder("selections/proj123"),
+      "sunbuild/projects/proj123/selections"
     );
   });
 

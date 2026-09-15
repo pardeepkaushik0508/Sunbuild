@@ -9,6 +9,12 @@ import { computeAllowanceUsage } from "@/lib/client/allowance";
 import { resolveDueBadge } from "@/lib/client/due";
 import { selectionClientFields } from "@/lib/client/selection-fields";
 import { whatsappLink } from "@/lib/utils";
+import {
+  CLIENT_SELECTION_PACKAGE_STATUS_WHERE,
+  getClientVisibleSectionIds,
+  getSelectionImagesBySectionIds,
+  idInFilter,
+} from "@/lib/selections/query";
 
 export default async function ClientSelectionsPage({
   searchParams,
@@ -38,63 +44,39 @@ export default async function ClientSelectionsPage({
         })
       : [{ id: project.id, name: project.name }];
 
+  const visibleSectionIds = await getClientVisibleSectionIds([project.id]);
+  const visibleSectionFilter = idInFilter(visibleSectionIds);
+
   const packages = await prisma.selectionPackage.findMany({
     where: {
       projectId: project.id,
-      status: { not: "DRAFT" },
+      ...CLIENT_SELECTION_PACKAGE_STATUS_WHERE,
+      sections: { some: visibleSectionFilter },
     },
     include: {
       sections: {
-        include: { items: true },
+        where: visibleSectionFilter,
+        include: {
+          items: { orderBy: { sortOrder: "asc" } },
+        },
         orderBy: { sortOrder: "asc" },
       },
     },
     orderBy: { updatedAt: "desc" },
   });
 
-  const fallbackPackages =
-    packages.length > 0
-      ? packages
-      : await prisma.selectionPackage.findMany({
-          where: { projectId: project.id },
-          include: {
-            sections: {
-              include: { items: true },
-              orderBy: { sortOrder: "asc" },
-            },
-          },
-          orderBy: { updatedAt: "desc" },
-        });
+  const sectionIds = packages.flatMap((p) => p.sections.map((s) => s.id));
+  const imageRows = await getSelectionImagesBySectionIds(sectionIds);
+  const imagesBySection = new Map<string, typeof imageRows>();
+  for (const img of imageRows) {
+    const list = imagesBySection.get(img.sectionId) ?? [];
+    list.push(img);
+    imagesBySection.set(img.sectionId, list);
+  }
 
-  const sectionIds = fallbackPackages.flatMap((p) =>
-    p.sections.map((s) => s.id)
-  );
-  const metaRows =
-    sectionIds.length === 0
-      ? []
-      : await prisma.$queryRawUnsafe<
-          Array<{ id: string; dueDate: string | Date | null; priority: string | null }>
-        >(
-          `SELECT id, dueDate, priority FROM SelectionSection WHERE id IN (${sectionIds
-            .map(() => "?")
-            .join(",")})`,
-          ...sectionIds
-        ).catch(() => [] as Array<{
-          id: string;
-          dueDate: string | Date | null;
-          priority: string | null;
-        }>);
-
-  const metaById = new Map(metaRows.map((r) => [r.id, r]));
-
-  const cards = fallbackPackages.flatMap((pkg) =>
+  const cards = packages.flatMap((pkg) =>
     pkg.sections.map((section) => {
-      const meta = metaById.get(section.id);
-      const fields = selectionClientFields({
-        ...section,
-        dueDate: meta?.dueDate ?? null,
-        priority: meta?.priority ?? "MEDIUM",
-      });
+      const fields = selectionClientFields(section);
       const usage = computeAllowanceUsage({
         sectionAllowance: section.allowance,
         items: section.items,
@@ -114,9 +96,29 @@ export default async function ClientSelectionsPage({
         `Hi ${project.pm?.name ?? "PM"}, I have a question about selection "${section.name}" on ${project.name}.`
       );
 
+      const extraImages = imagesBySection.get(section.id) ?? [];
+      const images = [
+        ...extraImages.map((img) => ({
+          id: img.id,
+          src: img.filePath,
+          alt: img.caption || section.name,
+        })),
+        ...section.items
+          .filter((item) => item.imageUrl)
+          .map((item) => ({
+            id: `item-${item.id}`,
+            src: item.imageUrl as string,
+            alt: item.label,
+          })),
+      ];
+
       return {
         id: section.id,
         name: section.name,
+        category:
+          "category" in section && typeof section.category === "string"
+            ? section.category
+            : null,
         description: section.notes,
         priority: fields.priority,
         status: section.status,
@@ -128,6 +130,8 @@ export default async function ClientSelectionsPage({
         packageTitle: pkg.title,
         askQuestionHref: ask,
         canApprove,
+        href: `/client/selections/${section.id}?projectId=${project.id}`,
+        images,
       };
     })
   );

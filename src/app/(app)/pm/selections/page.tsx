@@ -22,6 +22,12 @@ import { redirect } from "next/navigation";
 import { PmProjectPicker } from "@/components/pm/project-picker";
 import { Role, SelectionSectionStatus } from "@prisma/client";
 import Link from "next/link";
+import { CreateSelectionForm } from "@/components/pm/create-selection-form";
+import { MediaImage } from "@/components/ui/media-image";
+import {
+  getClientVisibleSectionIds,
+  getSelectionImagesBySectionIds,
+} from "@/lib/selections/query";
 
 type PageProps = {
   searchParams: Promise<{
@@ -75,7 +81,7 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
     );
   }
 
-  const [project, packages, projects] = await Promise.all([
+  const [project, packages, projects, allSections] = await Promise.all([
     prisma.project.findFirst({
       where: { id: selectedId },
       include: {
@@ -103,7 +109,42 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
       },
       orderBy: { name: "asc" },
     }),
+    prisma.selectionSection.findMany({
+      where: { package: { projectId: { in: projectIds } } },
+      include: {
+        package: {
+          select: {
+            id: true,
+            project: {
+              select: {
+                id: true,
+                name: true,
+                buyer: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 80,
+    }),
   ]);
+
+  const sectionIdsForMedia = [
+    ...new Set([
+      ...packages.flatMap((p) => p.sections.map((s) => s.id)),
+      ...allSections.map((s) => s.id),
+    ]),
+  ];
+  const [visibleIds, imageRows] = await Promise.all([
+    getClientVisibleSectionIds(projectIds),
+    getSelectionImagesBySectionIds(sectionIdsForMedia),
+  ]);
+  const visibleSet = new Set(visibleIds);
+  const thumbBySection = new Map<string, (typeof imageRows)[number]>();
+  for (const img of imageRows) {
+    if (!thumbBySection.has(img.sectionId)) thumbBySection.set(img.sectionId, img);
+  }
 
   const activePackage =
     packages.find((p) => p.id === sp.packageId) ?? packages[0] ?? null;
@@ -186,6 +227,113 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
         </div>
       </Card>
 
+      <CreateSelectionForm
+        projectId={selectedId}
+        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+      />
+
+      {allSections.length > 0 && projects.length > 1 ? (
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-sb-ink">
+            All authorized selections
+          </h2>
+          <div className="space-y-2">
+            {allSections.map((section) => (
+              <div
+                key={section.id}
+                className="flex items-center gap-3 rounded-[12px] border border-sb-border px-3 py-2"
+              >
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-sb-canvas">
+                  {thumbBySection.get(section.id) ? (
+                    <MediaImage
+                      src={thumbBySection.get(section.id)!.filePath}
+                      alt={section.name}
+                      aspectClassName="aspect-square"
+                      width={96}
+                      height={96}
+                    />
+                  ) : null}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{section.name}</p>
+                  <p className="text-xs text-sb-muted">
+                    {section.package.project.name}
+                    {section.package.project.buyer
+                      ? ` · ${fullName(
+                          section.package.project.buyer.firstName,
+                          section.package.project.buyer.lastName
+                        )}`
+                      : ""}
+                    {` · ${section.status.replace(/_/g, " ")}`}
+                    {visibleSet.has(section.id) ? "" : " · Internal"}
+                  </p>
+                </div>
+                <Link
+                  href={`/pm/selections/${section.package.id}?projectId=${section.package.project.id}`}
+                  className="text-sm font-medium text-sb-orange"
+                >
+                  View
+                </Link>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
+      {activePackage && activePackage.sections.length > 0 ? (
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-sb-ink">
+            Project selections
+          </h2>
+          <div className="space-y-2">
+            {activePackage.sections.map((section) => {
+              const thumb = thumbBySection.get(section.id);
+              return (
+                <div
+                  key={section.id}
+                  className="flex items-center gap-3 rounded-[12px] border border-sb-border px-3 py-2"
+                >
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-sb-canvas">
+                    {thumb ? (
+                      <MediaImage
+                        src={thumb.filePath}
+                        alt={section.name}
+                        aspectClassName="aspect-square"
+                        width={96}
+                        height={96}
+                      />
+                    ) : (
+                      <div className="aspect-square bg-sb-canvas" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-sb-ink">
+                      {section.name}
+                    </p>
+                    <p className="text-xs text-sb-muted">
+                      {section.category || "Uncategorized"}
+                      {" · "}
+                      {visibleSet.has(section.id) ? "Client visible" : "Internal"}
+                      {" · "}
+                      {section.status.replace(/_/g, " ")}
+                      {section.dueDate
+                        ? ` · Due ${formatDate(section.dueDate)}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/pm/selections/${activePackage.id}`}
+                    className="text-sm font-medium text-sb-orange"
+                  >
+                    View
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -236,20 +384,18 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
       </Card>
 
       {packages.length === 0 ? (
-        <Card>
-          <h2 className="text-lg font-semibold text-sb-ink">
-            Create Selection Sheet
-          </h2>
-          <p className="mt-1 text-sm text-sb-muted">
-            Creates the standard selection package for this project.
-          </p>
-          <ActionForm action={createPackageFormAction} className="mt-4">
-            <input type="hidden" name="projectId" value={selectedId} />
-            <SubmitButton pendingLabel="Creating…">
-              Create Selection Sheet
-            </SubmitButton>
-          </ActionForm>
-        </Card>
+        <EmptyState
+          title="No selections have been created for this project yet."
+          description="Create a selection above, or generate the standard selection sheet."
+          action={
+            <ActionForm action={createPackageFormAction}>
+              <input type="hidden" name="projectId" value={selectedId} />
+              <SubmitButton pendingLabel="Creating…">
+                Create Selection Sheet
+              </SubmitButton>
+            </ActionForm>
+          }
+        />
       ) : null}
 
       {!activePackage ? (
@@ -378,7 +524,20 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                 className="rounded-[16px] border border-sb-border bg-sb-surface p-4 shadow-[var(--sb-shadow)]"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-sb-ink">{section.name}</h3>
+                  <div className="flex min-w-0 items-start gap-2">
+                    {thumbBySection.get(section.id) ? (
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
+                        <MediaImage
+                          src={thumbBySection.get(section.id)!.filePath}
+                          alt={section.name}
+                          aspectClassName="aspect-square"
+                          width={80}
+                          height={80}
+                        />
+                      </div>
+                    ) : null}
+                    <h3 className="font-semibold text-sb-ink">{section.name}</h3>
+                  </div>
                   <StatusBadge tone={statusTone(section.status)}>
                     {section.status.replace(/_/g, " ")}
                   </StatusBadge>
@@ -445,6 +604,12 @@ export default async function PMSelectionsPage({ searchParams }: PageProps) {
                   <option value="LOW">Low</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High</option>
+                </Select>
+              </FormField>
+              <FormField label="Client visibility">
+                <Select name="clientVisible" defaultValue="true">
+                  <option value="true">Visible to client</option>
+                  <option value="false">Internal only</option>
                 </Select>
               </FormField>
               <SubmitButton size="sm" pendingLabel="Creating…">

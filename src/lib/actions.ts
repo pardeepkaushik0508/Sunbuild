@@ -77,6 +77,9 @@ import {
   syncProjectProgress,
   revalidateProjectProgressSurfaces,
 } from "@/lib/dashboard/sync-project-progress";
+import { collectUploadFiles } from "@/lib/media/collect-upload-files";
+import { revalidateProjectPhotos, revalidateProjectSelections } from "@/lib/photos/revalidate";
+import { isSectionClientVisible } from "@/lib/selections/query";
 
 function formString(form: FormData, key: string) {
   const v = form.get(key);
@@ -1480,24 +1483,9 @@ export async function uploadPhotoAction(form: FormData) {
       return { error: "Please select a project." };
     }
     await assertProjectAccess(session, projectId);
-    const file = form.get("file");
-    if (!(file instanceof File) || !file.size) {
+    const files = collectUploadFiles(form);
+    if (files.length === 0) {
       return { error: "Please select an image file to upload." };
-    }
-
-    let saved;
-    try {
-      saved = await saveCompanyUpload(
-        session.membership.companyId,
-        file,
-        `photos/${projectId}`
-      );
-    } catch (err) {
-      if (err instanceof AppError) return { error: err.message };
-      console.error("[photo-upload] storage failed", err);
-      return {
-        error: "Failed to upload photo. Please check file storage configuration.",
-      };
     }
 
     // Default: PM/staff uploads are client-visible so they appear on the client portal.
@@ -1514,39 +1502,54 @@ export async function uploadPhotoAction(form: FormData) {
       if (requested === PhotoVisibility.INTERNAL) {
         visibility = PhotoVisibility.INTERNAL;
       } else {
-        // Explicit CLIENT_VISIBLE, empty, or any other value → show to client
         visibility = PhotoVisibility.CLIENT_VISIBLE;
       }
     }
 
+    const savedList: Awaited<ReturnType<typeof saveCompanyUpload>>[] = [];
     try {
-      await prisma.photo.create({
-        data: {
-          projectId,
-          ...storageMeta(saved),
-          caption: formString(form, "caption") || null,
-          visibility,
-          uploadedById: session.user.id,
-          publishedAt:
-            visibility === PhotoVisibility.CLIENT_VISIBLE ? new Date() : null,
-          publishedById:
-            visibility === PhotoVisibility.CLIENT_VISIBLE
-              ? session.user.id
-              : null,
-        },
-      });
+      for (const file of files) {
+        const saved = await saveCompanyUpload(
+          session.membership.companyId,
+          file,
+          `photos/${projectId}`
+        );
+        savedList.push(saved);
+        await prisma.photo.create({
+          data: {
+            projectId,
+            ...storageMeta(saved),
+            caption: formString(form, "caption") || null,
+            visibility,
+            uploadedById: session.user.id,
+            publishedAt:
+              visibility === PhotoVisibility.CLIENT_VISIBLE ? new Date() : null,
+            publishedById:
+              visibility === PhotoVisibility.CLIENT_VISIBLE
+                ? session.user.id
+                : null,
+          },
+        });
+      }
     } catch (err) {
-      await deleteUpload(saved.filePath, {
-        publicId: saved.publicId,
-        resourceType: saved.resourceType,
-      });
-      throw err;
+      for (const saved of savedList) {
+        try {
+          await deleteUpload(saved.filePath, {
+            publicId: saved.publicId,
+            resourceType: saved.resourceType,
+          });
+        } catch {
+          // best-effort cleanup
+        }
+      }
+      if (err instanceof AppError) return { error: err.message };
+      console.error("[photo-upload] storage failed", err);
+      return {
+        error: "Failed to upload photo. Please check file storage configuration.",
+      };
     }
-    revalidatePath("/pm/photos");
-    revalidatePath(`/sub/jobs/${projectId}`);
-    revalidatePath("/sub");
-    revalidatePath("/client");
-    revalidatePath("/client/photos");
+
+    revalidateProjectPhotos(projectId);
     return { success: true };
   } catch (err) {
     if (err instanceof AppError) {
@@ -1579,9 +1582,7 @@ export async function publishPhotoAction(photoId: string) {
     entityType: "Photo",
     entityId: photoId,
   });
-  revalidatePath("/pm/photos");
-  revalidatePath("/client");
-  revalidatePath("/client/photos");
+  revalidateProjectPhotos(photo.projectId);
 }
 
 export async function deletePhotoAction(photoId: string) {
@@ -1614,10 +1615,7 @@ export async function deletePhotoAction(photoId: string) {
     entityType: "Photo",
     entityId: photoId,
   });
-  revalidatePath("/pm/photos");
-  revalidatePath("/sub");
-  revalidatePath("/client");
-  revalidatePath("/client/photos");
+  revalidateProjectPhotos(photo.projectId);
 }
 
 export async function createSelectionPackageAction(projectId: string) {
@@ -1665,8 +1663,7 @@ export async function createSelectionPackageAction(projectId: string) {
       },
     },
   });
-  revalidatePath("/pm/selections");
-  revalidatePath("/client/selections");
+  revalidateProjectSelections(projectId);
   return pkg.id;
 }
 
@@ -1693,6 +1690,10 @@ export async function saveSelectionItemAction(itemId: string, form: FormData) {
     role === Role.OPERATIONS_ADMIN ||
     role === Role.OWNER;
   if (!canEdit) throw new ForbiddenError();
+  if (role === Role.CLIENT) {
+    const visible = await isSectionClientVisible(item.section.id);
+    if (!visible) throw new ForbiddenError();
+  }
 
   const selectedCost = Number(formString(form, "selectedCost") || 0) || null;
   const allowanceAmount =
@@ -1731,6 +1732,12 @@ export async function submitSelectionSectionAction(sectionId: string) {
   });
   if (!section) throw new AppError("Not found");
   await assertProjectAccess(session, section.package.projectId);
+  if (
+    session.membership.role === Role.CLIENT &&
+    !(await isSectionClientVisible(section.id))
+  ) {
+    throw new AppError("Not found");
+  }
   if (
     section.status !== SelectionSectionStatus.DRAFT &&
     section.status !== SelectionSectionStatus.CHANGES_REQUESTED
