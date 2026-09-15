@@ -38,13 +38,17 @@ import {
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ created?: string }>;
 };
 
 function dateInputValue(d: Date | null | undefined) {
   return d ? d.toISOString().slice(0, 10) : "";
 }
 
-export default async function SalesContractWorkspacePage({ params }: PageProps) {
+export default async function SalesContractWorkspacePage({
+  params,
+  searchParams,
+}: PageProps) {
   const session = await requireRole([
     Role.SALES_MANAGER,
     Role.OWNER,
@@ -52,6 +56,7 @@ export default async function SalesContractWorkspacePage({ params }: PageProps) 
     Role.CEO,
   ]);
   const { id } = await params;
+  const { created } = await searchParams;
   const companyId = session.membership.companyId;
 
   const contract = await prisma.purchaseContract.findUnique({
@@ -161,6 +166,24 @@ export default async function SalesContractWorkspacePage({ params }: PageProps) 
           </div>
         }
       />
+
+      {created ? (
+        <div className="rounded-[12px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="font-semibold">Purchase agreement created</p>
+          <p className="mt-1">
+            Page 1 fields are saved. Download the contract PDF to complete or
+            circulate the remaining pages offline.
+          </p>
+          <a
+            href={`/api/contracts/${contract.id}/pdf`}
+            download={`${contract.contractNumber || "contract"}.pdf`}
+            className="mt-2 inline-flex items-center gap-1.5 font-medium underline"
+          >
+            <Download className="h-4 w-4" />
+            Download contract PDF
+          </a>
+        </div>
+      ) : null}
 
       {/* Top Banner: Status & Lock Warning */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-sb-border bg-white p-4 shadow-sm">

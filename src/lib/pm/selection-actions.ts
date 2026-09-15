@@ -255,7 +255,30 @@ export async function createSelectionAction(form: FormData) {
     true
   );
 
-  const optionLabel = formString(form, "optionLabel");
+  const optionItems: Array<{
+    label: string;
+    notes: string | null;
+    sortOrder: number;
+  }> = [];
+  for (let n = 1; n <= 8; n++) {
+    const label =
+      formString(form, `optionLabel${n}`) ||
+      (n === 1 ? formString(form, "optionLabel") : "");
+    if (!label) continue;
+    optionItems.push({
+      label,
+      notes: formString(form, `optionNotes${n}`) || null,
+      sortOrder: optionItems.length + 1,
+    });
+  }
+  if (optionItems.length === 0) {
+    optionItems.push({
+      label: "Primary selection",
+      notes: formString(form, "itemNotes") || null,
+      sortOrder: 1,
+    });
+  }
+
   const created = await prisma.selectionSection.create({
     data: {
       packageId: pkg.id,
@@ -269,16 +292,15 @@ export async function createSelectionAction(form: FormData) {
       priority: parseSelectionPriority(formString(form, "priority")),
       status: statusParsed ?? SelectionSectionStatus.DRAFT,
       items: {
-        create: [
-          {
-            label: optionLabel || "Primary selection",
-            optionValue: formString(form, "specification") || null,
-            notes: formString(form, "itemNotes") || null,
-            sortOrder: 1,
-          },
-        ],
+        create: optionItems.map((item) => ({
+          label: item.label,
+          optionValue: formString(form, "specification") || null,
+          notes: item.notes,
+          sortOrder: item.sortOrder,
+        })),
       },
     },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
   });
 
   await prisma.$executeRaw`
@@ -288,6 +310,30 @@ export async function createSelectionAction(form: FormData) {
         instructions = ${formString(form, "instructions") || null}
     WHERE id = ${created.id}
   `.catch(() => undefined);
+
+  // Attach per-option photos onto matching SelectionItem.imageUrl (first file)
+  // and also into the shared SelectionImage gallery.
+  for (let n = 1; n <= 8; n++) {
+    const optionFiles = collectUploadFiles(form, [`optionImages${n}`]);
+    if (optionFiles.length === 0) continue;
+    const item = created.items[n - 1];
+    if (!item) continue;
+    const saved = await saveCompanyUpload(
+      session.membership.companyId,
+      optionFiles[0],
+      `selections/${projectId}`
+    );
+    await prisma.selectionItem.update({
+      where: { id: item.id },
+      data: { imageUrl: saved.filePath },
+    });
+    await attachSelectionImages({
+      companyId: session.membership.companyId,
+      projectId,
+      sectionId: created.id,
+      files: optionFiles,
+    });
+  }
 
   const files = collectUploadFiles(form);
   if (files.length > 0) {

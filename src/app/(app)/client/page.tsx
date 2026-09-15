@@ -32,6 +32,7 @@ import { getPublicConnection } from "@/lib/google/calendar";
 import type { CalendarEvent } from "@/components/dashboard/calendar-widget";
 import type { TodoItem } from "@/components/dashboard/todo-widget";
 import { ProjectPhotoGallery } from "@/components/client/project-photo-gallery";
+import { ClientHomeHero } from "@/components/client/home-hero";
 import {
   CLIENT_SELECTION_PACKAGE_STATUS_WHERE,
   getClientVisibleSectionIds,
@@ -276,9 +277,19 @@ export default async function ClientHomePage({
   }));
 
   const projectPicker = projects.map((p) => ({ id: p.id, name: p.name }));
+  const heroImageSrc =
+    full.heroImageUrl || full.photos[0]?.filePath || null;
 
   return (
     <div className="w-full space-y-5">
+      <ClientHomeHero
+        projectName={full.name}
+        statusLabel={full.status.replace(/_/g, " ")}
+        imageSrc={heroImageSrc}
+        progressPercent={liveProgress}
+        photosHref={`/client/photos?projectId=${full.id}`}
+      />
+
       <ClientPortalBanner
         projectName={full.name}
         statusLabel={full.status.replace(/_/g, " ")}

@@ -238,7 +238,7 @@ export default async function ProjectStatementOfAdjustmentsPage({
                   })}
                 />
                 <SoaRow
-                  label="Change Orders Total (Without GST)"
+                  label="Change Orders Total"
                   value={formatCurrency(calc.changeOrdersTotalWithoutGst)}
                   bold
                 />
@@ -246,10 +246,6 @@ export default async function ProjectStatementOfAdjustmentsPage({
                   label="TOTAL CLOSING PRICE"
                   value={formatCurrency(calc.totalClosingPrice)}
                   bold
-                />
-                <SoaRow
-                  label={`GST ${calc.gstRatePercent}%`}
-                  value={formatCurrency(calc.totalGst)}
                 />
                 <SoaRow
                   label="TOTAL SALES PRICE"

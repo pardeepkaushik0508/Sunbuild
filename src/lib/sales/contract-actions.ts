@@ -193,7 +193,7 @@ export async function createPurchaseContractAction(form: FormData) {
     },
   });
 
-  redirect(`/sales/contracts/${contract.id}`);
+  redirect(`/sales/contracts/${contract.id}?created=1`);
 }
 
 /**

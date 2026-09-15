@@ -10,10 +10,10 @@ import { calculateStatementOfAdjustments } from "../statement-of-adjustments/cal
 import { formatSoaCurrency } from "../statement-of-adjustments/money";
 
 describe("Statement of Adjustments calculations", () => {
-  it("matches reference-style arithmetic with promo credit and deposits", () => {
+  it("matches Sunview format arithmetic with no GST", () => {
     const result = calculateStatementOfAdjustments({
       baseHomePrice: 1_000_000,
-      gstRate: 0.05,
+      gstRate: 0,
       promoCreditAdjustment: 54_761.9,
       changeOrders: [
         {
@@ -78,31 +78,31 @@ describe("Statement of Adjustments calculations", () => {
     assert.equal(result.promoCreditAdjustment, 54_761.9);
     assert.equal(result.changeOrdersTotalWithoutGst, 65_238.1);
     assert.equal(result.totalClosingPrice, 1_065_238.1);
-    assert.equal(result.totalGst, 53_261.91);
-    assert.equal(result.totalSalesPrice, 1_118_500.01);
+    assert.equal(result.totalGst, 0);
+    assert.equal(result.totalSalesPrice, 1_065_238.1);
     assert.equal(result.depositsToDate, 150_000);
-    assert.equal(result.cashToClose, 968_500.01);
+    assert.equal(result.cashToClose, 915_238.1);
   });
 
   it("handles zero change orders and deposits cleanly", () => {
     const result = calculateStatementOfAdjustments({
       baseHomePrice: 500_000,
-      gstRate: 0.05,
+      gstRate: 0,
       promoCreditAdjustment: 0,
       changeOrders: [],
       deposits: [],
     });
     assert.equal(result.changeOrdersSubtotal, 0);
     assert.equal(result.totalClosingPrice, 500_000);
-    assert.equal(result.totalGst, 25_000);
-    assert.equal(result.totalSalesPrice, 525_000);
-    assert.equal(result.cashToClose, 525_000);
+    assert.equal(result.totalGst, 0);
+    assert.equal(result.totalSalesPrice, 500_000);
+    assert.equal(result.cashToClose, 500_000);
   });
 
   it("includes COMPLETED change orders as approved", () => {
     const result = calculateStatementOfAdjustments({
       baseHomePrice: 100,
-      gstRate: 0.05,
+      gstRate: 0,
       promoCreditAdjustment: 0,
       changeOrders: [
         {

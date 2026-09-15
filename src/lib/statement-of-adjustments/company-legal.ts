@@ -21,7 +21,8 @@ const SUNVIEW_DEFAULTS: CompanyLegalInfo = {
   city: "Calgary",
   province: "AB",
   postalCode: "",
-  gstNumber: "GST #",
+  /** SOA letterhead does not print GST — kept empty for client format. */
+  gstNumber: "",
   cityLine: "Calgary, Alberta",
 };
 
@@ -50,8 +51,8 @@ export function resolveCompanyLegalInfo(company: {
   const city = company.city?.trim() || SUNVIEW_DEFAULTS.city;
   const province = company.province?.trim() || SUNVIEW_DEFAULTS.province;
   const postalCode = company.postalCode?.trim() || "";
-  const gstNumber =
-    company.gstNumber?.trim() || SUNVIEW_DEFAULTS.gstNumber;
+  // Do not invent a GST # for SOA letterhead when company has none.
+  const gstNumber = company.gstNumber?.trim() || "";
 
   const cityParts = [city, province, postalCode].filter(Boolean);
   const cityLine =
@@ -78,7 +79,11 @@ export function resolveCompanyLegalInfo(company: {
     city,
     province,
     postalCode,
-    gstNumber: gstNumber.startsWith("GST") ? gstNumber : `GST # ${gstNumber}`,
+    gstNumber: !gstNumber
+      ? ""
+      : gstNumber.startsWith("GST")
+        ? gstNumber
+        : `GST # ${gstNumber}`,
     cityLine: company.addressLine1?.trim()
       ? [
           [city, province].filter(Boolean).join(", "),

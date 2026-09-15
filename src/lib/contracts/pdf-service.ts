@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { embedSunviewLogo } from "@/lib/branding/sunview-logo";
 
 export type PrintableContractData = {
   contractNumber: string;
@@ -79,9 +80,18 @@ export function generateContractHtml(data: PrintableContractData): string {
       font-weight: 700;
       color: #111827;
       letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo img {
+      height: 44px;
+      width: auto;
+      background: #000;
+      padding: 4px 6px;
     }
     .logo span {
-      color: #f97316;
+      color: #f28c0c;
     }
     .subtitle {
       font-size: 11px;
@@ -245,7 +255,7 @@ export function generateContractHtml(data: PrintableContractData): string {
 
   <div class="header">
     <div>
-      <div class="logo">SUNVIEW <span>CUSTOM HOMES</span></div>
+      <div class="logo"><img src="/branding/sunview-logo.png" alt="Sunview Custom Homes" /> SUNVIEW <span>CUSTOM HOMES</span></div>
       <div class="subtitle">Standard Residential Purchase Agreement</div>
     </div>
     <div class="contract-badge">
@@ -395,7 +405,7 @@ export function generateContractHtml(data: PrintableContractData): string {
       ? `<div class="page-break"></div>
          <div class="header">
            <div>
-             <div class="logo">SUNVIEW <span>CUSTOM HOMES</span></div>
+             <div class="logo"><img src="/branding/sunview-logo.png" alt="Sunview Custom Homes" /> SUNVIEW <span>CUSTOM HOMES</span></div>
              <div class="subtitle">Schedule of Allowances (SOA) – Annex A</div>
            </div>
            <div class="contract-badge">
@@ -494,9 +504,18 @@ export function generateSoaHtml(data: PrintableSoaData): string {
       font-size: 22px;
       font-weight: 700;
       letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo img {
+      height: 44px;
+      width: auto;
+      background: #000;
+      padding: 4px 6px;
     }
     .logo span {
-      color: #f97316;
+      color: #f28c0c;
     }
     .subtitle {
       font-size: 11px;
@@ -594,7 +613,7 @@ export function generateSoaHtml(data: PrintableSoaData): string {
 
   <div class="header">
     <div>
-      <div class="logo">SUNVIEW <span>CUSTOM HOMES</span></div>
+      <div class="logo"><img src="/branding/sunview-logo.png" alt="Sunview Custom Homes" /> SUNVIEW <span>CUSTOM HOMES</span></div>
       <div class="subtitle">Official Schedule of Allowances (SOA)</div>
     </div>
     <div>
@@ -677,31 +696,61 @@ export async function generateContractPdfBuffer(
 
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const logo = await embedSunviewLogo(pdfDoc);
 
-  const primaryColor = rgb(0.976, 0.451, 0.086); // Sunbuild Orange #f97316
-  const inkColor = rgb(0.067, 0.094, 0.153); // #111827
-  const mutedColor = rgb(0.42, 0.447, 0.502); // #6b7280
+  const primaryColor = rgb(0.95, 0.55, 0.05);
+  const inkColor = rgb(0.067, 0.094, 0.153);
+  const mutedColor = rgb(0.42, 0.447, 0.502);
+  const black = rgb(0, 0, 0);
 
   let y = 750;
 
-  // Header
-  page.drawText("SUNVIEW CUSTOM HOMES", {
-    x: 50,
-    y,
-    size: 18,
-    font: fontBold,
-    color: primaryColor,
-  });
-  page.drawText(`Contract: ${data.contractNumber}`, {
-    x: 400,
-    y,
-    size: 14,
-    font: fontBold,
-    color: inkColor,
-  });
+  // Header with Sunview logo
+  if (logo) {
+    const maxH = 44;
+    const scale = maxH / logo.height;
+    const logoW = logo.width * scale;
+    const logoH = logo.height * scale;
+    page.drawRectangle({
+      x: 46,
+      y: y - logoH - 4,
+      width: logoW + 8,
+      height: logoH + 8,
+      color: black,
+    });
+    page.drawImage(logo, {
+      x: 50,
+      y: y - logoH,
+      width: logoW,
+      height: logoH,
+    });
+    page.drawText(`Contract: ${data.contractNumber}`, {
+      x: 400,
+      y: y - 8,
+      size: 14,
+      font: fontBold,
+      color: inkColor,
+    });
+    y -= logoH + 18;
+  } else {
+    page.drawText("SUNVIEW CUSTOM HOMES", {
+      x: 50,
+      y,
+      size: 18,
+      font: fontBold,
+      color: primaryColor,
+    });
+    page.drawText(`Contract: ${data.contractNumber}`, {
+      x: 400,
+      y,
+      size: 14,
+      font: fontBold,
+      color: inkColor,
+    });
+    y -= 16;
+  }
 
-  y -= 16;
-  page.drawText("Standard Residential Purchase Agreement", {
+  page.drawText("Standard Residential Purchase Agreement — Page 1", {
     x: 50,
     y,
     size: 10,

@@ -19,6 +19,7 @@ import {
   DollarSign,
   ScrollText,
 } from "lucide-react";
+import { SUNVIEW_COMMUNITIES } from "@/lib/communities";
 
 type ProjectOption = { id: string; name: string };
 type LeadOption = { id: string; name: string; email: string | null; phone: string | null };
@@ -377,11 +378,43 @@ export function ContractCreateForm({ projects, leads, buyers, defaultProjectId =
             </select>
           </FormField>
 
+          <FormField label="Sunview community">
+            <select
+              className="h-10 w-full rounded-[10px] border border-sb-border bg-white px-3 text-sm text-sb-text"
+              value=""
+              onChange={(e) => {
+                const label = e.target.value;
+                if (label) setProjectName(label);
+              }}
+              aria-label="Pick a Sunview community"
+            >
+              <option value="">Select community from website…</option>
+              <optgroup label="Now Selling">
+                {SUNVIEW_COMMUNITIES.filter((c) => c.status === "NOW_SELLING").map(
+                  (c) => (
+                    <option key={c.id} value={c.label}>
+                      {c.label.toUpperCase()} — NOW SELLING
+                    </option>
+                  )
+                )}
+              </optgroup>
+              <optgroup label="Sold Out">
+                {SUNVIEW_COMMUNITIES.filter((c) => c.status === "SOLD_OUT").map(
+                  (c) => (
+                    <option key={c.id} value={c.label}>
+                      {c.label.toUpperCase()} — SOLD OUT
+                    </option>
+                  )
+                )}
+              </optgroup>
+            </select>
+          </FormField>
+
           <FormField label="Project / Model Name" required>
             <Input
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              placeholder="e.g. The Aspen Ridge Custom Build"
+              placeholder="e.g. Clearwater Park, Chestermere"
               required
             />
           </FormField>

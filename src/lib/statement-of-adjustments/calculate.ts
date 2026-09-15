@@ -74,13 +74,14 @@ export type SoaCalculationResult = {
 /**
  * Authoritative Statement of Adjustments math (integer cents).
  *
+ * Sunview SOA (client format) does **not** include GST:
  * Base Home Price
- * + Change Orders Total Without GST (approved COs − promo credit)
- * = Total Closing Price
- * + GST
- * = Total Sales Price
+ * + Change Orders Total (approved COs − promo credit)
+ * = Total Closing / Sales Price
  * − Deposits to Date
  * = Cash to Close
+ *
+ * Pass gstRate > 0 only if a future company requires GST on SOA.
  */
 export function calculateStatementOfAdjustments(
   input: SoaCalculationInput
@@ -122,9 +123,9 @@ export function calculateStatementOfAdjustments(
     changeOrdersTotalWithoutGstCents
   );
 
-  const rate = Number.isFinite(input.gstRate) && input.gstRate >= 0
-    ? input.gstRate
-    : 0.05;
+  // Default 0 — Sunview Statement of Adjustments has no GST lines.
+  const rate =
+    Number.isFinite(input.gstRate) && input.gstRate >= 0 ? input.gstRate : 0;
   const totalGstCents = Math.round(totalClosingPriceCents * rate);
   const totalSalesPriceCents = addCents(totalClosingPriceCents, totalGstCents);
 
