@@ -1,7 +1,8 @@
 /**
  * Twilio operating mode: current free-trial SMS vs paid/production SMS.
  *
- * Trial (official Create Message params only): to, body (template id), statusCallback.
+ * Trial Create Message: to, body (template id), statusCallback, and from
+ * (Twilio trial number from Console → Try out SMS — required to avoid 572003).
  * Production: to, from (or Messaging Service), custom body, statusCallback.
  */
 

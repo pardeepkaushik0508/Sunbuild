@@ -49,7 +49,7 @@ export type PublicTwilioSettings = {
   liveAuthOk: boolean | null;
   /** TWILIO_PHONE_NUMBER exists on this Twilio account (Incoming Numbers). Production only. */
   fromNumberOwned: boolean | null;
-  /** Trial readiness: auth OK + valid template (From not required). */
+  /** Trial readiness: auth OK + valid template + trial From number set. */
   trialReady: boolean | null;
   statusCallbackUrl: string;
   inboundWebhookUrl: string;
@@ -104,7 +104,7 @@ export function requireTwilioConfig(): TwilioConfig {
     const mode = getTwilioMode();
     throw new AppError(
       mode === "trial"
-        ? "SMS is not configured. For trial set TWILIO_MODE=trial, TWILIO_ACCOUNT_SID, and TWILIO_AUTH_TOKEN (TWILIO_PHONE_NUMBER is not required)."
+        ? "SMS is not configured. For trial set TWILIO_MODE=trial, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to the Twilio trial From number from Console → Try out SMS."
         : "SMS is not configured. For production set TWILIO_MODE=production, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER (or TWILIO_MESSAGING_SERVICE_SID).",
       503,
       "TWILIO_CONFIG"
@@ -134,7 +134,7 @@ function diagnosticsFor(
   if (senderMode === "not_configured") {
     if (mode === "trial") {
       lines.push(
-        "SMS is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN. TWILIO_PHONE_NUMBER is not required in trial."
+        "SMS is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to the Twilio trial From number from Console → Messaging → Try out SMS."
       );
     } else {
       lines.push(
@@ -172,18 +172,32 @@ function diagnosticsFor(
         `Trial template: ${live?.trialTemplate || resolved.template}`
       );
     }
-    lines.push("Purchased From number: Not required in trial");
+    if (live?.phoneNumber) {
+      lines.push(
+        `Trial From number: ${maskPhone(live.phoneNumber) || "set"} (must match Console → Try out SMS → From)`
+      );
+    } else {
+      lines.push(
+        "BLOCKER: Trial From number missing. Set TWILIO_PHONE_NUMBER to the “Twilio trial number” shown as From on Console → Messaging → Try out SMS (error 572003 if omitted/wrong)."
+      );
+    }
     lines.push(
       "Recipient verification: Cannot reliably confirm locally; verify recipient in Twilio Console → Messaging → Try out SMS"
     );
     if (live?.statusCallbackUrl) {
       lines.push(`Status callback: ${live.statusCallbackUrl}`);
     }
-    const trialReady = live?.liveAuthOk === true && resolved.ok;
+    const trialReady =
+      live?.liveAuthOk === true && resolved.ok && Boolean(live?.phoneNumber);
     lines.push(`Ready for trial API test: ${trialReady ? "YES" : "NO"}`);
     lines.push(
       "Trial SMS body is a Twilio template id (not custom CRM text). Intended notification text is still stored in SMS history."
     );
+    if (recentFailures.some((f) => f.errorCode === "572003")) {
+      lines.push(
+        "A stored SMS failed with 572003 (From not assigned to this verified recipient). Copy the exact From trial number from Console → Try out SMS into TWILIO_PHONE_NUMBER and redeploy."
+      );
+    }
     return lines;
   }
 
@@ -372,8 +386,9 @@ export async function getPublicTwilioSettings(
 
   const live = await probeTwilioAccount(config);
   const templateOk = mode !== "trial" || trialResolved.ok;
+  const trialFromOk = mode !== "trial" || Boolean(config.phoneNumber);
   const trialReady =
-    mode === "trial" ? live.liveAuthOk && templateOk : null;
+    mode === "trial" ? live.liveAuthOk && templateOk && trialFromOk : null;
   const sendReady =
     mode === "trial"
       ? Boolean(trialReady)
@@ -388,7 +403,9 @@ export async function getPublicTwilioSettings(
     senderMode,
     fromDisplay:
       mode === "trial"
-        ? "Not required in trial"
+        ? config.phoneNumber
+          ? maskPhone(config.phoneNumber)
+          : "Missing — set TWILIO_PHONE_NUMBER to Console trial From"
         : senderMode === "messaging_service"
           ? maskSid(config.messagingServiceSid)
           : maskPhone(config.phoneNumber),

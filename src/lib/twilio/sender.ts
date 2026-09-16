@@ -1,7 +1,8 @@
 /**
  * Twilio sender selection by TWILIO_MODE.
  *
- * Trial: SID + Auth Token only (Twilio supplies the trial From; do not require TWILIO_PHONE_NUMBER).
+ * Trial: SID + Auth Token + Twilio trial From number shown in Console → Try out SMS.
+ *   Body is a template id. Custom CRM text is not sent to Twilio.
  * Production: SID + Auth Token + TWILIO_PHONE_NUMBER and/or TWILIO_MESSAGING_SERVICE_SID.
  */
 
@@ -41,18 +42,24 @@ export function getTwilioSenderMode(): TwilioSenderMode {
 }
 
 /**
- * Fields passed to Twilio Messages.create for production.
- * Trial payloads must not include from / messagingServiceSid.
+ * Fields passed to Twilio Messages.create.
+ * Trial: include `from` when TWILIO_PHONE_NUMBER is the Console trial number
+ * (required for current trial accounts — error 572003 when missing/wrong).
+ * Production: Messaging Service preferred, else From.
  */
 export function selectTwilioFromFields(input: {
   mode: TwilioMode;
   messagingServiceSid: string | null;
   phoneNumber: string | null;
 }): { messagingServiceSid?: string; from?: string } {
-  if (input.mode === "trial") return {};
+  const phoneNumber = input.phoneNumber?.trim() || null;
+
+  if (input.mode === "trial") {
+    if (phoneNumber) return { from: phoneNumber };
+    return {};
+  }
 
   const messagingServiceSid = input.messagingServiceSid?.trim() || null;
-  const phoneNumber = input.phoneNumber?.trim() || null;
   if (messagingServiceSid) return { messagingServiceSid };
   if (phoneNumber) return { from: phoneNumber };
   return {};

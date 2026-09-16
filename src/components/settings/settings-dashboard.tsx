@@ -565,9 +565,9 @@ export function SettingsDashboard({
               >
                 <span className="font-semibold">SMS Trial Mode</span>
                 <span className="mt-1 block text-sb-muted">
-                  Twilio supplies the trial sender. Custom CRM text is stored in
-                  history but the API body is a trial template. Secrets stay
-                  server-only — never NEXT_PUBLIC_.
+                  Body uses a Twilio trial template. Set TWILIO_PHONE_NUMBER to
+                  the Console Try out SMS → From trial number (avoids error
+                  572003). Secrets stay server-only — never NEXT_PUBLIC_.
                 </span>
               </p>
               <ul className="list-disc space-y-1 pl-5 text-sb-muted">
@@ -594,7 +594,10 @@ export function SettingsDashboard({
                   Trial template:{" "}
                   {settings.twilio.trialTemplate ?? "sms_internal_alerts"}
                 </li>
-                <li>Purchased Twilio From number: Not required</li>
+                <li>
+                  Trial From (TWILIO_PHONE_NUMBER):{" "}
+                  {settings.twilio.fromDisplay ?? "Missing"}
+                </li>
                 <li>
                   Recipient trial verification: Verify in Twilio Console
                 </li>

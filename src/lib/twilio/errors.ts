@@ -8,10 +8,13 @@ export type ParsedTwilioSendError = {
   unverifiedRecipient: boolean;
   authFailed: boolean;
   trialRestriction: boolean;
+  trialFromMismatch: boolean;
 };
 
 const TRIAL_UNVERIFIED_CODES = new Set(["21608", "21610"]);
 const INVALID_FROM_CODES = new Set(["21212", "21606", "21601"]);
+/** Trial From not assigned to this verified recipient (must use Console trial number). */
+const TRIAL_FROM_MISMATCH_CODES = new Set(["572003"]);
 const INDIA_TEMPLATE_CODES = new Set(["572006", "63027", "63016"]);
 const AUTH_FAILED_CODES = new Set(["20003"]);
 const TRIAL_GEO_CODES = new Set([
@@ -81,6 +84,12 @@ export const UNVERIFIED_RECIPIENT_DIAGNOSTIC =
 export const INVALID_FROM_DIAGNOSTIC =
   "TWILIO_PHONE_NUMBER must be a Twilio Console phone number (Phone Numbers → Manage) owned by this account. Update the env on Render and .env.local, then redeploy.";
 
+export const TRIAL_FROM_MISMATCH_DIAGNOSTIC =
+  "Error 572003: Set TWILIO_PHONE_NUMBER to the exact Twilio trial From number shown in Twilio Console → Messaging → Try out SMS for this recipient (labeled “Twilio trial number”), then redeploy. Do not use a personal mobile as From.";
+
+export const MISSING_TRIAL_FROM_DIAGNOSTIC =
+  "MISSING_TRIAL_FROM: Current Twilio trial requires TWILIO_PHONE_NUMBER set to the From value on Console → Messaging → Try out SMS (Twilio trial number). Without it, Twilio returns 572003.";
+
 export const TRIAL_RESTRICTION_DIAGNOSTIC =
   "Recipient is not supported by the current Twilio trial configuration. Verify the recipient in Twilio Console → Messaging → Try out SMS and use a destination allowed by this trial.";
 
@@ -93,6 +102,18 @@ export const INVALID_TRIAL_TEMPLATE_DIAGNOSTIC =
 export const INVALID_RECIPIENT_DIAGNOSTIC =
   "INVALID_RECIPIENT_NUMBER: Recipient phone must be a valid E.164 number (example +14035550100). Ambiguous local numbers are not auto-converted without country context.";
 
+export function isTrialFromMismatchError(
+  code: string | null,
+  message: string
+): boolean {
+  if (code && TRIAL_FROM_MISMATCH_CODES.has(code)) return true;
+  return (
+    /from['']?\s*number.*(isn't|is not|not).*assigned.*verified.*recipient/i.test(
+      message
+    ) || /using your assigned trial number/i.test(message)
+  );
+}
+
 export function parseTwilioSendError(err: unknown): ParsedTwilioSendError {
   const errorCode = readCode(err);
   const sanitized = sanitizeTwilioErrorMessage(readRawMessage(err));
@@ -100,11 +121,14 @@ export function parseTwilioSendError(err: unknown): ParsedTwilioSendError {
   const authFailed =
     (errorCode != null && AUTH_FAILED_CODES.has(errorCode)) ||
     /authenticate|authentication error/i.test(sanitized);
+  const trialFromMismatch = isTrialFromMismatchError(errorCode, sanitized);
   const trialRestriction = isTrialRestrictionError(errorCode, sanitized);
 
   let errorMessage = sanitized || "Twilio could not send this SMS";
   if (authFailed) {
     errorMessage = AUTH_FAILED_DIAGNOSTIC;
+  } else if (trialFromMismatch) {
+    errorMessage = TRIAL_FROM_MISMATCH_DIAGNOSTIC;
   } else if (unverifiedRecipient) {
     errorMessage = UNVERIFIED_RECIPIENT_DIAGNOSTIC;
   } else if (trialRestriction) {
@@ -127,6 +151,7 @@ export function parseTwilioSendError(err: unknown): ParsedTwilioSendError {
     unverifiedRecipient,
     authFailed,
     trialRestriction,
+    trialFromMismatch,
   };
 }
 

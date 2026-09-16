@@ -25,18 +25,16 @@ import {
 } from "../twilio/phone";
 import { mapTwilioMessageStatus } from "../twilio/status";
 import {
-  parseTwilioSendError,
-  isUnverifiedRecipientError,
-  UNVERIFIED_RECIPIENT_DIAGNOSTIC,
-  AUTH_FAILED_DIAGNOSTIC,
-  TRIAL_RESTRICTION_DIAGNOSTIC,
-  INVALID_TRIAL_TEMPLATE_DIAGNOSTIC,
-} from "../twilio/errors";
-import {
   getTwilioSenderMode,
   selectTwilioFromFields,
   normalizeTwilioAccountSid,
 } from "../twilio/sender";
+import {
+  buildTwilioMessagePayload,
+  assertTrialFromConfigured,
+  resolveOutboundTwilioBody,
+} from "../twilio/payload";
+import type { TwilioConfig } from "../twilio/config";
 import {
   DEFAULT_TWILIO_TRIAL_TEMPLATE,
   getTwilioMode,
@@ -45,9 +43,16 @@ import {
   resolveTwilioTrialTemplate,
   TWILIO_TRIAL_TEMPLATES,
 } from "../twilio/mode";
-import { buildTwilioMessagePayload } from "../twilio/payload";
-import { resolveOutboundTwilioBody } from "../twilio/payload";
-import type { TwilioConfig } from "../twilio/config";
+import {
+  parseTwilioSendError,
+  isUnverifiedRecipientError,
+  UNVERIFIED_RECIPIENT_DIAGNOSTIC,
+  AUTH_FAILED_DIAGNOSTIC,
+  TRIAL_RESTRICTION_DIAGNOSTIC,
+  TRIAL_FROM_MISMATCH_DIAGNOSTIC,
+  INVALID_TRIAL_TEMPLATE_DIAGNOSTIC,
+  MISSING_TRIAL_FROM_DIAGNOSTIC,
+} from "../twilio/errors";
 
 const KEYS = [
   "APP_URL",
@@ -253,7 +258,7 @@ describe("Twilio sender modes", () => {
     assert.equal(getTwilioSenderMode(), "not_configured");
   });
 
-  it("trial mode works without TWILIO_PHONE_NUMBER", () => {
+  it("trial mode works with SID/token; From is added when TWILIO_PHONE_NUMBER is set", () => {
     clearTwilio();
     process.env.TWILIO_MODE = "trial";
     process.env.TWILIO_ACCOUNT_SID = "test-account-sid";
@@ -266,6 +271,14 @@ describe("Twilio sender modes", () => {
         phoneNumber: null,
       }),
       {}
+    );
+    assert.deepEqual(
+      selectTwilioFromFields({
+        mode: "trial",
+        messagingServiceSid: null,
+        phoneNumber: "+17372508034",
+      }),
+      { from: "+17372508034" }
     );
   });
 
@@ -301,27 +314,37 @@ describe("Twilio sender modes", () => {
 describe("Twilio message payloads", () => {
   afterEach(restoreTwilio);
 
-  it("trial request uses sms_internal_alerts and does not include from", () => {
+  it("trial request uses sms_internal_alerts and includes Console trial From", () => {
     clearTwilio();
     const intended = "New project ABC has been assigned to you";
-    const outbound = resolveOutboundTwilioBody(trialConfig(), intended);
+    const config = trialConfig({ phoneNumber: "+17372508034" });
+    const outbound = resolveOutboundTwilioBody(config, intended);
     assert.equal(outbound.ok, true);
     if (!outbound.ok) return;
     assert.equal(outbound.twilioBody, "sms_internal_alerts");
     assert.equal(outbound.intendedBody, intended);
 
-    const payload = buildTwilioMessagePayload(trialConfig(), {
-      to: "+14035550100",
+    const payload = buildTwilioMessagePayload(config, {
+      to: "+919671830977",
       body: outbound.twilioBody,
       statusCallback: "https://sunbuild.onrender.com/api/twilio/status",
     });
     assert.equal(payload.body, "sms_internal_alerts");
-    assert.equal(payload.to, "+14035550100");
-    assert.equal("from" in payload && payload.from !== undefined, false);
+    assert.equal(payload.to, "+919671830977");
+    assert.equal(payload.from, "+17372508034");
     assert.equal(
       "messagingServiceSid" in payload && payload.messagingServiceSid !== undefined,
       false
     );
+  });
+
+  it("trial rejects missing From before calling Twilio (avoids 572003)", () => {
+    clearTwilio();
+    const missing = assertTrialFromConfigured(trialConfig({ phoneNumber: null }));
+    assert.equal(missing.ok, false);
+    if (missing.ok) return;
+    assert.equal(missing.code, "MISSING_TRIAL_FROM");
+    assert.equal(missing.message, MISSING_TRIAL_FROM_DIAGNOSTIC);
   });
 
   it("trial rejects an invalid template without sending", () => {
@@ -353,6 +376,18 @@ describe("Twilio message payloads", () => {
 });
 
 describe("Twilio trial send errors", () => {
+  it("maps trial From mismatch 572003 to a clear Console diagnostic", () => {
+    const parsed = parseTwilioSendError({
+      code: 572003,
+      message:
+        "The 'from' number isn't assigned to this verified messaging recipient. Please check the Twilio Console and send message using your assigned trial number.",
+    });
+    assert.equal(parsed.errorCode, "572003");
+    assert.equal(parsed.trialFromMismatch, true);
+    assert.equal(parsed.errorMessage, TRIAL_FROM_MISMATCH_DIAGNOSTIC);
+    assert.doesNotMatch(parsed.errorMessage, /buy a/i);
+  });
+
   it("maps unverified-recipient 21608 to a safe diagnostic", () => {
     const parsed = parseTwilioSendError({
       code: 21608,

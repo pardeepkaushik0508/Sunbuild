@@ -19,7 +19,7 @@ import {
   INVALID_RECIPIENT_DIAGNOSTIC,
   parseTwilioSendError,
 } from "@/lib/twilio/errors";
-import { resolveOutboundTwilioBody } from "@/lib/twilio/payload";
+import { resolveOutboundTwilioBody, assertTrialFromConfigured } from "@/lib/twilio/payload";
 import type { TwilioFormParams } from "@/lib/twilio/webhook";
 
 export type PublicSmsMessage = {
@@ -138,6 +138,10 @@ export async function sendSmsMessage(input: {
   }
 
   const config = requireTwilioConfig();
+  const trialFrom = assertTrialFromConfigured(config);
+  if (!trialFrom.ok) {
+    throw new AppError(trialFrom.message, 400, trialFrom.code);
+  }
   const outbound = resolveOutboundTwilioBody(config, body);
   if (!outbound.ok) {
     throw new AppError(outbound.message, 400, outbound.code);
@@ -153,7 +157,7 @@ export async function sendSmsMessage(input: {
       buyerId,
       senderUserId: input.session.user.id,
       direction: "OUTBOUND",
-      fromNumber: config.mode === "production" ? config.phoneNumber : null,
+      fromNumber: config.phoneNumber,
       toNumber,
       // Persist intended CRM text even when trial sends a template id to Twilio.
       body: outbound.intendedBody.slice(0, 1600),
@@ -177,7 +181,7 @@ export async function sendSmsMessage(input: {
     data: {
       twilioSid: sent.sid,
       status,
-      fromNumber: sent.from || (config.mode === "production" ? config.phoneNumber : null),
+      fromNumber: sent.from || config.phoneNumber,
       errorCode: sent.errorCode,
       errorMessage: sent.errorMessage,
     },
@@ -254,6 +258,11 @@ export async function sendTrialSmsToCompanyUser(input: {
     );
   }
 
+  const trialFrom = assertTrialFromConfigured(config);
+  if (!trialFrom.ok) {
+    throw new AppError(trialFrom.message, 400, trialFrom.code);
+  }
+
   const outbound = resolveOutboundTwilioBody(
     config,
     "Sunbuild trial SMS diagnostic (intended body retained in history)"
@@ -291,7 +300,7 @@ export async function sendTrialSmsToCompanyUser(input: {
       companyId,
       senderUserId: input.session.user.id,
       direction: "OUTBOUND",
-      fromNumber: null,
+      fromNumber: config.phoneNumber,
       toNumber,
       body: outbound.intendedBody,
       status: "QUEUED",
@@ -313,7 +322,7 @@ export async function sendTrialSmsToCompanyUser(input: {
     data: {
       twilioSid: sent.sid,
       status: mapped === "RECEIVED" ? "SENT" : mapped,
-      fromNumber: sent.from,
+      fromNumber: sent.from || config.phoneNumber,
       errorCode: sent.errorCode,
       errorMessage: sent.errorMessage,
     },
@@ -404,6 +413,29 @@ export async function notifyUserBySmsBestEffort(input: {
       return;
     }
 
+    const trialFrom = assertTrialFromConfigured(config);
+    if (!trialFrom.ok) {
+      await prisma.smsMessage
+        .create({
+          data: {
+            companyId: input.companyId,
+            projectId: input.projectId || null,
+            senderUserId: null,
+            direction: "OUTBOUND",
+            fromNumber: null,
+            toNumber,
+            body: text.slice(0, 1600),
+            status: "FAILED",
+            errorCode: "MISSING_TRIAL_FROM",
+            errorMessage: trialFrom.message,
+          },
+        })
+        .catch((err) => {
+          console.warn("[twilio] could not persist missing-trial-from SMS row", err);
+        });
+      return;
+    }
+
     const outbound = resolveOutboundTwilioBody(config, text.slice(0, 1600));
     if (!outbound.ok) {
       await prisma.smsMessage
@@ -434,7 +466,7 @@ export async function notifyUserBySmsBestEffort(input: {
         projectId: input.projectId || null,
         senderUserId: null,
         direction: "OUTBOUND",
-        fromNumber: config.mode === "production" ? config.phoneNumber : null,
+        fromNumber: config.phoneNumber,
         toNumber,
         body: outbound.intendedBody.slice(0, 1600),
         status: "QUEUED",
@@ -456,8 +488,7 @@ export async function notifyUserBySmsBestEffort(input: {
       data: {
         twilioSid: sent.sid,
         status: mapped === "RECEIVED" ? "SENT" : mapped,
-        fromNumber:
-          sent.from || (config.mode === "production" ? config.phoneNumber : null),
+        fromNumber: sent.from || config.phoneNumber,
         errorCode: sent.errorCode,
         errorMessage: sent.errorMessage,
       },

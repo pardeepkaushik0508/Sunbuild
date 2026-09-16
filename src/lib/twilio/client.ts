@@ -52,7 +52,7 @@ export async function sendTwilioSms(
     return {
       sid: message.sid,
       status: message.status,
-      from: message.from || (config.mode === "production" ? config.phoneNumber : null),
+      from: message.from || config.phoneNumber,
       errorCode: message.errorCode != null ? String(message.errorCode) : null,
       errorMessage: message.errorMessage || null,
       unverifiedRecipient: parsedFailure?.unverifiedRecipient ?? false,
@@ -64,7 +64,7 @@ export async function sendTwilioSms(
     return {
       sid: null,
       status: "failed",
-      from: config.mode === "production" ? config.phoneNumber : null,
+      from: config.phoneNumber,
       errorCode: parsed.errorCode,
       errorMessage: parsed.errorMessage,
       unverifiedRecipient: parsed.unverifiedRecipient,
