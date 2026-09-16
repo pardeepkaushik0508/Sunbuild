@@ -32,6 +32,7 @@ import {
   sessionTimeoutSchema,
 } from "@/lib/settings/validation";
 import { AppError } from "@/lib/errors";
+import { getPublicTwilioSettings } from "@/lib/twilio/config";
 import { readdir, stat } from "fs/promises";
 import path from "path";
 
@@ -193,6 +194,7 @@ export async function getCompanySettings(
     ) as SessionTimeoutMinutes,
     fileStorage,
     whatsapp: whatsapp as WhatsAppIntegrationSettings,
+    twilio: await getPublicTwilioSettings(),
     quickbooks: quickbooks as QuickBooksIntegrationSettings,
     emailNotifications: email,
     meta: {

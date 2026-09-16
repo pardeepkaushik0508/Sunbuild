@@ -212,8 +212,8 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
     },
     {
       id: "lot",
-      label: "Lot / Address",
-      value: primary?.lotInfo ?? primary?.municipalAddress ?? "—",
+      label: "Lot / plan number",
+      value: primary?.lotInfo ?? primary?.municipalAddress ?? "Not set",
     },
     {
       id: "pm",

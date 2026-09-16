@@ -84,7 +84,9 @@ export function analyzeSoaItems(
     if (
       item.category.toLowerCase() === "other" ||
       item.category.toLowerCase() === "general" ||
-      !STANDARD_ALLOWANCE_CATEGORIES.includes(item.category as any)
+      !(STANDARD_ALLOWANCE_CATEGORIES as readonly string[]).includes(
+        item.category
+      )
     ) {
       const suggested = suggestAllowanceCategory(item.name, item.description ?? "");
       if (suggested && suggested !== item.category) {

@@ -788,7 +788,7 @@ export async function generateContractPdfBuffer(
 
   y -= 14;
   page.drawText(`Phone: ${data.buyerPhone || "—"}`, { x: 50, y, size: 10, font: fontRegular, color: inkColor });
-  page.drawText(`Lot Info: ${data.lotBlockPlan || data.legalAddress || "—"}`, { x: 310, y, size: 10, font: fontRegular, color: inkColor });
+  page.drawText(`Lot / plan: ${data.lotBlockPlan || data.legalAddress || "Not set"}`, { x: 310, y, size: 10, font: fontRegular, color: inkColor });
 
   // Financial Breakdown
   y -= 34;

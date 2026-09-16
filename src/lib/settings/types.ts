@@ -54,6 +54,31 @@ export type WhatsAppIntegrationSettings = {
   webhookConfigured: boolean;
 };
 
+export type TwilioFailureSample = {
+  sentAt: string;
+  toDisplay: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  unverifiedRecipient: boolean;
+};
+
+export type TwilioSenderMode =
+  | "messaging_service"
+  | "phone_number"
+  | "not_configured";
+
+export type TwilioIntegrationSettings = {
+  status: IntegrationStatus;
+  provider: "twilio" | null;
+  senderMode: TwilioSenderMode;
+  fromDisplay: string | null;
+  messagingServiceConfigured: boolean;
+  statusCallbackUrl: string;
+  inboundWebhookUrl: string;
+  recentFailures: TwilioFailureSample[];
+  diagnostics: string[];
+};
+
 export type QuickBooksIntegrationSettings = {
   status: IntegrationStatus;
   realmId: string | null;
@@ -73,6 +98,7 @@ export type CompanySettingsSnapshot = {
   sessionTimeoutMinutes: SessionTimeoutMinutes;
   fileStorage: FileStorageSettings;
   whatsapp: WhatsAppIntegrationSettings;
+  twilio: TwilioIntegrationSettings;
   quickbooks: QuickBooksIntegrationSettings;
   emailNotifications: EmailNotificationSettings;
   /** Derived display helpers (never secrets). */

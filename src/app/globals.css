@@ -108,10 +108,11 @@ html[data-theme="dark"] {
   --color-sb-danger: var(--sb-danger);
   --color-sb-success: var(--sb-success);
   --color-sb-info: var(--sb-info);
-  --font-sans: var(--font-poppins);
+  --font-sans: var(--font-open-sans);
+  --font-heading: var(--font-montserrat);
   --font-brand: var(--font-pacifico);
-  --font-outfit: var(--font-poppins);
-  --font-dm-sans: var(--font-poppins);
+  --font-outfit: var(--font-montserrat);
+  --font-dm-sans: var(--font-open-sans);
 }
 
 * {
@@ -133,7 +134,17 @@ body {
   min-height: 100%;
   background: var(--sb-canvas);
   color: var(--sb-body);
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  font-family: var(--font-open-sans), "Open Sans", system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+th {
+  font-family: var(--font-montserrat), Montserrat, system-ui, sans-serif;
 }
 
 /* Sidebar / drawer navigation scroll area */
@@ -197,7 +208,15 @@ button,
 input,
 select,
 textarea {
-  font: inherit;
+  font-family: inherit;
+}
+
+.sb-shell-nav-scroll a,
+.sb-shell-nav-scroll button {
+  font-family: var(--font-open-sans), "Open Sans", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .sb-card {
@@ -211,6 +230,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-family: var(--font-montserrat), Montserrat, system-ui, sans-serif;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--sb-ink);

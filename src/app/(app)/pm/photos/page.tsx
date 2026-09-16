@@ -12,6 +12,7 @@ import { MediaImage } from "@/components/ui/media-image";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, mediaUrl } from "@/lib/utils";
+import { ProjectHeroImageCard } from "@/components/projects/project-hero-image-card";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -30,7 +31,7 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
       ? [filterProjectId]
       : projectIds;
 
-  const [photos, projects] = await Promise.all([
+  const [photos, projects, bannerProject] = await Promise.all([
     prisma.photo.findMany({
       where: { projectId: { in: filteredIds } },
       include: {
@@ -45,6 +46,12 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    filterProjectId && projectIds.includes(filterProjectId)
+      ? prisma.project.findFirst({
+          where: { id: filterProjectId },
+          select: { id: true, heroImageUrl: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -63,10 +70,23 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
         }
       />
 
+      {bannerProject ? (
+        <div className="mb-6">
+          <ProjectHeroImageCard
+            projectId={bannerProject.id}
+            heroImageUrl={bannerProject.heroImageUrl}
+          />
+        </div>
+      ) : null}
+
       <Card className="mb-6">
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
-          Upload photo
+          Upload progress photos
         </h2>
+        <p className="mt-1 text-sm text-sb-muted">
+          These appear in the client&apos;s Project Photos gallery. They do not
+          replace the home banner.
+        </p>
         <ActionForm
           action={uploadPhotoAction}
           successMessage="Photo uploaded"

@@ -47,6 +47,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["twilio"],
   images: {
     remotePatterns: [
       {

@@ -12,10 +12,11 @@ export function SessionTimeoutGuard({
 }: {
   timeoutMinutes: number;
 }) {
-  const lastActive = useRef(Date.now());
+  const lastActive = useRef(0);
   const loggingOut = useRef(false);
 
   useEffect(() => {
+    lastActive.current = Date.now();
     const ms = Math.max(1, timeoutMinutes) * 60 * 1000;
 
     function touch() {

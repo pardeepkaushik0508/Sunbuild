@@ -282,8 +282,15 @@ export function HighPriorityMicrosoftCard({
   initialConnection?: PublicMicrosoftTodoConnection | null;
 }) {
   const initiallyConnected = Boolean(initialConnection?.connected);
+  const shouldSkipFetch = Boolean(
+    initialConnection &&
+      !initialConnection.connected &&
+      initialConnection.status !== "RECONNECT_REQUIRED"
+  );
   const [items, setItems] = useState<HighPriorityItem[]>([]);
-  const [isLoading, setIsLoading] = useState(initiallyConnected);
+  const [isLoading, setIsLoading] = useState(
+    shouldSkipFetch ? false : initiallyConnected
+  );
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] =
     useState<PublicMicrosoftTodoConnection | null>(initialConnection ?? null);
@@ -331,18 +338,11 @@ export function HighPriorityMicrosoftCard({
   }, []);
 
   useEffect(() => {
-    // Skip Graph fetch until the user has connected (or needs reconnect).
-    if (
-      initialConnection &&
-      !initialConnection.connected &&
-      initialConnection.status !== "RECONNECT_REQUIRED"
-    ) {
-      setIsLoading(false);
-      setConnection(initialConnection);
-      return;
-    }
-    void load(false);
-  }, [load, initialConnection]);
+    if (shouldSkipFetch) return;
+    queueMicrotask(() => {
+      void load(false);
+    });
+  }, [load, shouldSkipFetch]);
 
   const needsConnect =
     !connection?.connected &&

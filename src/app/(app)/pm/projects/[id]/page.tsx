@@ -25,6 +25,7 @@ import {
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
+import { EMPTY_FIELD_LABEL, LOT_PLAN_LABEL } from "@/lib/labels";
 import { loadProjectSubcontractorPayments } from "@/lib/payments/subcontractor-summary";
 import { financeRolesCanSeeAllSubPayments } from "@/lib/payments/invoice-flow";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
@@ -32,6 +33,8 @@ import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
 import { formatPersonOptionLabel } from "@/lib/users/person-label";
 import { FileText, FileSpreadsheet, Lock, ExternalLink } from "lucide-react";
+import { SendSmsButton } from "@/components/twilio/send-sms-button";
+import { ProjectHeroImageCard } from "@/components/projects/project-hero-image-card";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -199,6 +202,14 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
                 </Button>
               </a>
             ) : null}
+            {project.buyer?.phone ? (
+              <SendSmsButton
+                toPhone={project.buyer.phone}
+                projectId={project.id}
+                defaultBody={`Hi ${project.buyer.firstName ?? "there"}, this is your Sunview project team.`}
+                label="SMS buyer"
+              />
+            ) : null}
           </>
         }
       />
@@ -216,6 +227,11 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           </span>
         ) : null}
       </div>
+
+      <ProjectHeroImageCard
+        projectId={project.id}
+        heroImageUrl={project.heroImageUrl}
+      />
 
       {scheduleItems.length > 0 ? (
         <GanttChart
@@ -301,37 +317,37 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             id: "deposit",
             label: "Client Deposit",
             value: deposits[0]
-              ? `$${deposits[0].amount.toLocaleString()}`
-              : "ÎÃÃ¶",
+              ? formatCurrency(deposits[0].amount)
+              : "No deposit yet",
           },
           {
             id: "client",
             label: "Client Name",
             value: project.buyer
               ? fullName(project.buyer.firstName, project.buyer.lastName)
-              : "ÎÃÃ¶",
+              : EMPTY_FIELD_LABEL,
           },
           {
             id: "lot",
-            label: "Lot Info",
-            value: project.lotInfo ?? "ÎÃÃ¶",
+            label: LOT_PLAN_LABEL,
+            value: project.lotInfo?.trim() || EMPTY_FIELD_LABEL,
           },
           {
             id: "address",
             label: "Municipal Address",
-            value: project.municipalAddress ?? "ÎÃÃ¶",
+            value: project.municipalAddress?.trim() || EMPTY_FIELD_LABEL,
           },
           {
             id: "pm",
             label: "Project Manager",
-            value: project.pm?.name ?? "ÎÃÃ¶",
+            value: project.pm?.name?.trim() || EMPTY_FIELD_LABEL,
           },
           {
             id: "price",
             label: "Total project cost",
             value: projectBudget.hasBudget
               ? formatCurrency(projectBudget.total)
-              : "—",
+              : EMPTY_FIELD_LABEL,
           },
         ]}
         viewAllHref="/pm/contracts"
@@ -546,15 +562,15 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
               </div>
               <div>
                 <dt className="text-sb-muted">Email</dt>
-                <dd>{project.buyer.email ?? "ÎÃÃ¶"}</dd>
+                <dd>{project.buyer.email ?? EMPTY_FIELD_LABEL}</dd>
               </div>
               <div>
                 <dt className="text-sb-muted">Phone</dt>
-                <dd>{project.buyer.phone ?? "ÎÃÃ¶"}</dd>
+                <dd>{project.buyer.phone ?? EMPTY_FIELD_LABEL}</dd>
               </div>
               <div>
                 <dt className="text-sb-muted">Mailing address</dt>
-                <dd>{project.buyer.mailingAddress ?? "ÎÃÃ¶"}</dd>
+                <dd>{project.buyer.mailingAddress ?? EMPTY_FIELD_LABEL}</dd>
               </div>
             </dl>
           ) : (

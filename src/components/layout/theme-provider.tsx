@@ -29,19 +29,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-      const initial =
-        stored === "dark" || stored === "light"
-          ? stored
-          : window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light";
-      setThemeState(initial);
-      applyTheme(initial);
-    } catch {
-      applyTheme("light");
-    }
+    queueMicrotask(() => {
+      try {
+        const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
+        const initial =
+          stored === "dark" || stored === "light"
+            ? stored
+            : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        setThemeState(initial);
+        applyTheme(initial);
+      } catch {
+        applyTheme("light");
+      }
+    });
   }, []);
 
   const setTheme = useCallback((next: Theme) => {

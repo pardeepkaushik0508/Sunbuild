@@ -60,6 +60,7 @@ model User {
   microsoftTodoConnections  MicrosoftTodoConnection[]
   microsoftTodoProjectLinks MicrosoftTodoProjectLink[]
   whatsappMessagesSent      WhatsAppMessage[]           @relation("WhatsAppSender")
+  smsMessagesSent           SmsMessage[]                @relation("SmsSender")
   sitePagesUpdated          SitePage[]                  @relation("SitePageUpdater")
   notifications             Notification[]
   statementsOfAdjustmentsGenerated StatementOfAdjustments[] @relation("SoaGeneratedBy")
@@ -152,6 +153,7 @@ model Company {
   contracts   PurchaseContract[]
   soas        ScheduleOfAllowances[]
   statementsOfAdjustments StatementOfAdjustments[]
+  smsMessages             SmsMessage[]
 }
 
 /// Typed key/value settings. Scopes must not be mixed:
@@ -296,6 +298,7 @@ model Lead {
   activities LeadActivity[]
   proposals  Proposal[]
   contracts  PurchaseContract[]
+  smsMessages SmsMessage[]
 
   @@index([companyId, status])
   @@index([companyId, updatedAt])
@@ -370,6 +373,7 @@ model Buyer {
   contracts PurchaseContract[]
   soas      ScheduleOfAllowances[]
   whatsappConversations WhatsAppConversation[]
+  smsMessages           SmsMessage[]
 }
 
 enum ProjectStatus {
@@ -429,6 +433,7 @@ model Project {
   warrantyTickets WarrantyTicket[]
   microsoftTodoLinks MicrosoftTodoProjectLink[]
   whatsappConversations WhatsAppConversation[]
+  smsMessages           SmsMessage[]
   statementsOfAdjustments StatementOfAdjustments[]
 
   @@index([companyId, status])
@@ -1335,6 +1340,55 @@ model WhatsAppMessage {
 
   @@index([conversationId, sentAt])
   @@index([whatsappMessageId])
+}
+
+// ─── Twilio SMS (same Next.js app — /api/twilio/*) ───────────────────────────
+
+enum SmsMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SmsMessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  UNDELIVERED
+  FAILED
+  RECEIVED
+}
+
+/// Outbound + inbound SMS stored in PostgreSQL. Status callbacks update `status`.
+model SmsMessage {
+  id             String              @id @default(cuid())
+  companyId      String?
+  projectId      String?
+  leadId         String?
+  buyerId        String?
+  senderUserId   String?
+  direction      SmsMessageDirection
+  fromNumber     String?
+  toNumber       String
+  body           String
+  mediaUrl       String?
+  status         SmsMessageStatus    @default(QUEUED)
+  twilioSid      String?             @unique
+  errorCode      String?
+  errorMessage   String?
+  sentAt         DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  company        Company?            @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lead           Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  buyer          Buyer?              @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  senderUser     User?               @relation("SmsSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, sentAt])
+  @@index([leadId, sentAt])
+  @@index([projectId, sentAt])
+  @@index([toNumber])
+  @@index([status])
 }
 
 /// In-app notifications (bell + /notifications inbox).

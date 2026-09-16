@@ -73,26 +73,23 @@ export function ClientInfoStrip({
           )}
         >
           {items.map((item) => {
+            const value = item.value?.trim() || "Not set";
             const inner =
               variant === "pills" ? (
                 <div className="flex min-h-[64px] flex-col items-center justify-center rounded-[12px] border border-sb-border bg-[#f3f4f6] px-3 py-3 text-center transition hover:border-sb-blue/40 hover:bg-white">
                   <p className="text-[13px] font-semibold text-sb-ink">
                     {item.label}
                   </p>
-                  {item.value ? (
-                    <p className="mt-0.5 line-clamp-1 text-[11px] text-sb-muted">
-                      {item.value}
-                    </p>
-                  ) : null}
+                  <p className="mt-0.5 line-clamp-1 text-[11px] text-sb-muted">
+                    {value}
+                  </p>
                 </div>
               ) : (
                 <div className="flex min-h-[72px] flex-col items-center justify-center rounded-[12px] border border-sb-border bg-sb-surface px-3 py-4 text-center shadow-[var(--sb-shadow)] transition hover:border-sb-blue/40">
                   <p className="text-sm font-medium text-sb-ink">{item.label}</p>
-                  {item.value ? (
-                    <p className="mt-1 line-clamp-2 text-xs text-sb-muted">
-                      {item.value}
-                    </p>
-                  ) : null}
+                  <p className="mt-1 line-clamp-2 text-xs text-sb-muted">
+                    {value}
+                  </p>
                 </div>
               );
             return item.href ? (

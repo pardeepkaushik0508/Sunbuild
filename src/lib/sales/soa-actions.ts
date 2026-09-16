@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { AllowanceItemStatus, ContractStatus } from "@prisma/client";
+import { AllowanceItemStatus, ContractStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/session";
 import { requireCapability } from "@/lib/authorization";
@@ -35,7 +35,10 @@ async function rateLimit(userId: string, kind: string) {
 /**
  * Recalculates SOA totals and propagates changes to the parent PurchaseContract.
  */
-async function syncSoaAndContractTotals(soaId: string, tx: any = prisma) {
+async function syncSoaAndContractTotals(
+  soaId: string,
+  tx: Prisma.TransactionClient = prisma
+) {
   const soa = await tx.scheduleOfAllowances.findUnique({
     where: { id: soaId },
     include: {

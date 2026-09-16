@@ -95,7 +95,7 @@ function Feature({
         {icon}
       </span>
       <div>
-        <p className="font-semibold text-sb-ink">{title}</p>
+        <p className="font-heading font-semibold text-sb-ink">{title}</p>
         <p className="mt-1 text-sm text-sb-muted">{body}</p>
       </div>
     </li>

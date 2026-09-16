@@ -17,6 +17,7 @@ import { salesLeadAccessWhere } from "@/lib/leads/visibility";
 import { prisma } from "@/lib/db";
 import { formatDate, fullName, whatsappLink } from "@/lib/utils";
 import { formatPersonOptionLabel } from "@/lib/users/person-label";
+import { SendSmsButton } from "@/components/twilio/send-sms-button";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -74,6 +75,13 @@ export default async function LeadDetailPage({ params }: PageProps) {
                   WhatsApp
                 </Button>
               </a>
+            ) : null}
+            {lead.phone ? (
+              <SendSmsButton
+                toPhone={lead.phone}
+                leadId={lead.id}
+                defaultBody={`Hi ${lead.firstName}, this is Sunview Homes.`}
+              />
             ) : null}
           </>
         }

@@ -27,7 +27,7 @@ export async function JobsReportsView({
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const deadlineEnd = new Date(
-    Date.now() + UPCOMING_DEADLINE_DAYS * 86400000
+    now.getTime() + UPCOMING_DEADLINE_DAYS * 86400000
   );
 
   const [byStatus, upcoming] = await Promise.all([

@@ -44,7 +44,7 @@ export function MetricCard({
         <p className="text-xs font-medium uppercase tracking-wide text-sb-muted">
           {label}
         </p>
-        <p className="mt-2 text-2xl font-bold tracking-tight text-sb-ink">
+        <p className="font-heading mt-2 text-2xl font-bold tracking-tight text-sb-ink">
           {value}
         </p>
         {hint ? <p className="mt-1 text-xs text-sb-muted">{hint}</p> : null}
@@ -106,7 +106,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-[16px] border border-dashed border-sb-border bg-white px-6 py-16 text-center">
-      <p className="font-medium text-sb-ink">{title}</p>
+      <p className="font-heading font-medium text-sb-ink">{title}</p>
       {description ? (
         <p className="mt-1 max-w-md text-sm text-sb-muted">{description}</p>
       ) : null}

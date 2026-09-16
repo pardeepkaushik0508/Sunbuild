@@ -21,6 +21,7 @@ import {
   ACTIVE_PROJECT_STATUSES,
   PLANNING_PROJECT_STATUSES,
 } from "@/lib/jobs/constants";
+import { clientProjectStatusLabel } from "@/lib/jobs/status";
 import { formatCurrency, fullName } from "@/lib/utils";
 import type { AppSession } from "@/lib/session";
 import { getAccessibleProjectIds } from "@/lib/session";
@@ -550,9 +551,9 @@ function buildClientItems(
       href: `/pm/projects/${project.id}`,
     },
     {
-      id: "procurement",
-      label: "Procurement",
-      value: project.status.replace(/_/g, " "),
+      id: "status",
+      label: "Project Status",
+      value: clientProjectStatusLabel(project.status),
       href: `/pm/projects/${project.id}`,
     },
     {

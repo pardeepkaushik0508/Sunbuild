@@ -101,13 +101,15 @@ export function OrganizationManagement({
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "1") setCollapsed(true);
-    } catch {
-      /* ignore */
-    }
-    setHydrated(true);
+    queueMicrotask(() => {
+      try {
+        const stored = window.localStorage.getItem(STORAGE_KEY);
+        if (stored === "1") setCollapsed(true);
+      } catch {
+        /* ignore */
+      }
+      setHydrated(true);
+    });
   }, []);
 
   function toggle() {

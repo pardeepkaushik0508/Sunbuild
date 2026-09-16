@@ -1,5 +1,29 @@
 import { ProjectStatus } from "@prisma/client";
 
+/** Simplified labels for client-facing overview strips. */
+export function clientProjectStatusLabel(
+  status: ProjectStatus | string
+): string {
+  switch (status) {
+    case ProjectStatus.PRE_CONSTRUCTION:
+      return "Sold";
+    case ProjectStatus.IN_PROGRESS:
+    case ProjectStatus.SUBSTANTIAL_COMPLETION:
+    case ProjectStatus.PENDING_CEO_APPROVAL:
+      return "In Progress";
+    case ProjectStatus.COMPLETED:
+      return "Completed";
+    case ProjectStatus.HANDED_OVER:
+      return "Handover";
+    case ProjectStatus.ON_HOLD:
+      return "On Hold";
+    case ProjectStatus.CANCELLED:
+      return "Cancelled";
+    default:
+      return projectStatusLabel(status);
+  }
+}
+
 /** Human labels matching Jobs Management PDF badges. */
 export function projectStatusLabel(status: ProjectStatus | string): string {
   switch (status) {

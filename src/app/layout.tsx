@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Poppins, Pacifico } from "next/font/google";
+import { Montserrat, Open_Sans, Pacifico } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/toast";
 import { NavigationProgress } from "@/components/layout/navigation-progress";
 
-const poppins = Poppins({
-  variable: "--font-poppins",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
+
+const openSans = Open_Sans({
+  variable: "--font-open-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -33,7 +39,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${poppins.variable} ${pacifico.variable} h-full`}>
+    <html
+      lang="en"
+      className={`${montserrat.variable} ${openSans.variable} ${pacifico.variable} h-full`}
+    >
       <body className="min-h-full antialiased">
         <Suspense fallback={null}>
           <NavigationProgress />

@@ -42,6 +42,7 @@ import { useOptionalToast } from "@/components/ui/toast";
 import { ROLE_LABELS } from "@/lib/permissions";
 import { toSafeErrorMessage } from "@/lib/errors";
 import { cn, formatDate, mediaUrl } from "@/lib/utils";
+import { ClientHeroImageField } from "@/components/projects/client-hero-image-field";
 
 type DialogMode = "add" | "edit" | "view" | "bulk" | null;
 
@@ -113,6 +114,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
   const [selectedUser, setSelectedUser] = useState<ManageUserRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchValue, setSearchValue] = useState(data.filters.q);
+  const [prevFilterQ, setPrevFilterQ] = useState(data.filters.q);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(
@@ -122,9 +124,10 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
   );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  if (data.filters.q !== prevFilterQ) {
+    setPrevFilterQ(data.filters.q);
     setSearchValue(data.filters.q);
-  }, [data.filters.q]);
+  }
 
   const pushQuery = useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -806,6 +809,9 @@ function UserFormDialog({
   const toast = useOptionalToast();
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [role, setRole] = useState<Role>(
+    user?.role ?? inviteRoles[0] ?? Role.PROJECT_MANAGER
+  );
   const names = splitName(user?.name ?? "");
   const assigned = new Set(user?.projects.map((p) => p.id) ?? []);
 
@@ -839,7 +845,12 @@ function UserFormDialog({
       onClose={onClose}
       wide
     >
-      <form ref={formRef} action={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+      <form
+        ref={formRef}
+        action={handleSubmit}
+        encType="multipart/form-data"
+        className="grid gap-4 sm:grid-cols-2"
+      >
         {formError ? (
           <p className="sm:col-span-2 text-sm text-sb-red">{formError}</p>
         ) : null}
@@ -870,11 +881,12 @@ function UserFormDialog({
           <Select
             name="role"
             required
-            defaultValue={user?.role ?? Role.PROJECT_MANAGER}
+            value={role}
+            onChange={(e) => setRole(e.target.value as Role)}
           >
-            {inviteRoles.map((role) => (
-              <option key={role} value={role}>
-                {ROLE_LABELS[role]}
+            {inviteRoles.map((inviteRole) => (
+              <option key={inviteRole} value={inviteRole}>
+                {ROLE_LABELS[inviteRole]}
               </option>
             ))}
           </Select>
@@ -930,6 +942,15 @@ function UserFormDialog({
             ))}
           </select>
         </FormField>
+        {mode === "add" && role === Role.CLIENT ? (
+          <div className="sm:col-span-2 space-y-2">
+            <ClientHeroImageField className="" />
+            <p className="text-xs text-sb-muted">
+              Select the client&apos;s project above so this banner is saved on
+              their home page.
+            </p>
+          </div>
+        ) : null}
         <div className="flex justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel

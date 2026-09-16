@@ -57,7 +57,9 @@ export function NotificationsMenu() {
 
   // Load on mount + refresh periodically so the bell badge stays accurate
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
     const id = window.setInterval(() => {
       void load();
     }, 60_000);
@@ -66,12 +68,17 @@ export function NotificationsMenu() {
 
   // Refresh when opening the panel
   useEffect(() => {
-    if (open) void load();
+    if (!open) return;
+    queueMicrotask(() => {
+      void load();
+    });
   }, [open, load]);
 
   // Refresh after route changes (e.g. after approving a CO)
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [pathname, load]);
 
   useEffect(() => {

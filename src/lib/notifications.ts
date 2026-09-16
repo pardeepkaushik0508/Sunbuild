@@ -49,6 +49,11 @@ export async function createNotification(input: CreateNotificationInput) {
     },
   });
   revalidateNotificationInbox();
+  try {
+    await smsForNotification(input);
+  } catch {
+    // SMS must never fail the in-app notification or the CRM action.
+  }
   return row;
 }
 
@@ -88,7 +93,28 @@ export async function createNotifications(inputs: CreateNotificationInput[]) {
     })),
   });
   if (result.count > 0) revalidateNotificationInbox();
+  for (const input of rows) {
+    await smsForNotification(input);
+  }
   return result;
+}
+
+async function smsForNotification(input: CreateNotificationInput) {
+  try {
+    const { notifyUserBySmsBestEffort } = await import("@/lib/twilio/service");
+    const body = [input.title, input.body].filter(Boolean).join("\n");
+    await notifyUserBySmsBestEffort({
+      userId: input.userId,
+      companyId: input.companyId,
+      body,
+      projectId: input.entityType === "Project" ? input.entityId : null,
+    });
+  } catch (err) {
+    console.error("[twilio] notification SMS skipped", {
+      type: input.type,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+  }
 }
 
 export async function notifyProjectManager(opts: {
@@ -185,21 +211,19 @@ export async function notifyProjectManagersOfDailyLog(opts: {
   const href = `/pm/daily-logs/${opts.dailyLogId}`;
   const companyId = opts.companyId || project.companyId;
 
-  // Use create (not createMany) so each write is validated and failures surface.
+  // Route through createNotificationOnce so SMS side-effects and dedupe apply.
   for (const userId of recipientIds) {
     try {
-      await prisma.notification.create({
-        data: {
-          userId,
-          companyId,
-          type: "DAILY_LOG_SUBMITTED",
-          title,
-          body,
-          href,
-          tone: "info",
-          entityType: "DailyLog",
-          entityId: opts.dailyLogId,
-        },
+      await createNotificationOnce({
+        userId,
+        companyId,
+        type: "DAILY_LOG_SUBMITTED",
+        title,
+        body,
+        href,
+        tone: "info",
+        entityType: "DailyLog",
+        entityId: opts.dailyLogId,
       });
     } catch (err) {
       console.error("[notifications] failed to create daily log notification", {

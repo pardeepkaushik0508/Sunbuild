@@ -55,6 +55,7 @@ import {
   canInviteRole,
   isValidRole,
   canSetClientVisibility,
+  requireClientHeroAccess,
 } from "@/lib/authorization";
 import { ForbiddenError, AppError, toSafeErrorMessage } from "@/lib/errors";
 import { ROLE_LABELS } from "@/lib/permissions";
@@ -82,6 +83,11 @@ import {
   revalidateProjectProgressSurfaces,
 } from "@/lib/dashboard/sync-project-progress";
 import { collectUploadFiles } from "@/lib/media/collect-upload-files";
+import {
+  getHeroImageFile,
+  saveProjectHeroImage,
+  clearProjectHeroImage,
+} from "@/lib/projects/hero-image";
 import { revalidateProjectPhotos, revalidateProjectSelections } from "@/lib/photos/revalidate";
 import { isSectionClientVisible } from "@/lib/selections/query";
 
@@ -924,6 +930,26 @@ export async function confirmContractAction(contractId: string, form: FormData) 
     });
   }
 
+  const heroFile = getHeroImageFile(form);
+  if (heroFile) {
+    try {
+      await saveProjectHeroImage({
+        session,
+        projectId: result.projectId,
+        file: heroFile,
+      });
+    } catch (err) {
+      console.error("[contract-confirm] hero image failed", err);
+      revalidateJobsSurfaces(result.projectId);
+      revalidatePath("/client");
+      revalidatePath("/owner/users");
+      await redirectWithToast(
+        `/pm/projects/${result.projectId}`,
+        "Project created, but the home banner did not upload. You can add it on the project page."
+      );
+    }
+  }
+
   revalidateJobsSurfaces(result.projectId);
   revalidatePath("/client");
   revalidatePath("/owner/users");
@@ -975,6 +1001,34 @@ export async function createTaskAction(form: FormData) {
 
   await syncProjectProgress(task.projectId);
   revalidateProjectProgressSurfaces(task.projectId);
+  if (task.assigneeId && task.assigneeId !== session.user.id) {
+    try {
+      const assigneeMembership = await prisma.membership.findFirst({
+        where: {
+          userId: task.assigneeId,
+          companyId: session.membership.companyId,
+          isActive: true,
+        },
+        select: { role: true },
+      });
+      await createNotificationOnce({
+        userId: task.assigneeId,
+        companyId: session.membership.companyId,
+        type: "TASK_ASSIGNED",
+        title: `Task assigned: ${task.title}`,
+        body: `Assigned by ${session.user.name}.`,
+        href:
+          assigneeMembership?.role === Role.SUBCONTRACTOR
+            ? `/sub/jobs/${task.projectId}`
+            : `/pm/projects/${task.projectId}`,
+        entityType: "Task",
+        entityId: task.id,
+      });
+      revalidateNotificationInbox();
+    } catch (err) {
+      console.error("[task] assignment notification/SMS skipped", err);
+    }
+  }
   return task.id;
 }
 
@@ -1044,6 +1098,38 @@ export async function updateTaskAction(form: FormData) {
   if (existing.projectId !== task.projectId) {
     await syncProjectProgress(existing.projectId);
     revalidateProjectProgressSurfaces(existing.projectId);
+  }
+  if (
+    nextAssignee &&
+    nextAssignee !== existing.assigneeId &&
+    nextAssignee !== session.user.id
+  ) {
+    try {
+      const assigneeMembership = await prisma.membership.findFirst({
+        where: {
+          userId: nextAssignee,
+          companyId: session.membership.companyId,
+          isActive: true,
+        },
+        select: { role: true },
+      });
+      await createNotificationOnce({
+        userId: nextAssignee,
+        companyId: session.membership.companyId,
+        type: "TASK_ASSIGNED",
+        title: `Task assigned: ${task.title}`,
+        body: `Assigned by ${session.user.name}.`,
+        href:
+          assigneeMembership?.role === Role.SUBCONTRACTOR
+            ? `/sub/jobs/${task.projectId}`
+            : `/pm/projects/${task.projectId}`,
+        entityType: "Task",
+        entityId: task.id,
+      });
+      revalidateNotificationInbox();
+    } catch (err) {
+      console.error("[task] assignment notification/SMS skipped", err);
+    }
   }
   return task.id;
 }
@@ -1320,19 +1406,53 @@ export async function createRfiAction(form: FormData) {
     entityId: rfi.id,
   });
 
-  await notifyProjectManager({
-    projectId: data.projectId,
-    companyId: session.membership.companyId,
-    type: "RFI_CREATED",
-    title: `New RFI: ${data.title}`,
-    body: project
-      ? `${session.user.name} submitted an RFI on ${project.name}.`
-      : `${session.user.name} submitted an RFI.`,
-    href: `/pm/rfis?projectId=${data.projectId}`,
-    entityType: "RFI",
-    entityId: rfi.id,
-    excludeUserId: session.user.id,
-  });
+  try {
+    await notifyProjectManager({
+      projectId: data.projectId,
+      companyId: session.membership.companyId,
+      type: "RFI_CREATED",
+      title: `New RFI: ${data.title}`,
+      body: project
+        ? `${session.user.name} submitted an RFI on ${project.name}.`
+        : `${session.user.name} submitted an RFI.`,
+      href: `/pm/rfis?projectId=${data.projectId}`,
+      entityType: "RFI",
+      entityId: rfi.id,
+      excludeUserId: session.user.id,
+    });
+  } catch (err) {
+    console.error("[rfi] PM notification/SMS skipped", err);
+  }
+
+  if (data.assigneeId && data.assigneeId !== session.user.id) {
+    try {
+      const assigneeMembership = await prisma.membership.findFirst({
+        where: {
+          userId: data.assigneeId,
+          companyId: session.membership.companyId,
+          isActive: true,
+        },
+        select: { role: true },
+      });
+      await createNotificationOnce({
+        userId: data.assigneeId,
+        companyId: session.membership.companyId,
+        type: "RFI_ASSIGNED",
+        title: `RFI assigned: ${data.title}`,
+        body: project
+          ? `${session.user.name} assigned an RFI on ${project.name}.`
+          : `${session.user.name} assigned an RFI.`,
+        href:
+          assigneeMembership?.role === Role.SUBCONTRACTOR
+            ? `/sub/rfis`
+            : `/pm/rfis?projectId=${data.projectId}`,
+        entityType: "RFI",
+        entityId: rfi.id,
+      });
+    } catch (err) {
+      console.error("[rfi] assignment notification/SMS skipped", err);
+    }
+  }
 
   revalidatePath("/pm/rfis");
   revalidatePath("/sub");
@@ -1602,6 +1722,42 @@ export async function uploadPhotoAction(form: FormData) {
     if (err instanceof AppError) {
       return { error: err.message };
     }
+    throw err;
+  }
+}
+
+export async function updateProjectHeroImageAction(form: FormData) {
+  try {
+    const session = await requireSession();
+    requireClientHeroAccess(session);
+    await rateLimitAction(session.user.id, "hero-upload", true);
+    const projectId = formString(form, "projectId");
+    if (!projectId) return { error: "Project is required." };
+    await assertProjectAccess(session, projectId);
+    const file = getHeroImageFile(form);
+    if (!file) {
+      return { error: "Please select a house mockup image to upload." };
+    }
+    await saveProjectHeroImage({ session, projectId, file });
+    return { success: true };
+  } catch (err) {
+    if (err instanceof AppError) return { error: err.message };
+    throw err;
+  }
+}
+
+export async function clearProjectHeroImageAction(form: FormData) {
+  try {
+    const session = await requireSession();
+    requireClientHeroAccess(session);
+    await rateLimitAction(session.user.id, "hero-remove");
+    const projectId = formString(form, "projectId");
+    if (!projectId) return { error: "Project is required." };
+    await assertProjectAccess(session, projectId);
+    await clearProjectHeroImage({ session, projectId });
+    return { success: true };
+  } catch (err) {
+    if (err instanceof AppError) return { error: err.message };
     throw err;
   }
 }
@@ -3000,6 +3156,17 @@ export async function inviteUserAction(form: FormData): Promise<
       metadata: { email, role, projectIds },
     });
 
+    const heroFile = getHeroImageFile(form);
+    if (role === Role.CLIENT && heroFile && projectIds.length > 0) {
+      try {
+        for (const projectId of projectIds) {
+          await saveProjectHeroImage({ session, projectId, file: heroFile });
+        }
+      } catch (err) {
+        console.error("[invite] hero image failed", err);
+      }
+    }
+
     revalidateUserSurfaces(projectIds);
 
     const { after } = await import("next/server");
@@ -3739,21 +3906,25 @@ export async function configureProjectAction(form: FormData) {
     const clientLabel = buyerName
       ? `${buyerName.firstName} ${buyerName.lastName}`.trim()
       : null;
-    await createNotificationOnce({
-      userId: pmId,
-      companyId: session.membership.companyId,
-      type: "PROJECT_ASSIGNED",
-      title: `You have been assigned to ${existing.name}`,
-      body: [
-        clientLabel ? `Client: ${clientLabel}` : null,
-        `Assigned ${new Date().toLocaleDateString()}`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      href: `/pm/projects/${data.projectId}`,
-      entityType: "Project",
-      entityId: data.projectId,
-    });
+    try {
+      await createNotificationOnce({
+        userId: pmId,
+        companyId: session.membership.companyId,
+        type: "PROJECT_ASSIGNED",
+        title: `You have been assigned to ${existing.name}`,
+        body: [
+          clientLabel ? `Client: ${clientLabel}` : null,
+          `Assigned ${new Date().toLocaleDateString()}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: `/pm/projects/${data.projectId}`,
+        entityType: "Project",
+        entityId: data.projectId,
+      });
+    } catch (err) {
+      console.error("[project] assignment notification/SMS skipped", err);
+    }
   }
 
   revalidateJobsSurfaces(data.projectId);

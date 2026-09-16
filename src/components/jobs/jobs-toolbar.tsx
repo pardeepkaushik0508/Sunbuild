@@ -38,10 +38,13 @@ export function JobsToolbar({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [q, setQ] = useState(search);
+  const [prevSearch, setPrevSearch] = useState(search);
 
-  useEffect(() => {
+  // Keep local input in sync when URL search param changes
+  if (search !== prevSearch) {
+    setPrevSearch(search);
     setQ(search);
-  }, [search]);
+  }
 
   const pushParams = useCallback(
     (patch: Record<string, string | null>) => {

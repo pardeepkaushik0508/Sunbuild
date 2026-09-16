@@ -15,6 +15,7 @@ import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { ClientPortalFields } from "@/components/contracts/client-portal-fields";
+import { ClientHeroImageField } from "@/components/projects/client-hero-image-field";
 import { formatPersonOptionLabel } from "@/lib/users/person-label";
 
 type PageProps = {
@@ -206,6 +207,7 @@ export default async function PMContractDetailPage({ params }: PageProps) {
           </p>
           <ActionForm
             action={confirmContract}
+            encType="multipart/form-data"
             className="mt-4 grid gap-4 md:grid-cols-2"
           >
             <FormField label="Assign project manager">
@@ -254,6 +256,7 @@ export default async function PMContractDetailPage({ params }: PageProps) {
               defaultEmail={contract.buyerEmail}
               defaultChecked={Boolean(contract.buyerEmail)}
             />
+            <ClientHeroImageField />
             <div className="md:col-span-2">
               <p className="mb-2 text-sm text-sb-muted">
                 Price: {formatCurrency(contract.purchasePrice)}

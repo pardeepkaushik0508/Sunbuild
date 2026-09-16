@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Priority } from "@prisma/client";
 import { X } from "lucide-react";
@@ -30,15 +30,15 @@ export function AddTaskDialog({
   const toast = useOptionalToast();
   const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
-  const [projectId, setProjectId] = useState(
-    defaultProjectId ?? projects[0]?.id ?? ""
-  );
+  const resolvedDefault = defaultProjectId ?? projects[0]?.id ?? "";
+  const [projectId, setProjectId] = useState(resolvedDefault);
+  const [wasOpen, setWasOpen] = useState(open);
 
-  useEffect(() => {
-    if (open) {
-      setProjectId(defaultProjectId ?? projects[0]?.id ?? "");
-    }
-  }, [open, defaultProjectId, projects]);
+  // Reset project when dialog opens (adjust state during render — React-approved pattern)
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setProjectId(resolvedDefault);
+  }
 
   const filteredAssignees = useMemo(() => {
     if (!projectId) return assignees;

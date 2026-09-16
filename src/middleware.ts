@@ -7,10 +7,15 @@ const publicPaths = [
   "/login",
   "/forgot-password",
   "/reset-password",
-  "/invite",
   "/privacy",
   "/terms",
   "/api/auth",
+  // Public-safe password policy for reset forms (no secrets returned)
+  "/api/settings/password-policy",
+  // External provider webhooks — handlers enforce signatures / verify tokens
+  "/api/twilio/status",
+  "/api/twilio/inbound",
+  "/api/whatsapp/webhook",
 ];
 
 function isPublicPath(pathname: string) {

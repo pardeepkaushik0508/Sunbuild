@@ -185,10 +185,11 @@ export function ContractCreateForm({ projects, leads, buyers, defaultProjectId =
     startTransition(async () => {
       try {
         await createPurchaseContractAction(formData);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // redirect() throws a NEXT_REDIRECT error which should not be caught as failure
-        if (err?.message?.includes("NEXT_REDIRECT")) return;
-        setError(err?.message || "Failed to create purchase contract.");
+        const message = err instanceof Error ? err.message : "";
+        if (message.includes("NEXT_REDIRECT")) return;
+        setError(message || "Failed to create purchase contract.");
       }
     });
   };

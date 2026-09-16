@@ -89,13 +89,14 @@ export function NavigationProgress() {
 
   // Show center overlay only when navigation is noticeably slow
   useEffect(() => {
-    if (!active) {
-      setShowOverlay(false);
-      return;
-    }
+    if (!active) return;
     const timer = setTimeout(() => setShowOverlay(true), 180);
     return () => clearTimeout(timer);
   }, [active]);
+
+  if (!active && showOverlay) {
+    setShowOverlay(false);
+  }
 
   if (!active) return null;
 

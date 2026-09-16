@@ -17,6 +17,75 @@ function typeLabel(type: string) {
   return type.replace(/_/g, " ");
 }
 
+function ResultsPanel({
+  className,
+  listId,
+  query,
+  hits,
+  loading,
+  onSelect,
+}: {
+  className?: string;
+  listId: string;
+  query: string;
+  hits: SearchHit[];
+  loading: boolean;
+  onSelect: () => void;
+}) {
+  const q = query.trim();
+  return (
+    <div
+      id={listId}
+      role="listbox"
+      className={cn(
+        "overflow-hidden rounded-[14px] border border-sb-border bg-sb-surface shadow-lg",
+        className
+      )}
+    >
+      <div className="max-h-[min(50vh,360px)] overflow-y-auto p-1.5">
+        {loading ? (
+          <p className="px-3 py-4 text-center text-sm text-sb-muted">
+            Searching…
+          </p>
+        ) : q.length > 0 && q.length < 2 ? (
+          <p className="px-3 py-4 text-center text-sm text-sb-muted">
+            Type at least 2 characters.
+          </p>
+        ) : q.length >= 2 && hits.length === 0 ? (
+          <p className="px-3 py-4 text-center text-sm text-sb-muted">
+            No matches found.
+          </p>
+        ) : hits.length > 0 ? (
+          <ul className="space-y-0.5">
+            {hits.map((hit) => (
+              <li key={`${hit.type}-${hit.id}`}>
+                <Link
+                  href={hit.href}
+                  role="option"
+                  onClick={onSelect}
+                  className="flex flex-col rounded-[10px] px-3 py-2.5 transition hover:bg-sb-canvas"
+                >
+                  <span className="text-sm font-medium text-sb-ink">
+                    {hit.title}
+                  </span>
+                  <span className="text-[12px] capitalize text-sb-muted">
+                    {typeLabel(hit.type)}
+                    {hit.subtitle ? ` · ${hit.subtitle}` : ""}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-3 py-4 text-center text-sm text-sb-muted">
+            Search projects, tasks, leads, docs…
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GlobalSearch() {
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -29,9 +98,13 @@ export function GlobalSearch() {
   const rootRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const trimmedQuery = query.trim();
+  const displayHits = trimmedQuery.length < 2 ? [] : hits;
+  const displayLoading = trimmedQuery.length < 2 ? false : loading;
+
   const panelOpen =
-    focused && (query.trim().length > 0 || loading || hits.length > 0);
-  const showHint = focused && query.trim().length > 0 && query.trim().length < 2;
+    focused && (trimmedQuery.length > 0 || displayLoading || displayHits.length > 0);
+  const showHint = focused && trimmedQuery.length > 0 && trimmedQuery.length < 2;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -79,12 +152,10 @@ export function GlobalSearch() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
     if (q.length < 2) {
-      setHits([]);
-      setLoading(false);
       return;
     }
-    setLoading(true);
     debounceRef.current = setTimeout(async () => {
+      setLoading(true);
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
           credentials: "same-origin",
@@ -110,64 +181,11 @@ export function GlobalSearch() {
     mobileInputRef.current?.focus();
   }
 
-  function ResultsPanel({ className }: { className?: string }) {
-    const q = query.trim();
-    return (
-      <div
-        id={listId}
-        role="listbox"
-        className={cn(
-          "overflow-hidden rounded-[14px] border border-sb-border bg-sb-surface shadow-lg",
-          className
-        )}
-      >
-        <div className="max-h-[min(50vh,360px)] overflow-y-auto p-1.5">
-          {loading ? (
-            <p className="px-3 py-4 text-center text-sm text-sb-muted">
-              Searching…
-            </p>
-          ) : q.length > 0 && q.length < 2 ? (
-            <p className="px-3 py-4 text-center text-sm text-sb-muted">
-              Type at least 2 characters.
-            </p>
-          ) : q.length >= 2 && hits.length === 0 ? (
-            <p className="px-3 py-4 text-center text-sm text-sb-muted">
-              No matches found.
-            </p>
-          ) : hits.length > 0 ? (
-            <ul className="space-y-0.5">
-              {hits.map((hit) => (
-                <li key={`${hit.type}-${hit.id}`}>
-                  <Link
-                    href={hit.href}
-                    role="option"
-                    onClick={() => {
-                      setFocused(false);
-                      setMobileOpen(false);
-                      setQuery("");
-                      setHits([]);
-                    }}
-                    className="flex flex-col rounded-[10px] px-3 py-2.5 transition hover:bg-sb-canvas"
-                  >
-                    <span className="text-sm font-medium text-sb-ink">
-                      {hit.title}
-                    </span>
-                    <span className="text-[12px] capitalize text-sb-muted">
-                      {typeLabel(hit.type)}
-                      {hit.subtitle ? ` · ${hit.subtitle}` : ""}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="px-3 py-4 text-center text-sm text-sb-muted">
-              Search projects, tasks, leads, docs…
-            </p>
-          )}
-        </div>
-      </div>
-    );
+  function handleSelect() {
+    setFocused(false);
+    setMobileOpen(false);
+    setQuery("");
+    setHits([]);
   }
 
   return (
@@ -208,7 +226,13 @@ export function GlobalSearch() {
 
         {(panelOpen || showHint) && (
           <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[60]">
-            <ResultsPanel />
+            <ResultsPanel
+              listId={listId}
+              query={query}
+              hits={displayHits}
+              loading={displayLoading}
+              onSelect={handleSelect}
+            />
           </div>
         )}
       </div>
@@ -248,7 +272,14 @@ export function GlobalSearch() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-2">
-            <ResultsPanel className="border-0 shadow-none" />
+            <ResultsPanel
+              className="border-0 shadow-none"
+              listId={listId}
+              query={query}
+              hits={displayHits}
+              loading={displayLoading}
+              onSelect={handleSelect}
+            />
           </div>
         </div>
       ) : null}

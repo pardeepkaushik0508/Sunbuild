@@ -96,7 +96,7 @@ export async function createPurchaseContractAction(form: FormData) {
   const internalNotes = formString(form, "internalNotes") || null;
 
   // Handle uploaded file if present
-  let fileMeta: Record<string, any> = {};
+  let fileMeta: Partial<ReturnType<typeof storageMeta>> = {};
   const file = form.get("file");
   if (file instanceof File && file.size > 0) {
     const saved = await saveCompanyUpload(companyId, file, "contracts");
@@ -326,7 +326,7 @@ export async function createContractRevisionAction(
         snapshotData: {
           ...contract,
           archivedAt: new Date().toISOString(),
-        } as any,
+        } as Prisma.InputJsonValue,
         filePath: contract.filePath,
         fileName: contract.fileName,
         createdById: session.user.id,

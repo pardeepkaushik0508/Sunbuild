@@ -8,6 +8,7 @@ import {
   type PasswordPolicy,
   type QuickBooksIntegrationSettings,
   type SessionTimeoutMinutes,
+  type TwilioIntegrationSettings,
   type WhatsAppIntegrationSettings,
 } from "@/lib/settings/types";
 
@@ -65,6 +66,18 @@ export const DEFAULT_WHATSAPP: WhatsAppIntegrationSettings = {
   provider: null,
   phoneDisplay: null,
   webhookConfigured: false,
+};
+
+export const DEFAULT_TWILIO: TwilioIntegrationSettings = {
+  status: "setup_required",
+  provider: null,
+  senderMode: "not_configured",
+  fromDisplay: null,
+  messagingServiceConfigured: false,
+  statusCallbackUrl: "/api/twilio/status",
+  inboundWebhookUrl: "/api/twilio/inbound",
+  recentFailures: [],
+  diagnostics: [],
 };
 
 export const DEFAULT_QUICKBOOKS: QuickBooksIntegrationSettings = {

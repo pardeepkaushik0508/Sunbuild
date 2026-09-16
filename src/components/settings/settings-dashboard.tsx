@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { Role } from "@prisma/client";
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -33,6 +33,7 @@ import type { PublicMicrosoftTodoConnection } from "@/lib/microsoft/types";
 type ModalId =
   | "email"
   | "whatsapp"
+  | "twilio"
   | "quickbooks"
   | "storage"
   | "mfa"
@@ -123,6 +124,32 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function WebhookUrlRow({ label, url }: { label: string; url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="rounded-[10px] border border-sb-border bg-sb-canvas px-3 py-2">
+      <p className="text-[12px] font-medium text-sb-muted">{label}</p>
+      <div className="mt-1 flex items-start justify-between gap-2">
+        <code className="break-all text-[12px] text-sb-ink">{url}</code>
+        <Button variant="outline" size="sm" onClick={copy}>
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Phase2Notice({
   title,
   body,
@@ -172,14 +199,17 @@ export function SettingsDashboard({
   const router = useRouter();
   const toast = useOptionalToast();
   const [settings, setSettings] = useState(initialSettings);
+  const [prevInitialSettings, setPrevInitialSettings] =
+    useState(initialSettings);
   const [modal, setModal] = useState<ModalId>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
+  if (initialSettings !== prevInitialSettings) {
+    setPrevInitialSettings(initialSettings);
     setSettings(initialSettings);
-  }, [initialSettings]);
+  }
 
   function open(id: ModalId) {
     setError(null);
@@ -270,6 +300,19 @@ export function SettingsDashboard({
               action={
                 <Button variant="yellow" size="sm" onClick={() => open("whatsapp")}>
                   Setup
+                </Button>
+              }
+            />
+            <SettingCard
+              title="Twilio SMS"
+              description={
+                settings.twilio.status === "connected"
+                  ? "Same-origin SMS via this Next.js app"
+                  : "Server env setup required"
+              }
+              action={
+                <Button variant="yellow" size="sm" onClick={() => open("twilio")}>
+                  {settings.twilio.status === "connected" ? "View" : "Setup"}
                 </Button>
               }
             />
@@ -402,6 +445,117 @@ export function SettingsDashboard({
               }`,
             ]}
           />
+          <div className="mt-5 flex justify-end">
+            <Button variant="outline" onClick={close}>
+              Close
+            </Button>
+          </div>
+        </DialogShell>
+      ) : null}
+
+      {modal === "twilio" ? (
+        <DialogShell title="Twilio SMS" onClose={close}>
+          {settings.twilio.status === "connected" ? (
+            <div className="space-y-3 text-sm text-sb-body">
+              <p className="rounded-[10px] border border-sb-green-border bg-sb-green-soft px-3 py-2 text-sb-ink">
+                Twilio is configured on this application. SMS is sent from
+                the same Next.js server — there is no separate API domain.
+              </p>
+              <ul className="list-disc space-y-1 pl-5 text-sb-muted">
+                <li>
+                  Status: Connected (
+                  {settings.twilio.senderMode === "messaging_service"
+                    ? "Messaging Service"
+                    : "direct phone number"}
+                  )
+                </li>
+                <li>Provider: Twilio</li>
+                <li>
+                  From: {settings.twilio.fromDisplay ?? "Not shown"}
+                </li>
+                <li>
+                  Messaging Service:{" "}
+                  {settings.twilio.messagingServiceConfigured
+                    ? "Yes (preferred)"
+                    : "Not set — using TWILIO_PHONE_NUMBER"}
+                </li>
+              </ul>
+              {settings.twilio.diagnostics.length ? (
+                <div className="rounded-[10px] border border-sb-yellow/50 bg-sb-yellow-soft px-3 py-2 text-sb-ink">
+                  <p className="font-semibold">Admin diagnostics</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sb-muted">
+                    {settings.twilio.diagnostics.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {settings.twilio.recentFailures.length ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-sb-ink">Recent failed SMS</p>
+                  <ul className="space-y-1 text-[12px] text-sb-muted">
+                    {settings.twilio.recentFailures.map((fail) => (
+                      <li
+                        key={`${fail.sentAt}-${fail.toDisplay}-${fail.errorCode ?? "x"}`}
+                      >
+                        {fail.toDisplay}
+                        {fail.errorCode ? ` · ${fail.errorCode}` : ""}
+                        {fail.unverifiedRecipient
+                          ? " · unverified trial recipient"
+                          : ""}
+                        {fail.errorMessage ? ` — ${fail.errorMessage}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <p className="text-sb-muted">
+                Paste these URLs in the Twilio console. They follow{" "}
+                <code className="text-sb-ink">APP_URL</code> when the app
+                moves hosts.
+              </p>
+              <WebhookUrlRow
+                label="Status callback"
+                url={settings.twilio.statusCallbackUrl}
+              />
+              <WebhookUrlRow
+                label="Inbound SMS"
+                url={settings.twilio.inboundWebhookUrl}
+              />
+            </div>
+          ) : (
+            <div className="space-y-3 text-sm text-sb-body">
+              <p className="rounded-[10px] border border-sb-yellow/50 bg-sb-yellow-soft px-3 py-2 text-sb-ink">
+                <span className="font-semibold">Setup required</span>
+                <span className="mt-1 block text-sb-muted">
+                  Twilio credentials are server-only environment variables on
+                  this Next.js app. Never use NEXT_PUBLIC_ for Twilio secrets.
+                </span>
+              </p>
+              <p>
+                Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and
+                TWILIO_PHONE_NUMBER for trial sending. TWILIO_MESSAGING_SERVICE_SID
+                is optional and preferred later in production. Point Twilio
+                webhooks at this same application origin — do not create a
+                second Render service or api subdomain.
+              </p>
+              {settings.twilio.diagnostics.length ? (
+                <ul className="list-disc space-y-1 pl-5 text-sb-muted">
+                  {settings.twilio.diagnostics.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <WebhookUrlRow
+                label="Status callback"
+                url={settings.twilio.statusCallbackUrl}
+              />
+              <WebhookUrlRow
+                label="Inbound SMS"
+                url={settings.twilio.inboundWebhookUrl}
+              />
+            </div>
+          )}
           <div className="mt-5 flex justify-end">
             <Button variant="outline" onClick={close}>
               Close

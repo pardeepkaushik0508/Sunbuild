@@ -30,7 +30,7 @@ export function OverviewMetricCard({
         <Icon size={18} />
       </span>
       <div className="min-w-0">
-        <p className="truncate text-[20px] leading-none font-bold tracking-tight text-sb-ink">
+        <p className="font-heading truncate text-[20px] leading-none font-bold tracking-tight text-sb-ink">
           {value}
         </p>
         <p className="mt-1 text-[12px] leading-tight text-sb-muted">{label}</p>

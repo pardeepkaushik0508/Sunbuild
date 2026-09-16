@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { handleWhatsAppWebhookPayload } from "@/lib/whatsapp/service";
+import { verifyWhatsAppSignature } from "@/lib/whatsapp/webhook-signature";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Meta WhatsApp Cloud API Webhook Verification.
@@ -15,7 +17,15 @@ export async function GET(request: NextRequest) {
   const challenge = searchParams.get("hub.challenge");
 
   const config = getWhatsAppConfig();
-  const expectedToken = config?.verifyToken || "sunbuild_whatsapp_verify";
+  const expectedToken = config?.verifyToken;
+
+  // Reject handshake when verify token is not configured (no hardcoded fallback).
+  if (!expectedToken) {
+    return NextResponse.json(
+      { error: "WhatsApp webhook verify token is not configured" },
+      { status: 503 }
+    );
+  }
 
   if (mode === "subscribe" && token === expectedToken && challenge) {
     return new NextResponse(challenge, {
@@ -30,11 +40,20 @@ export async function GET(request: NextRequest) {
 /**
  * Meta WhatsApp Cloud API Webhook Event Listener.
  * Receives incoming messages and message status updates (delivered, read, failed).
+ * Requires X-Hub-Signature-256 verified against WHATSAPP_APP_SECRET.
  */
 export async function POST(request: NextRequest) {
+  const config = getWhatsAppConfig();
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-hub-signature-256");
+
+  if (!verifyWhatsAppSignature(rawBody, signature, config?.appSecret)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
+
   try {
-    const payload = await request.json().catch(() => null);
-    if (!payload) {
+    const payload = JSON.parse(rawBody) as unknown;
+    if (!payload || typeof payload !== "object") {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
@@ -42,8 +61,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    // Return 200 to acknowledge receipt to Meta to prevent retry loops
+    // Ack 200 so Meta does not retry forever on handler bugs; log for ops.
     console.error("WhatsApp webhook error:", error);
-    return NextResponse.json({ success: true, processedWithError: true }, { status: 200 });
+    return NextResponse.json(
+      { success: true, processedWithError: true },
+      { status: 200 }
+    );
   }
 }

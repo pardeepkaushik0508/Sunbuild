@@ -83,15 +83,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    const flash = readFlashCookie();
-    if (flash) {
-      setItems((prev) => [...prev, flash]);
-      const timer = setTimeout(() => dismiss(flash.id), AUTO_HIDE_MS);
-      timers.current.set(flash.id, timer);
-    }
+    let cancelled = false;
+    const timersMap = timers.current;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const flash = readFlashCookie();
+      if (flash) {
+        setItems((prev) => [...prev, flash]);
+        const timer = setTimeout(() => dismiss(flash.id), AUTO_HIDE_MS);
+        timersMap.set(flash.id, timer);
+      }
+    });
     return () => {
-      timers.current.forEach((t) => clearTimeout(t));
-      timers.current.clear();
+      cancelled = true;
+      timersMap.forEach((t) => clearTimeout(t));
+      timersMap.clear();
     };
   }, [dismiss]);
 

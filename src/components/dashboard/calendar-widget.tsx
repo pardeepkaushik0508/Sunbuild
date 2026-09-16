@@ -180,7 +180,9 @@ export function CalendarWidget({
   }, [googleConnected, cursor, fetchGoogleEvents]);
 
   useEffect(() => {
-    void fetchGoogleEvents(cursor);
+    queueMicrotask(() => {
+      void fetchGoogleEvents(cursor);
+    });
   }, [cursor, fetchGoogleEvents]);
 
   useEffect(() => {
@@ -191,10 +193,14 @@ export function CalendarWidget({
     return () => window.clearInterval(id);
   }, [googleConnected, reconnectNeeded, cursor, fetchGoogleEvents]);
 
-  useEffect(() => {
+  const [prevGoogleReconnect, setPrevGoogleReconnect] = useState(
+    googleReconnectRequired
+  );
+  if (googleReconnectRequired !== prevGoogleReconnect) {
+    setPrevGoogleReconnect(googleReconnectRequired);
     setReconnectNeeded(googleReconnectRequired);
     if (!googleReconnectRequired) setSyncError(null);
-  }, [googleReconnectRequired]);
+  }
 
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(cursor), { weekStartsOn: 0 });
@@ -269,21 +275,27 @@ export function CalendarWidget({
   }, [eventsByDay, cursor]);
 
   // Keep the selected day inside the visible month so the list matches the grid.
-  useEffect(() => {
-    setSelected((prev) => {
-      if (isSameMonth(prev, cursor)) return prev;
+  const [selectedForCursor, setSelectedForCursor] = useState(cursor);
+  if (!isSameMonth(selectedForCursor, cursor)) {
+    setSelectedForCursor(cursor);
+    if (!isSameMonth(selected, cursor)) {
       const today = new Date();
-      if (isSameMonth(today, cursor)) return today;
-      let firstEventDay: Date | null = null;
-      for (const [key] of eventsByDay) {
-        const [y, m, d] = key.split("-").map(Number);
-        if (y !== cursor.getFullYear() || m !== cursor.getMonth() + 1) continue;
-        const day = new Date(y, m - 1, d);
-        if (!firstEventDay || day < firstEventDay) firstEventDay = day;
+      let next: Date;
+      if (isSameMonth(today, cursor)) {
+        next = today;
+      } else {
+        let firstEventDay: Date | null = null;
+        for (const [key] of eventsByDay) {
+          const [y, m, d] = key.split("-").map(Number);
+          if (y !== cursor.getFullYear() || m !== cursor.getMonth() + 1) continue;
+          const day = new Date(y, m - 1, d);
+          if (!firstEventDay || day < firstEventDay) firstEventDay = day;
+        }
+        next = firstEventDay ?? startOfMonth(cursor);
       }
-      return firstEventDay ?? startOfMonth(cursor);
-    });
-  }, [cursor, eventsByDay]);
+      setSelected(next);
+    }
+  }
 
   const selectedKey = calendarDayKey(selected);
   const selectedEvents = eventsByDay.get(selectedKey) ?? [];

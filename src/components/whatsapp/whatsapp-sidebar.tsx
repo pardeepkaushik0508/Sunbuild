@@ -14,7 +14,7 @@ import {
   AlertCircle,
   ArrowLeft,
 } from "lucide-react";
-import { cn, initials, whatsappLink, formatDate } from "@/lib/utils";
+import { cn, initials, whatsappLink } from "@/lib/utils";
 
 export type WhatsAppContact = {
   id: string;
@@ -77,7 +77,7 @@ export function WhatsAppSidebar({
 }) {
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [contacts, setContacts] = useState<WhatsAppContact[]>(initialContacts);
+  const [fetchedContacts, setFetchedContacts] = useState<WhatsAppContact[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Chat thread state
@@ -89,23 +89,25 @@ export function WhatsAppSidebar({
   const [chatError, setChatError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const contacts =
+    initialContacts.length > 0 ? initialContacts : fetchedContacts;
+
   useEffect(() => {
-    if (!open) return;
-    if (initialContacts.length > 0) {
-      setContacts(initialContacts);
-      return;
-    }
+    if (!open || initialContacts.length > 0) return;
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+    });
     fetch("/api/whatsapp/contacts")
       .then((r) => r.json())
       .then((data: { contacts?: WhatsAppContact[] }) => {
         if (!cancelled && Array.isArray(data.contacts)) {
-          setContacts(data.contacts);
+          setFetchedContacts(data.contacts);
         }
       })
       .catch(() => {
-        if (!cancelled) setContacts([]);
+        if (!cancelled) setFetchedContacts([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -116,17 +118,20 @@ export function WhatsAppSidebar({
   }, [open, initialContacts]);
 
   const active = contacts.find((c) => c.id === activeId) || null;
+  const displayMessages = active?.phone ? messages : [];
 
   // Load chat messages when active contact changes
   useEffect(() => {
     if (!active || !active.phone) {
-      setMessages([]);
       return;
     }
 
     let cancelled = false;
-    setLoadingChat(true);
-    setChatError(null);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoadingChat(true);
+      setChatError(null);
+    });
 
     const params = new URLSearchParams();
     if (active.projectId) params.set("projectId", active.projectId);
@@ -151,7 +156,7 @@ export function WhatsAppSidebar({
           }
         }
       )
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled) setChatError("Failed to load messages.");
       })
       .finally(() => {
@@ -411,7 +416,7 @@ export function WhatsAppSidebar({
                 <p className="text-center text-xs text-[#6b7280] py-8">
                   Loading conversation…
                 </p>
-              ) : messages.length === 0 ? (
+              ) : displayMessages.length === 0 ? (
                 <div className="text-center py-10">
                   <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#dcf8c6] text-[#075e54] mb-2">
                     <MessageCircle size={20} />
@@ -425,7 +430,7 @@ export function WhatsAppSidebar({
                   </p>
                 </div>
               ) : (
-                messages.map((m) => {
+                displayMessages.map((m) => {
                   const isOutbound = m.direction === "OUTBOUND";
                   return (
                     <div

@@ -15,29 +15,41 @@ export function TotpQrCode({
   size?: number;
   className?: string;
 }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [generated, setGenerated] = useState<{
+    forUri: string;
+    forSize: number;
+    dataUrl: string | null;
+    failed: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setFailed(false);
-    setDataUrl(null);
-    QRCode.toDataURL(uri, {
-      width: size,
-      margin: 2,
-      errorCorrectionLevel: "M",
-      color: { dark: "#111827", light: "#ffffff" },
-    })
-      .then((url) => {
-        if (!cancelled) setDataUrl(url);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
+    void (async () => {
+      try {
+        const url = await QRCode.toDataURL(uri, {
+          width: size,
+          margin: 2,
+          errorCorrectionLevel: "M",
+          color: { dark: "#111827", light: "#ffffff" },
+        });
+        if (!cancelled) {
+          setGenerated({ forUri: uri, forSize: size, dataUrl: url, failed: false });
+        }
+      } catch {
+        if (!cancelled) {
+          setGenerated({ forUri: uri, forSize: size, dataUrl: null, failed: true });
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
   }, [uri, size]);
+
+  const matching =
+    generated?.forUri === uri && generated?.forSize === size;
+  const dataUrl = matching ? generated.dataUrl : null;
+  const failed = matching ? generated.failed : false;
 
   if (failed) {
     return (

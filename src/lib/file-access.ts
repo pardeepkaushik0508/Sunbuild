@@ -193,6 +193,16 @@ export async function assertFileDownloadAccess(
     return;
   }
 
+  // Client home banner / house mockup — anyone with project access (incl. client)
+  const heroProject = await prisma.project.findFirst({
+    where: { heroImageUrl: filePath },
+    select: { id: true },
+  });
+  if (heroProject) {
+    await assertProjectAccess(session, heroProject.id);
+    return;
+  }
+
   // Selection material lists — staff with project access only (never client/sub)
   const materialProject = await prisma.project.findFirst({
     where: { materialListPath: filePath },
@@ -252,7 +262,7 @@ export async function assertFileDownloadAccess(
 
   // Fallback: path-prefixed folders like documents/{projectId}/...
   const projectMatch = filePath.match(
-    /^(?:documents|photos|invoices|completion|warranty|materials|selections)\/([^/]+)\//
+    /^(?:documents|photos|invoices|completion|warranty|materials|selections|heroes)\/([^/]+)\//
   );
   if (projectMatch?.[1]) {
     const maybeProjectId = projectMatch[1];

@@ -277,8 +277,7 @@ export default async function ClientHomePage({
   }));
 
   const projectPicker = projects.map((p) => ({ id: p.id, name: p.name }));
-  const heroImageSrc =
-    full.heroImageUrl || full.photos[0]?.filePath || null;
+  const heroImageSrc = full.heroImageUrl || null;
 
   return (
     <div className="w-full space-y-5">

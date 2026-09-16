@@ -70,7 +70,9 @@ export function HighPriorityMicrosoftPageClient({
   }, []);
 
   useEffect(() => {
-    void load(false);
+    queueMicrotask(() => {
+      void load(false);
+    });
   }, [load]);
 
   const filtered = useMemo(() => {

@@ -168,6 +168,26 @@ export function roleHasCapability(
   return baseAllowed;
 }
 
+/** Staff who may set the persistent client-home house mockup. */
+export function sessionCanManageClientHero(session: AppSession): boolean {
+  const role = session.membership.role;
+  if (role === Role.SUBCONTRACTOR || role === Role.CLIENT) return false;
+  const matrix = session.membership.permissionMatrix;
+  return (
+    roleHasCapability(role, "uploadPhotos", matrix) ||
+    roleHasCapability(role, "manageContracts", matrix) ||
+    roleHasCapability(role, "manageUsers", matrix)
+  );
+}
+
+export function requireClientHeroAccess(session: AppSession) {
+  if (!sessionCanManageClientHero(session)) {
+    throw new ForbiddenError(
+      "You do not have permission to update the client home banner."
+    );
+  }
+}
+
 /** True when the session may use the Manage Users module (matrix or base role). */
 export function sessionHasUserManagement(session: AppSession): boolean {
   return roleHasCapability(

@@ -277,6 +277,11 @@ function AppShellInner({
 }: ShellProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [openForPath, setOpenForPath] = useState(pathname);
+  if (pathname !== openForPath) {
+    setOpenForPath(pathname);
+    if (open) setOpen(false);
+  }
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
   const nav = useMemo(
     () => navForRole(role, showFinanceNav, showUsersNav),
@@ -311,10 +316,6 @@ function AppShellInner({
       [key]: !(key in prev ? prev[key] : autoExpanded.has(key)),
     }));
   }
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -433,7 +434,7 @@ function AppShellInner({
                       aria-expanded={groupOpen}
                       onClick={() => toggleGroup(groupKey)}
                       className={cn(
-                        "flex h-14 w-full items-center gap-3 rounded-[14px] px-4 text-left text-sm font-medium transition hover:bg-sb-canvas",
+                        "flex h-14 w-full items-center gap-3 rounded-[14px] px-4 text-left font-sans text-[14px] font-medium leading-tight transition hover:bg-sb-canvas",
                         childActive || groupOpen
                           ? "bg-sb-canvas text-sb-ink"
                           : "text-sb-body"
@@ -442,7 +443,9 @@ function AppShellInner({
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-sb-canvas text-sb-muted">
                         <Icon size={16} />
                       </span>
-                      <span className="flex-1">{item.label}</span>
+                      <span className="flex-1 font-sans text-[14px] font-medium leading-tight">
+                        {item.label}
+                      </span>
                       <ChevronDown
                         size={16}
                         className={cn(
@@ -465,7 +468,7 @@ function AppShellInner({
                               href={child.href}
                               onClick={() => setOpen(false)}
                               className={cn(
-                                "flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition",
+                                "flex h-11 items-center gap-3 rounded-[12px] px-3 font-sans text-[14px] font-medium leading-tight transition",
                                 isChild
                                   ? "bg-sb-orange text-white shadow-sm"
                                   : "text-sb-body hover:bg-sb-canvas"
@@ -481,7 +484,9 @@ function AppShellInner({
                               >
                                 <ChildIcon size={14} />
                               </span>
-                              {child.label}
+                              <span className="font-sans text-[14px] font-medium leading-tight">
+                                {child.label}
+                              </span>
                             </Link>
                           );
                         })}
@@ -497,7 +502,7 @@ function AppShellInner({
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={cn(
-                    "flex h-14 items-center gap-3 rounded-[14px] px-4 text-sm font-medium transition",
+                    "flex h-14 items-center gap-3 rounded-[14px] px-4 font-sans text-[14px] font-medium leading-tight transition",
                     active
                       ? "bg-sb-yellow text-sb-ink shadow-sm"
                       : "text-sb-body hover:bg-sb-canvas"
