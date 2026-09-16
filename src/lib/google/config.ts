@@ -2,26 +2,19 @@ import "server-only";
 
 import { AppError } from "@/lib/errors";
 import { getAppOrigin } from "@/lib/app-url";
+import {
+  GOOGLE_CALENDAR_SCOPES,
+  hasGoogleCalendarEventsScope,
+  hasGoogleTasksScope,
+  normalizeGrantedScopes,
+} from "@/lib/google/scopes";
 
-export const GOOGLE_CALENDAR_SCOPES = [
-  // Events read/write on calendars the user can access
-  "https://www.googleapis.com/auth/calendar.events",
-  // Needed to list Birthdays / Holidays / other selected calendars
-  "https://www.googleapis.com/auth/calendar.readonly",
-  // Google Tasks shown under the Tasks calendar in Google Calendar UI
-  "https://www.googleapis.com/auth/tasks.readonly",
-  "https://www.googleapis.com/auth/userinfo.email",
-  "openid",
-] as const;
-
-/** True when the stored OAuth grant includes Google Tasks read access. */
-export function hasGoogleTasksScope(scope: string | null | undefined): boolean {
-  if (!scope) return false;
-  return (
-    scope.includes("https://www.googleapis.com/auth/tasks.readonly") ||
-    scope.includes("https://www.googleapis.com/auth/tasks")
-  );
-}
+export {
+  GOOGLE_CALENDAR_SCOPES,
+  hasGoogleCalendarEventsScope,
+  hasGoogleTasksScope,
+  normalizeGrantedScopes,
+};
 
 export type {
   GoogleConnectionStatus,

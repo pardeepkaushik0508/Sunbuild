@@ -73,7 +73,12 @@ export async function GET(request: Request) {
       action: "GOOGLE_CALENDAR_CONNECTED",
       entityType: "GoogleCalendarConnection",
       entityId: session.user.id,
-      metadata: { email: email ?? null },
+      metadata: {
+        email: email ?? null,
+        scopeNames: tokens.scope
+          ? tokens.scope.split(/\s+/).filter(Boolean)
+          : [],
+      },
     });
 
     // Push any pending local tasks/schedule that never reached Google.

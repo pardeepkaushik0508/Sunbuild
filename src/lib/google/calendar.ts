@@ -8,10 +8,15 @@ import {
 } from "@/lib/google/auth-client";
 import {
   getGoogleCache,
+  getGoogleErrorCacheTtlMs,
   googleEventsCacheKey,
   invalidateGoogleCacheForUser,
   setGoogleCache,
 } from "@/lib/google/cache";
+import {
+  classifyGoogleError,
+  googleErrorLogFields,
+} from "@/lib/google/errors";
 import type { ListedGoogleEvent } from "@/lib/google/listed-event";
 
 export {
@@ -133,9 +138,15 @@ export async function createGoogleEvent(
       googleMeetUrl: meet,
     };
   } catch (err) {
-    const status = (err as { code?: number })?.code;
-    if (status === 401 || status === 403) {
+    const classified = classifyGoogleError(err, "calendar");
+    console.error("[google-calendar] create event failed:", {
+      userId,
+      companyId,
+      ...googleErrorLogFields(err, classified),
+    });
+    if (classified.requiresReconnect) {
       await markGoogleReconnectRequired(authed.connectionId);
+      invalidateGoogleCacheForUser(userId);
     }
     throw err;
   }
@@ -194,9 +205,15 @@ export async function updateGoogleEvent(
     invalidateGoogleCacheForUser(userId);
     return { googleMeetUrl: meet };
   } catch (err) {
-    const status = (err as { code?: number })?.code;
-    if (status === 401 || status === 403) {
+    const classified = classifyGoogleError(err, "calendar");
+    console.error("[google-calendar] update event failed:", {
+      userId,
+      companyId,
+      ...googleErrorLogFields(err, classified),
+    });
+    if (classified.requiresReconnect) {
       await markGoogleReconnectRequired(authed.connectionId);
+      invalidateGoogleCacheForUser(userId);
     }
     throw err;
   }
@@ -221,8 +238,15 @@ export async function deleteGoogleEvent(
   } catch (err) {
     const status = (err as { code?: number })?.code;
     if (status === 404 || status === 410) return true;
-    if (status === 401 || status === 403) {
+    const classified = classifyGoogleError(err, "calendar");
+    console.error("[google-calendar] delete event failed:", {
+      userId,
+      companyId,
+      ...googleErrorLogFields(err, classified),
+    });
+    if (classified.requiresReconnect) {
       await markGoogleReconnectRequired(authed.connectionId);
+      invalidateGoogleCacheForUser(userId);
     }
     return false;
   }
@@ -398,15 +422,21 @@ export async function listGoogleEventsInRange(
     setGoogleCache(cacheKey, result, 45_000);
     return result;
   } catch (err) {
-    const status = (err as { code?: number })?.code;
+    const classified = classifyGoogleError(err, "calendar");
     console.error("[google-calendar] list events failed:", {
-      status,
-      message: err instanceof Error ? err.message : "unknown",
+      userId,
+      companyId,
+      ...googleErrorLogFields(err, classified),
     });
-    if (status === 401 || status === 403) {
+    if (classified.requiresReconnect) {
       await markGoogleReconnectRequired(authed.connectionId);
-      return { events: [], reconnectRequired: true, error: true };
+      invalidateGoogleCacheForUser(userId);
+      const result = { events: [], reconnectRequired: true, error: true };
+      setGoogleCache(cacheKey, result, getGoogleErrorCacheTtlMs());
+      return result;
     }
-    return { events: [], reconnectRequired: false, error: true };
+    const result = { events: [], reconnectRequired: false, error: true };
+    setGoogleCache(cacheKey, result, getGoogleErrorCacheTtlMs());
+    return result;
   }
 }

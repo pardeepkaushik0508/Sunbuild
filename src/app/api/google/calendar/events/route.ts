@@ -24,6 +24,9 @@ const ALLOWED: Role[] = [
  * Pull Google Calendar events + Google Tasks for the visible month (± pad).
  * Tasks require a separate API/scope from normal calendar events.
  * Pass ?force=1 to bypass the short-lived server cache (Sync button).
+ *
+ * Calendar success is independent of Tasks failure — Tasks errors do not
+ * blank Calendar events unless the OAuth connection itself requires reconnect.
  */
 export async function GET(request: Request) {
   try {
@@ -65,12 +68,17 @@ export async function GET(request: Request) {
       getAccessibleProjectIds(session),
     ]);
 
-    if (listed.reconnectRequired) {
+    // OAuth-level reconnect: Calendar auth is unusable.
+    if (listed.reconnectRequired || taskListed.reconnectRequired) {
       return NextResponse.json({
         events: [] as CalendarEvent[],
         reconnectRequired: true,
         tasksScopeMissing: false,
-        error: listed.error,
+        tasksApiDisabled: false,
+        tasksErrorCode: taskListed.tasksErrorCode,
+        error: true,
+        errorMessage:
+          "Reconnect Google Calendar in Settings (new permissions may be required).",
         count: 0,
       });
     }
@@ -102,7 +110,10 @@ export async function GET(request: Request) {
       events,
       reconnectRequired: false,
       tasksScopeMissing: taskListed.tasksScopeMissing,
+      tasksApiDisabled: taskListed.tasksApiDisabled,
+      tasksErrorCode: taskListed.tasksErrorCode,
       error: listed.error || taskListed.error,
+      errorMessage: taskListed.errorMessage,
       count: events.length,
     });
   } catch (err) {
@@ -119,7 +130,10 @@ export async function GET(request: Request) {
       events: [] as CalendarEvent[],
       reconnectRequired: false,
       tasksScopeMissing: false,
+      tasksApiDisabled: false,
+      tasksErrorCode: null,
       error: true,
+      errorMessage: "Could not load Google Calendar events. Try Sync again.",
       count: 0,
     });
   }

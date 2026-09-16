@@ -136,7 +136,10 @@ export function CalendarWidget({
           events?: CalendarEvent[];
           reconnectRequired?: boolean;
           tasksScopeMissing?: boolean;
+          tasksApiDisabled?: boolean;
+          tasksErrorCode?: string | null;
           error?: boolean;
+          errorMessage?: string | null;
           count?: number;
         };
         if (data.reconnectRequired) {
@@ -144,24 +147,45 @@ export function CalendarWidget({
           setGoogleEvents([]);
           setTasksScopeMissing(false);
           setSyncError(
-            "Reconnect Google Calendar in Settings (new permissions may be required)."
+            data.errorMessage ||
+              "Reconnect Google Calendar in Settings (new permissions may be required)."
           );
-          return;
-        }
-        if (data.error && (!data.events || data.events.length === 0)) {
-          setSyncError("Could not load Google Calendar events. Try Sync again.");
-          setGoogleEvents([]);
-          setTasksScopeMissing(false);
           return;
         }
         setReconnectNeeded(false);
         setTasksScopeMissing(Boolean(data.tasksScopeMissing));
-        setSyncError(
-          data.tasksScopeMissing
-            ? "Reconnect Google to sync Tasks (Due: … items)."
-            : null
-        );
-        setGoogleEvents(Array.isArray(data.events) ? data.events : []);
+
+        // Calendar events can still be shown when Tasks-only fails.
+        const eventsList = Array.isArray(data.events) ? data.events : [];
+        setGoogleEvents(eventsList);
+
+        if (data.tasksScopeMissing) {
+          setSyncError(
+            data.errorMessage ||
+              "Reconnect Google to grant Google Tasks access."
+          );
+          return;
+        }
+        if (data.tasksApiDisabled) {
+          setSyncError(
+            data.errorMessage ||
+              "Google Tasks API is not enabled for this Google Cloud project."
+          );
+          return;
+        }
+        if (data.error && eventsList.length === 0) {
+          setSyncError(
+            data.errorMessage ||
+              "Could not load Google Calendar events. Try Sync again."
+          );
+          return;
+        }
+        if (data.error && data.errorMessage) {
+          // Soft Tasks/API error while Calendar events loaded.
+          setSyncError(data.errorMessage);
+          return;
+        }
+        setSyncError(null);
       } catch {
         setSyncError("Google Calendar sync timed out. Click Sync to retry.");
       } finally {
@@ -173,11 +197,12 @@ export function CalendarWidget({
   );
 
   const handleSyncClick = useCallback(() => {
-    if (!googleConnected) return;
+    if (!googleConnected || syncing) return;
     setReconnectNeeded(false);
+    setTasksScopeMissing(false);
     setSyncError(null);
     void fetchGoogleEvents(cursor, { force: true });
-  }, [googleConnected, cursor, fetchGoogleEvents]);
+  }, [googleConnected, syncing, cursor, fetchGoogleEvents]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -199,7 +224,10 @@ export function CalendarWidget({
   if (googleReconnectRequired !== prevGoogleReconnect) {
     setPrevGoogleReconnect(googleReconnectRequired);
     setReconnectNeeded(googleReconnectRequired);
-    if (!googleReconnectRequired) setSyncError(null);
+    if (!googleReconnectRequired) {
+      setSyncError(null);
+      setTasksScopeMissing(false);
+    }
   }
 
   const days = useMemo(() => {

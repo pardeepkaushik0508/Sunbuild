@@ -914,9 +914,24 @@ function UserFormDialog({
     user?.role ?? inviteRoles[0] ?? Role.PROJECT_MANAGER
   );
   const [status, setStatus] = useState(user?.status ?? "ACTIVE");
-  const [projectIds, setProjectIds] = useState<string[]>(
-    user?.projects.map((p) => p.id) ?? []
+  const [projectIds, setProjectIds] = useState<string[]>(() =>
+    [...new Set(user?.projects.map((p) => p.id) ?? [])]
   );
+  const uniqueProjects = useMemo(() => {
+    const seen = new Set<string>();
+    return projects.filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [projects]);
+  const selectedProjectSet = useMemo(() => new Set(projectIds), [projectIds]);
+
+  function toggleProject(id: string) {
+    setProjectIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
@@ -1061,25 +1076,58 @@ function UserFormDialog({
         <FormField
           label="Project assignments"
           className="sm:col-span-2"
-          hint="Hold Ctrl/Cmd to select multiple projects."
+          hint="Click a project to select or unselect. Previously assigned projects stay selected until you unselect them."
         >
-          <select
-            name="projectIds"
-            multiple
-            value={projectIds}
-            onChange={(e) =>
-              setProjectIds(
-                Array.from(e.target.selectedOptions).map((o) => o.value)
-              )
-            }
-            className="min-h-28 w-full rounded-[10px] border border-sb-border bg-sb-surface px-3 py-2 text-sm text-sb-ink outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20"
+          <div
+            role="listbox"
+            aria-multiselectable="true"
+            aria-label="Project assignments"
+            className="max-h-40 overflow-y-auto rounded-[10px] border border-sb-border bg-sb-surface"
           >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            {uniqueProjects.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-sb-muted">No projects available</p>
+            ) : (
+              uniqueProjects.map((p) => {
+                const selected = selectedProjectSet.has(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => toggleProject(p.id)}
+                    className={`flex w-full items-center gap-2 border-b border-sb-border px-3 py-2 text-left text-sm last:border-b-0 ${
+                      selected
+                        ? "bg-[#fff7ed] font-medium text-sb-ink"
+                        : "bg-sb-surface text-sb-ink hover:bg-[#f9fafb]"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                        selected
+                          ? "border-sb-orange bg-sb-orange text-white"
+                          : "border-[#d1d5db] bg-white"
+                      }`}
+                    >
+                      {selected ? (
+                        <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none">
+                          <path
+                            d="M2.5 6.2 4.8 8.5 9.5 3.5"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : null}
+                    </span>
+                    {p.name}
+                  </button>
+                );
+              })
+            )}
+          </div>
         </FormField>
         {mode === "add" && role === Role.CLIENT ? (
           <div className="sm:col-span-2 space-y-2">

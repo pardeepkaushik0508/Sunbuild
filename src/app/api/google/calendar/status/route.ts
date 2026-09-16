@@ -4,6 +4,13 @@ import { getPublicConnection } from "@/lib/google/auth-client";
 import { isGoogleCalendarConfigured } from "@/lib/google/config";
 import { UnauthorizedError } from "@/lib/errors";
 
+/**
+ * Connection status for Settings / widgets.
+ *
+ * Intentionally does NOT trigger backfill — polling this endpoint must not
+ * create Google Calendar events. Backfill runs from OAuth callback only
+ * (and explicit Sync flows that call it deliberately).
+ */
 export async function GET() {
   try {
     const session = await requireApiSession();
@@ -11,23 +18,6 @@ export async function GET() {
       session.user.id,
       session.membership.companyId
     );
-
-    // When already connected, quietly push any pending local calendar items
-    // (e.g. tasks created before Google was linked, or schedule without checkbox).
-    if (connection.connected) {
-      void import("@/lib/google/sync")
-        .then(({ backfillGoogleCalendarForUser }) =>
-          backfillGoogleCalendarForUser({
-            userId: session.user.id,
-            companyId: session.membership.companyId,
-          })
-        )
-        .catch((err) => {
-          console.error("[google-sync] status backfill failed:", {
-            message: err instanceof Error ? err.message : "unknown",
-          });
-        });
-    }
 
     return NextResponse.json({
       ...connection,
@@ -43,6 +33,8 @@ export async function GET() {
         status: "NOT_CONNECTED",
         email: null,
         configured: isGoogleCalendarConfigured(),
+        tasksScopeGranted: false,
+        hasRefreshToken: false,
       },
       { status: 200 }
     );

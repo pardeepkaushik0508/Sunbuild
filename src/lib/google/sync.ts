@@ -15,6 +15,15 @@ const PENDING_SYNC_STATUSES = [
   "RECONNECT_REQUIRED",
 ] as const;
 
+/** In-process lock so concurrent callback/status/manual backfills don't double-create. */
+const backfillLocks = new Map<
+  string,
+  Promise<{ tasks: number; schedule: number; activities: number }>
+>();
+
+/** Abandoned SYNCING older than this is reclaimable. */
+const STALE_SYNCING_MS = 5 * 60_000;
+
 function endOfTimedEvent(start: Date, end?: Date | null): Date {
   if (end && end.getTime() > start.getTime()) return end;
   return new Date(start.getTime() + 60 * 60 * 1000);
@@ -115,6 +124,86 @@ async function setTaskSync(
 }
 
 /**
+ * Atomically claim a task for sync to prevent duplicate Google events under concurrency.
+ * Returns false if another worker already claimed it or it already has a googleEventId.
+ */
+async function claimTaskForSync(taskId: string): Promise<boolean> {
+  const staleBefore = new Date(Date.now() - STALE_SYNCING_MS);
+  const claimed = await prisma.task.updateMany({
+    where: {
+      id: taskId,
+      googleEventId: null,
+      OR: [
+        { googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] } },
+        {
+          googleSyncStatus: "SYNCING",
+          googleLastSyncedAt: { lt: staleBefore },
+        },
+        {
+          googleSyncStatus: "SYNCING",
+          googleLastSyncedAt: null,
+          updatedAt: { lt: staleBefore },
+        },
+      ],
+    },
+    data: {
+      googleSyncStatus: "SYNCING",
+      googleLastSyncedAt: new Date(),
+    },
+  });
+  return claimed.count === 1;
+}
+
+async function claimScheduleForSync(id: string): Promise<boolean> {
+  const staleBefore = new Date(Date.now() - STALE_SYNCING_MS);
+  const claimed = await prisma.scheduleItem.updateMany({
+    where: {
+      id,
+      googleEventId: null,
+      OR: [
+        { googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] } },
+        {
+          googleSyncStatus: "SYNCING",
+          googleLastSyncedAt: { lt: staleBefore },
+        },
+        {
+          googleSyncStatus: "SYNCING",
+          googleLastSyncedAt: null,
+          updatedAt: { lt: staleBefore },
+        },
+      ],
+    },
+    data: {
+      googleSyncStatus: "SYNCING",
+      googleLastSyncedAt: new Date(),
+    },
+  });
+  return claimed.count === 1;
+}
+
+async function claimActivityForSync(id: string): Promise<boolean> {
+  const staleBefore = new Date(Date.now() - STALE_SYNCING_MS);
+  const claimed = await prisma.leadActivity.updateMany({
+    where: {
+      id,
+      googleEventId: null,
+      OR: [
+        { googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] } },
+        {
+          googleSyncStatus: "SYNCING",
+          googleLastSyncedAt: { lt: staleBefore },
+        },
+      ],
+    },
+    data: {
+      googleSyncStatus: "SYNCING",
+      googleLastSyncedAt: new Date(),
+    },
+  });
+  return claimed.count === 1;
+}
+
+/**
  * Push a dated task to Google Calendar.
  * Tries preferred users in order (assignee → creator → session) until one
  * has a connected Google account.
@@ -146,7 +235,25 @@ export async function syncTaskToGoogle(input: {
     return;
   }
 
-  await setTaskSync(task.id, { googleSyncStatus: "SYNCING" });
+  // Updates with an existing Google event skip the create-claim path.
+  if (!task.googleEventId) {
+    const claimed = await claimTaskForSync(task.id);
+    if (!claimed) {
+      const again = await prisma.task.findUnique({
+        where: { id: task.id },
+        select: { googleEventId: true, googleSyncStatus: true },
+      });
+      if (again?.googleEventId || again?.googleSyncStatus === "SYNCING") {
+        console.info("[google-sync] task claim skipped (concurrent)", {
+          taskId: task.id,
+        });
+        return;
+      }
+      await setTaskSync(task.id, { googleSyncStatus: "SYNCING" });
+    }
+  } else {
+    await setTaskSync(task.id, { googleSyncStatus: "SYNCING" });
+  }
 
   const start =
     task.startDate && task.startDate.getTime() <= task.dueDate.getTime()
@@ -241,7 +348,20 @@ export async function syncScheduleItemToGoogle(input: {
     (await resolveGoogleSyncUserId(input.companyId, [input.userId])) ||
     input.userId;
 
-  await setScheduleSync(item.id, { googleSyncStatus: "SYNCING" });
+  if (!item.googleEventId) {
+    const claimed = await claimScheduleForSync(item.id);
+    if (!claimed) {
+      const again = await prisma.scheduleItem.findUnique({
+        where: { id: item.id },
+        select: { googleEventId: true, googleSyncStatus: true },
+      });
+      if (again?.googleEventId || again?.googleSyncStatus === "SYNCING") {
+        return;
+      }
+    }
+  } else {
+    await setScheduleSync(item.id, { googleSyncStatus: "SYNCING" });
+  }
 
   try {
     if (item.googleEventId) {
@@ -338,7 +458,20 @@ export async function syncLeadActivityToGoogle(input: {
       activity.userId,
     ])) || input.userId;
 
-  await setLeadActivitySync(activity.id, { googleSyncStatus: "SYNCING" });
+  if (!activity.googleEventId) {
+    const claimed = await claimActivityForSync(activity.id);
+    if (!claimed) {
+      const again = await prisma.leadActivity.findUnique({
+        where: { id: activity.id },
+        select: { googleEventId: true, googleSyncStatus: true },
+      });
+      if (again?.googleEventId || again?.googleSyncStatus === "SYNCING") {
+        return;
+      }
+    }
+  } else {
+    await setLeadActivitySync(activity.id, { googleSyncStatus: "SYNCING" });
+  }
 
   const title =
     activity.title?.trim() ||
@@ -481,9 +614,39 @@ export async function removeLeadActivityFromGoogle(input: {
   });
 }
 
+export async function removeTaskFromGoogle(input: {
+  userId: string;
+  companyId: string;
+  taskId: string;
+}): Promise<void> {
+  const task = await prisma.task.findUnique({
+    where: { id: input.taskId },
+    select: {
+      id: true,
+      googleEventId: true,
+      googleCalendarId: true,
+    },
+  });
+  if (!task?.googleEventId) return;
+  await deleteGoogleEvent(
+    input.userId,
+    input.companyId,
+    task.googleEventId,
+    task.googleCalendarId || undefined
+  );
+  await setTaskSync(task.id, {
+    googleSyncStatus: "LOCAL_ONLY",
+    googleEventId: null,
+    googleCalendarId: null,
+    googleMeetUrl: null,
+    googleLastSyncedAt: null,
+  });
+}
+
 /**
  * After Google connects, push pending local tasks / schedule / activities
- * that never made it to Calendar (e.g. checkbox was off, or assignee had no link).
+ * that never made it to Calendar.
+ * Concurrent callers for the same user+company share one in-flight run.
  */
 export async function backfillGoogleCalendarForUser(input: {
   userId: string;
@@ -491,82 +654,110 @@ export async function backfillGoogleCalendarForUser(input: {
   /** Limit how many of each entity type to push (avoid flooding). */
   limit?: number;
 }): Promise<{ tasks: number; schedule: number; activities: number }> {
-  const limit = input.limit ?? 40;
-  const windowStart = new Date();
-  windowStart.setUTCDate(windowStart.getUTCDate() - 14);
-  const windowEnd = new Date();
-  windowEnd.setUTCDate(windowEnd.getUTCDate() + 90);
-
-  let tasks = 0;
-  let schedule = 0;
-  let activities = 0;
-
-  const pendingTasks = await prisma.task.findMany({
-    where: {
-      dueDate: { not: null, gte: windowStart, lte: windowEnd },
-      googleEventId: null,
-      googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] },
-      project: { companyId: input.companyId },
-      OR: [{ assigneeId: input.userId }, { createdById: input.userId }],
-    },
-    select: { id: true, assigneeId: true, createdById: true },
-    orderBy: { dueDate: "asc" },
-    take: limit,
-  });
-
-  for (const task of pendingTasks) {
-    await syncTaskToGoogle({
-      companyId: input.companyId,
-      taskId: task.id,
-      preferredUserIds: [task.assigneeId, task.createdById, input.userId],
-    });
-    tasks += 1;
-  }
-
-  const pendingSchedule = await prisma.scheduleItem.findMany({
-    where: {
-      startDate: { gte: windowStart, lte: windowEnd },
-      googleEventId: null,
-      googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] },
-      project: { companyId: input.companyId },
-    },
-    select: { id: true },
-    orderBy: { startDate: "asc" },
-    take: limit,
-  });
-
-  for (const item of pendingSchedule) {
-    await syncScheduleItemToGoogle({
+  const lockKey = `${input.userId}:${input.companyId}`;
+  const existing = backfillLocks.get(lockKey);
+  if (existing) {
+    console.info("[google-sync] backfill joined in-flight run", {
       userId: input.userId,
       companyId: input.companyId,
-      scheduleItemId: item.id,
     });
-    schedule += 1;
+    return existing;
   }
 
-  const pendingActivities = await prisma.leadActivity.findMany({
-    where: {
-      dueAt: { not: null, gte: windowStart, lte: windowEnd },
-      googleEventId: null,
-      googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] },
-      lead: { companyId: input.companyId },
-      OR: [{ userId: input.userId }],
-    },
-    select: { id: true, userId: true },
-    orderBy: { dueAt: "asc" },
-    take: limit,
-  });
+  const run = (async () => {
+    const limit = input.limit ?? 40;
+    const windowStart = new Date();
+    windowStart.setUTCDate(windowStart.getUTCDate() - 14);
+    const windowEnd = new Date();
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + 90);
 
-  for (const activity of pendingActivities) {
-    await syncLeadActivityToGoogle({
+    let tasks = 0;
+    let schedule = 0;
+    let activities = 0;
+
+    const pendingTasks = await prisma.task.findMany({
+      where: {
+        dueDate: { not: null, gte: windowStart, lte: windowEnd },
+        googleEventId: null,
+        googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] },
+        project: { companyId: input.companyId },
+        OR: [{ assigneeId: input.userId }, { createdById: input.userId }],
+      },
+      select: { id: true, assigneeId: true, createdById: true },
+      orderBy: { dueDate: "asc" },
+      take: limit,
+    });
+
+    for (const task of pendingTasks) {
+      await syncTaskToGoogle({
+        companyId: input.companyId,
+        taskId: task.id,
+        preferredUserIds: [task.assigneeId, task.createdById, input.userId],
+      });
+      tasks += 1;
+    }
+
+    // Claim prevents multi-user duplicate pushes onto different calendars.
+    const pendingSchedule = await prisma.scheduleItem.findMany({
+      where: {
+        startDate: { gte: windowStart, lte: windowEnd },
+        googleEventId: null,
+        googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] },
+        project: { companyId: input.companyId },
+      },
+      select: { id: true },
+      orderBy: { startDate: "asc" },
+      take: limit,
+    });
+
+    for (const item of pendingSchedule) {
+      await syncScheduleItemToGoogle({
+        userId: input.userId,
+        companyId: input.companyId,
+        scheduleItemId: item.id,
+      });
+      schedule += 1;
+    }
+
+    const pendingActivities = await prisma.leadActivity.findMany({
+      where: {
+        dueAt: { not: null, gte: windowStart, lte: windowEnd },
+        googleEventId: null,
+        googleSyncStatus: { in: [...PENDING_SYNC_STATUSES] },
+        lead: { companyId: input.companyId },
+        OR: [{ userId: input.userId }],
+      },
+      select: { id: true, userId: true },
+      orderBy: { dueAt: "asc" },
+      take: limit,
+    });
+
+    for (const activity of pendingActivities) {
+      await syncLeadActivityToGoogle({
+        userId: input.userId,
+        companyId: input.companyId,
+        activityId: activity.id,
+      });
+      activities += 1;
+    }
+
+    console.info("[google-sync] backfill complete", {
       userId: input.userId,
       companyId: input.companyId,
-      activityId: activity.id,
+      tasks,
+      schedule,
+      activities,
     });
-    activities += 1;
-  }
 
-  return { tasks, schedule, activities };
+    return { tasks, schedule, activities };
+  })();
+
+  backfillLocks.set(lockKey, run);
+  try {
+    return await run;
+  } finally {
+    backfillLocks.delete(lockKey);
+  }
 }
 
 /** Collect googleEventIds already linked in SUNBUILD for dedupe. */
@@ -610,4 +801,9 @@ export async function collectSyncedGoogleEventIds(
     if (a.googleEventId) ids.add(a.googleEventId);
   }
   return ids;
+}
+
+/** Test helper — clear in-process backfill locks. */
+export function clearGoogleBackfillLocksForTests(): void {
+  backfillLocks.clear();
 }

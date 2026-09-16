@@ -16,4 +16,8 @@ export type PublicGoogleConnection = {
   status: GoogleConnectionStatus | "NOT_CONNECTED";
   email: string | null;
   configured: boolean;
+  /** Whether stored OAuth scope string includes Tasks read access. */
+  tasksScopeGranted?: boolean;
+  /** Whether a refresh token is present (boolean only — never the token). */
+  hasRefreshToken?: boolean;
 };

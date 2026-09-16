@@ -5,11 +5,17 @@ import { prisma } from "@/lib/db";
 import {
   getGoogleOAuthConfig,
   GOOGLE_CALENDAR_SCOPES,
+  hasGoogleTasksScope,
+  normalizeGrantedScopes,
   type GoogleConnectionStatus,
 } from "@/lib/google/config";
 import type { PublicGoogleConnection } from "@/lib/google/types";
 import { decryptSecret, encryptSecret } from "@/lib/google/crypto";
 import { invalidateGoogleCacheForUser } from "@/lib/google/cache";
+import {
+  classifyGoogleError,
+  googleErrorLogFields,
+} from "@/lib/google/errors";
 import { AppError } from "@/lib/errors";
 
 export type { PublicGoogleConnection } from "@/lib/google/types";
@@ -72,6 +78,7 @@ export async function getPublicConnection(
       status: true,
       googleAccountEmail: true,
       refreshTokenEncrypted: true,
+      scope: true,
     },
   });
   if (!row || row.status === "DISCONNECTED") {
@@ -80,6 +87,8 @@ export async function getPublicConnection(
       status: "NOT_CONNECTED",
       email: null,
       configured,
+      tasksScopeGranted: false,
+      hasRefreshToken: false,
     };
   }
   return {
@@ -87,6 +96,8 @@ export async function getPublicConnection(
     status: row.status as GoogleConnectionStatus,
     email: row.googleAccountEmail,
     configured,
+    tasksScopeGranted: hasGoogleTasksScope(row.scope),
+    hasRefreshToken: Boolean(row.refreshTokenEncrypted),
   };
 }
 
@@ -107,7 +118,7 @@ export async function saveGoogleConnection(input: {
         companyId: input.companyId,
       },
     },
-    select: { id: true, refreshTokenEncrypted: true },
+    select: { id: true, refreshTokenEncrypted: true, scope: true },
   });
 
   let refreshTokenEncrypted = existing?.refreshTokenEncrypted ?? null;
@@ -123,12 +134,27 @@ export async function saveGoogleConnection(input: {
     );
   }
 
+  // Persist ACTUAL granted scopes from Google — never invent Tasks as granted.
+  // Empty/missing token scope → keep prior DB scope, else null (live API probe).
+  const fromGoogle = normalizeGrantedScopes(input.scope, false);
+  const scope =
+    fromGoogle ||
+    (existing?.scope?.trim() ? existing.scope.trim() : null);
+
+  console.info("[google-oauth] connection saved", {
+    userId: input.userId,
+    companyId: input.companyId,
+    hasRefreshToken: true,
+    scopeNames: scope ? scope.split(/\s+/).filter(Boolean) : [],
+    tasksScopeGranted: hasGoogleTasksScope(scope),
+  });
+
   const data = {
     googleAccountEmail: input.email ?? null,
     accessTokenEncrypted,
     refreshTokenEncrypted,
     tokenExpiry: input.expiryDate ? new Date(input.expiryDate) : null,
-    scope: input.scope ?? GOOGLE_CALENDAR_SCOPES.join(" "),
+    scope,
     status: "CONNECTED",
     googleCalendarId: "primary",
     connectedAt: new Date(),
@@ -149,6 +175,7 @@ export async function saveGoogleConnection(input: {
     });
   }
 
+  // Must clear both events + tasks caches (including legacy gcal-tasks: keys).
   invalidateGoogleCacheForUser(input.userId);
 }
 
@@ -190,8 +217,10 @@ export async function disconnectGoogleCalendar(
       refreshTokenEncrypted: null,
       tokenExpiry: null,
       googleAccountEmail: null,
+      scope: null,
     },
   });
+  invalidateGoogleCacheForUser(userId);
 }
 
 export async function markGoogleReconnectRequired(connectionId: string) {
@@ -203,7 +232,8 @@ export async function markGoogleReconnectRequired(connectionId: string) {
 
 /**
  * Returns an authenticated Google OAuth2 client for the user.
- * Refreshes access tokens automatically. Marks reconnect when refresh fails.
+ * Refreshes access tokens automatically. Marks reconnect when refresh fails
+ * with an auth-revoked classification — never solely because access expired.
  */
 export async function getAuthedGoogleClient(
   userId: string,
@@ -240,6 +270,7 @@ export async function getAuthedGoogleClient(
           accessTokenEncrypted?: string;
           refreshTokenEncrypted?: string;
           tokenExpiry?: Date | null;
+          scope?: string;
           status: string;
         } = { status: "CONNECTED" };
         if (tokens.access_token) {
@@ -253,6 +284,10 @@ export async function getAuthedGoogleClient(
         if (tokens.expiry_date) {
           update.tokenExpiry = new Date(tokens.expiry_date);
         }
+        if (tokens.scope) {
+          update.scope =
+            normalizeGrantedScopes(tokens.scope, false) || undefined;
+        }
         await prisma.googleCalendarConnection.update({
           where: { id: row.id },
           data: update,
@@ -263,7 +298,7 @@ export async function getAuthedGoogleClient(
     });
 
     // Refresh when expiry is missing OR token is near expiry.
-    // Missing expiry previously skipped refresh and caused silent empty calendars.
+    // Access expiry alone must never force RECONNECT_REQUIRED.
     const expiresAt = row.tokenExpiry?.getTime() ?? 0;
     const needsRefresh = !expiresAt || expiresAt < Date.now() + 60_000;
     if (needsRefresh) {
@@ -286,6 +321,9 @@ export async function getAuthedGoogleClient(
                     ),
                   }
                 : {}),
+              ...(creds.scope
+                ? { scope: normalizeGrantedScopes(creds.scope, false) }
+                : {}),
             },
           });
           client.setCredentials({
@@ -293,13 +331,24 @@ export async function getAuthedGoogleClient(
             refresh_token: creds.refresh_token || refreshToken,
             expiry_date: creds.expiry_date,
           });
+          console.info("[google-auth] access token refreshed", {
+            userId,
+            companyId,
+            preservedRefreshToken: !creds.refresh_token,
+          });
         }
       } catch (refreshErr) {
-        console.error("[google-calendar] token refresh failed:", {
-          message:
-            refreshErr instanceof Error ? refreshErr.message : "unknown",
+        const classified = classifyGoogleError(refreshErr, "oauth");
+        console.error("[google-auth] token refresh failed:", {
+          userId,
+          companyId,
+          ...googleErrorLogFields(refreshErr, classified),
         });
-        await markGoogleReconnectRequired(row.id);
+        // Network blips should not force reconnect; auth revocation must.
+        if (classified.requiresReconnect) {
+          await markGoogleReconnectRequired(row.id);
+          invalidateGoogleCacheForUser(userId);
+        }
         return null;
       }
     }
@@ -311,10 +360,14 @@ export async function getAuthedGoogleClient(
       scope: row.scope,
     };
   } catch (err) {
-    console.error("[google-calendar] auth client failed:", {
-      message: err instanceof Error ? err.message : "unknown",
+    const classified = classifyGoogleError(err, "oauth");
+    console.error("[google-auth] auth client failed:", {
+      userId,
+      companyId,
+      ...googleErrorLogFields(err, classified),
     });
     await markGoogleReconnectRequired(row.id);
+    invalidateGoogleCacheForUser(userId);
     return null;
   }
 }
