@@ -152,12 +152,12 @@ export function InteractiveDataTable({
 
       <div
         className={cn(
-          "overflow-x-auto rounded-[16px] border border-sb-border bg-white shadow-[var(--sb-shadow)]",
+          "overflow-x-auto rounded-[16px] border border-sb-border bg-sb-surface shadow-[var(--sb-shadow)]",
           tableClassName
         )}
       >
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-sb-border bg-[#fafafa] text-[11px] uppercase tracking-wide text-sb-muted">
+        <table className="min-w-full text-left text-sm text-sb-body">
+          <thead className="border-b border-sb-border bg-sb-canvas text-[11px] uppercase tracking-wide text-sb-muted">
             <tr>
               {columns.map((col) => {
                 const sortable =
@@ -241,7 +241,7 @@ export function InteractiveDataTable({
               <select
                 value={pageSize}
                 onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                className="h-9 rounded-[8px] border border-sb-border bg-white px-2 text-sb-ink outline-none focus:border-sb-orange/50"
+                className="h-9 rounded-[8px] border border-sb-border bg-sb-surface px-2 text-sb-ink outline-none focus:border-sb-orange/50"
               >
                 {pageSizeOptions.map((n) => (
                   <option key={n} value={n}>
@@ -255,7 +255,7 @@ export function InteractiveDataTable({
                 type="button"
                 disabled={safePage <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-[8px] border border-sb-border bg-white px-3 text-[13px] font-medium text-sb-ink disabled:opacity-40"
+                className="inline-flex h-9 items-center gap-1 rounded-[8px] border border-sb-border bg-sb-surface px-3 text-[13px] font-medium text-sb-ink disabled:opacity-40"
               >
                 <ChevronLeft size={16} />
                 Previous
@@ -267,7 +267,7 @@ export function InteractiveDataTable({
                 type="button"
                 disabled={safePage >= totalPages || total === 0}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="inline-flex h-9 items-center gap-1 rounded-[8px] border border-sb-border bg-white px-3 text-[13px] font-medium text-sb-ink disabled:opacity-40"
+                className="inline-flex h-9 items-center gap-1 rounded-[8px] border border-sb-border bg-sb-surface px-3 text-[13px] font-medium text-sb-ink disabled:opacity-40"
               >
                 Next
                 <ChevronRight size={16} />

@@ -14,14 +14,14 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   "object-src 'none'",
-  "img-src 'self' data: blob: https://res.cloudinary.com",
+  "img-src 'self' data: blob: https://res.cloudinary.com https://*.cloudinary.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   isProd
     ? "script-src 'self' 'unsafe-inline'"
     : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "connect-src 'self'",
-  "media-src 'self' https://res.cloudinary.com",
+  "media-src 'self' https://res.cloudinary.com https://*.cloudinary.com",
   "worker-src 'self' blob:",
   ...(isProd ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
@@ -53,6 +53,11 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "res.cloudinary.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "*.cloudinary.com",
         pathname: "/**",
       },
     ],

@@ -2,10 +2,13 @@ import { cn } from "@/lib/utils";
 
 const tones: Record<string, string> = {
   default: "bg-sb-canvas text-sb-ink border-sb-border",
-  success: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  warning: "bg-amber-50 text-amber-700 border-amber-200",
-  danger: "bg-red-50 text-sb-red border-red-200",
-  info: "bg-blue-50 text-blue-700 border-blue-200",
+  success:
+    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
+  warning:
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
+  danger:
+    "bg-red-50 text-sb-red border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
+  info: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
   yellow: "bg-sb-yellow-soft text-sb-ink border-sb-yellow/50",
   orange: "bg-sb-orange-soft text-sb-orange-dark border-sb-orange/30",
 };

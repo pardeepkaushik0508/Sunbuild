@@ -182,6 +182,114 @@ async function main() {
     }
   }
 
+  const projects = await prisma.project.findMany({
+    where: { heroImageUrl: { not: null } },
+    select: { id: true, heroImageUrl: true },
+  });
+  for (const row of projects) {
+    const filePath = row.heroImageUrl;
+    if (!filePath || alreadyMigrated(filePath)) {
+      stats.skipped++;
+      continue;
+    }
+    try {
+      const r = await migrateOne({
+        label: "ProjectHero",
+        id: row.id,
+        filePath,
+        folder: `heroes/${row.id}`,
+        update: (data) =>
+          prisma.project.update({
+            where: { id: row.id },
+            data: { heroImageUrl: data.filePath },
+          }),
+      });
+      if (r === "ok") stats.ok++;
+      else if (r === "missing") stats.missing++;
+    } catch (e) {
+      stats.failed++;
+      console.error(
+        `[fail] ProjectHero ${row.id}`,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
+  const users = await prisma.user.findMany({
+    where: { image: { not: null } },
+    select: { id: true, image: true },
+  });
+  for (const row of users) {
+    const filePath = row.image;
+    if (!filePath || alreadyMigrated(filePath)) {
+      stats.skipped++;
+      continue;
+    }
+    try {
+      const r = await migrateOne({
+        label: "UserAvatar",
+        id: row.id,
+        filePath,
+        folder: `avatars/${row.id}`,
+        update: (data) =>
+          prisma.user.update({
+            where: { id: row.id },
+            data: { image: data.filePath },
+          }),
+      });
+      if (r === "ok") stats.ok++;
+      else if (r === "missing") stats.missing++;
+    } catch (e) {
+      stats.failed++;
+      console.error(
+        `[fail] UserAvatar ${row.id}`,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
+  const contracts = await prisma.purchaseContract.findMany({
+    where: { filePath: { not: null } },
+    select: { id: true, projectId: true, filePath: true, storageProvider: true },
+  });
+  for (const row of contracts) {
+    const filePath = row.filePath;
+    if (!filePath || alreadyMigrated(filePath, row.storageProvider)) {
+      stats.skipped++;
+      continue;
+    }
+    try {
+      const r = await migrateOne({
+        label: "PurchaseContract",
+        id: row.id,
+        filePath,
+        folder: row.projectId ? `contracts/${row.projectId}` : "contracts",
+        update: (data) =>
+          prisma.purchaseContract.update({
+            where: { id: row.id },
+            data: {
+              filePath: data.filePath,
+              storageProvider: data.storageProvider,
+              storagePublicId: data.storagePublicId,
+              mediaWidth: data.mediaWidth,
+              mediaHeight: data.mediaHeight,
+              mediaFormat: data.mediaFormat,
+              mediaBytes: data.mediaBytes,
+              mediaResourceType: data.mediaResourceType,
+            },
+          }),
+      });
+      if (r === "ok") stats.ok++;
+      else if (r === "missing") stats.missing++;
+    } catch (e) {
+      stats.failed++;
+      console.error(
+        `[fail] PurchaseContract ${row.id}`,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
   console.log("Migration complete:", stats);
 }
 

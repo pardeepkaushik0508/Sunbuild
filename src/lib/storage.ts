@@ -45,6 +45,21 @@ function getUploadRoot() {
   return path.join(process.cwd(), "uploads");
 }
 
+function getLegacyMediaRoot() {
+  return path.join(process.cwd(), "public", "legacy-media");
+}
+
+/** Deployed copy of images that were saved to disk before Cloudinary worked. */
+export function bundledLegacyMediaPath(relativePath: string) {
+  const { normalized } = assertSafeRelativePath(relativePath);
+  const absolute = path.resolve(getLegacyMediaRoot(), normalized);
+  const root = path.resolve(getLegacyMediaRoot());
+  if (!absolute.startsWith(root + path.sep) && absolute !== root) {
+    throw new AppError("Invalid file path", 400, "INVALID_PATH");
+  }
+  return absolute;
+}
+
 function sanitizeFolder(folder: string) {
   const cleaned = folder
     .replace(/\\/g, "/")
@@ -161,11 +176,14 @@ export async function saveUpload(
   const displayName = path.basename(file.name).slice(0, 200);
 
   const isProd = process.env.NODE_ENV === "production";
+  const cloudinaryConfigured = isCloudinaryConfigured();
+  // Never silently write to disk when Cloudinary is configured — a bad secret
+  // used to save local paths that then 404 on Render.
   const allowLocalFallback =
     process.env.FILE_STORAGE_ALLOW_LOCAL_FALLBACK === "1" ||
-    (!isProd && process.env.REQUIRE_CLOUDINARY !== "1");
+    (!isProd && !cloudinaryConfigured && process.env.REQUIRE_CLOUDINARY !== "1");
 
-  if (isProd && !isCloudinaryConfigured()) {
+  if (isProd && !cloudinaryConfigured) {
     throw new AppError(
       "File storage is not configured. Set a valid CLOUDINARY_URL on Render (Environment → CLOUDINARY_URL = cloudinary://API_KEY:API_SECRET@CLOUD_NAME). Local disk uploads are wiped on every deploy.",
       503,
@@ -173,7 +191,7 @@ export async function saveUpload(
     );
   }
 
-  if (isCloudinaryConfigured()) {
+  if (cloudinaryConfigured) {
     try {
       const asset = await uploadBufferToCloudinary({
         buffer: bytes,
@@ -259,10 +277,16 @@ export async function readUpload(filePath: string) {
   const { absolute } = assertSafeRelativePath(filePath);
   try {
     await access(/*turbopackIgnore: true*/ absolute);
+    return readFile(/*turbopackIgnore: true*/ absolute);
   } catch {
-    throw new AppError("File not found", 404, "NOT_FOUND");
+    const bundled = bundledLegacyMediaPath(filePath);
+    try {
+      await access(/*turbopackIgnore: true*/ bundled);
+      return readFile(/*turbopackIgnore: true*/ bundled);
+    } catch {
+      throw new AppError("File not found", 404, "NOT_FOUND");
+    }
   }
-  return readFile(/*turbopackIgnore: true*/ absolute);
 }
 
 /**

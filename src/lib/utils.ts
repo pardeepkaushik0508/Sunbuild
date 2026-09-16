@@ -59,15 +59,23 @@ export function mediaUrl(path?: string | null) {
   if (!path) return null;
   const legacy = LEGACY_SEED_MEDIA[path];
   if (legacy) return legacy;
+  if (path.startsWith("//") && /cloudinary\.com/i.test(path)) {
+    path = `https:${path}`;
+  }
   if (
     path.startsWith("http://") ||
     path.startsWith("https://") ||
     path.startsWith("data:") ||
     path.startsWith("/")
   ) {
-    // Prefer HTTPS for Cloudinary (and reject insecure http image hosts in UI).
-    if (path.startsWith("http://res.cloudinary.com/")) {
-      return `https://${path.slice("http://".length)}`;
+    try {
+      const u = new URL(path);
+      if (u.hostname.endsWith("cloudinary.com") && u.protocol === "http:") {
+        u.protocol = "https:";
+        return u.toString();
+      }
+    } catch {
+      // not a URL
     }
     return path;
   }
@@ -86,11 +94,16 @@ export function mediaThumbnailUrl(
   if (!url) return null;
   const width = opts?.width ?? 480;
   const height = opts?.height ?? 320;
-  if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
-    return url.replace(
-      "/upload/",
-      `/upload/c_fill,f_auto,q_auto,w_${width},h_${height}/`
-    );
+  try {
+    const host = new URL(url).hostname;
+    if (host.endsWith("cloudinary.com") && url.includes("/upload/")) {
+      return url.replace(
+        "/upload/",
+        `/upload/c_fill,f_auto,q_auto,w_${width},h_${height}/`
+      );
+    }
+  } catch {
+    // not a URL
   }
   return url;
 }

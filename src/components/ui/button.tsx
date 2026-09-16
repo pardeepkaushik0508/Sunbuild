@@ -15,21 +15,22 @@ type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-[#1f2937] text-white hover:bg-black border border-[#1f2937]",
-  secondary: "bg-sb-orange text-white hover:bg-sb-orange-dark border border-sb-orange",
+    "bg-sb-body text-white hover:opacity-90 border border-sb-body dark:bg-sb-ink dark:border-sb-ink dark:text-sb-canvas",
+  secondary:
+    "bg-sb-orange text-white hover:bg-sb-orange-dark border border-sb-orange",
   orange:
-    "bg-sb-orange-soft text-sb-orange border border-sb-orange/40 hover:bg-orange-100",
+    "bg-sb-orange-soft text-sb-orange border border-sb-orange/40 hover:opacity-90",
   yellow:
     "bg-sb-yellow text-sb-ink border border-sb-yellow hover:bg-sb-yellow-dark",
   purple:
-    "bg-sb-purple text-white border border-sb-purple hover:bg-[#7c3aed]",
+    "bg-sb-purple text-white border border-sb-purple hover:opacity-90",
   ghost: "bg-transparent hover:bg-sb-canvas text-sb-body",
   danger:
-    "bg-white text-sb-red border border-red-300 hover:bg-red-50",
+    "bg-sb-surface text-sb-red border border-red-300 hover:bg-sb-red-soft dark:border-red-800",
   outline:
-    "bg-white border border-[#d1d5db] text-[#4b5563] hover:bg-sb-canvas",
+    "bg-sb-surface border border-sb-border text-sb-body hover:bg-sb-canvas",
   whatsapp:
-    "bg-sb-green-soft text-sb-green border border-sb-green-border hover:bg-green-100",
+    "bg-sb-green-soft text-sb-green border border-sb-green-border hover:opacity-90",
 };
 
 const sizes: Record<Size, string> = {

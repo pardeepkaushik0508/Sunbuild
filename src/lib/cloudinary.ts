@@ -17,13 +17,15 @@ export type CloudinaryAsset = {
 let configured = false;
 let configuredFrom: string | null = null;
 
-function maskCloudinaryUrl(raw: string) {
-  try {
-    const u = new URL(raw);
-    return `${u.protocol}//***:***@${u.hostname}${u.pathname ? "/…" : ""}`;
-  } catch {
-    return "[invalid CLOUDINARY_URL]";
+function stripWrappingQuotes(raw: string): string {
+  let url = raw.trim();
+  if (
+    (url.startsWith('"') && url.endsWith('"')) ||
+    (url.startsWith("'") && url.endsWith("'"))
+  ) {
+    url = url.slice(1, -1).trim();
   }
+  return url;
 }
 
 /**
@@ -31,7 +33,7 @@ function maskCloudinaryUrl(raw: string) {
  * Common copy/paste wraps api_key/api_secret in <> which Cloudinary rejects as Invalid api_key.
  */
 export function normalizeCloudinaryUrl(raw: string): string {
-  let url = raw.trim();
+  let url = stripWrappingQuotes(raw);
   if (!url) return url;
 
   // cloudinary://<key>:<secret>@cloud → strip accidental angle brackets
@@ -93,59 +95,106 @@ export function parseCloudinaryUrl(raw: string): {
   return { cloud_name, api_key, api_secret };
 }
 
-/** Configure from CLOUDINARY_URL once. Never log the secret. */
-export function getCloudinary() {
-  const raw = process.env.CLOUDINARY_URL?.trim();
-  if (!raw) {
-    throw new AppError(
-      "File storage is not configured. Set CLOUDINARY_URL on the server.",
-      503,
-      "STORAGE_NOT_CONFIGURED"
-    );
-  }
-
-  const url = normalizeCloudinaryUrl(raw);
-
-  // Reconfigure when env changes (tests / hot reload).
-  if (!configured || configuredFrom !== url) {
-    try {
-      const parsed = parseCloudinaryUrl(url);
-      // Prefer explicit fields — `cloudinary_url` option is NOT applied by the SDK.
-      cloudinary.config({
-        cloud_name: parsed.cloud_name,
-        api_key: parsed.api_key,
-        api_secret: parsed.api_secret,
-        secure: true,
-      });
-      // Keep env in sync for any SDK internals that read CLOUDINARY_URL.
-      process.env.CLOUDINARY_URL = url;
-      configured = true;
-      configuredFrom = url;
-    } catch (err) {
-      configured = false;
-      configuredFrom = null;
-      if (err instanceof AppError) throw err;
-      console.error(
-        "[cloudinary] Invalid CLOUDINARY_URL",
-        maskCloudinaryUrl(url)
-      );
+/**
+ * Prefer discrete dashboard fields (easier to copy). Fall back to CLOUDINARY_URL.
+ * Same credentials must be set on localhost (.env.local) and Render.
+ */
+export function readCloudinaryCredentials(): {
+  cloud_name: string;
+  api_key: string;
+  api_secret: string;
+} | null {
+  const cloud_name = stripWrappingQuotes(
+    process.env.CLOUDINARY_CLOUD_NAME || ""
+  );
+  const api_key = stripWrappingQuotes(process.env.CLOUDINARY_API_KEY || "");
+  const api_secret = stripWrappingQuotes(
+    process.env.CLOUDINARY_API_SECRET || ""
+  );
+  if (cloud_name && api_key && api_secret) {
+    if (/[<>]/.test(api_key) || /[<>]/.test(api_secret)) {
       throw new AppError(
-        "File storage configuration is invalid. Check CLOUDINARY_URL (use cloudinary://API_KEY:API_SECRET@CLOUD_NAME — no < > around credentials).",
+        "File storage configuration is invalid. Remove < > from Cloudinary credentials.",
         503,
         "STORAGE_MISCONFIGURED"
       );
     }
+    return { cloud_name, api_key, api_secret };
+  }
+
+  const raw = process.env.CLOUDINARY_URL?.trim();
+  if (!raw) return null;
+  return parseCloudinaryUrl(raw);
+}
+
+function credentialsCacheKey(creds: {
+  cloud_name: string;
+  api_key: string;
+  api_secret: string;
+}) {
+  return `${creds.cloud_name}:${creds.api_key}:${creds.api_secret.length}`;
+}
+
+/** Configure from env once. Never log the secret. */
+export function getCloudinary() {
+  let creds: { cloud_name: string; api_key: string; api_secret: string };
+  try {
+    const parsed = readCloudinaryCredentials();
+    if (!parsed) {
+      throw new AppError(
+        "File storage is not configured. Set CLOUDINARY_URL (or CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET) on the server.",
+        503,
+        "STORAGE_NOT_CONFIGURED"
+      );
+    }
+    creds = parsed;
+  } catch (err) {
+    configured = false;
+    configuredFrom = null;
+    throw err;
+  }
+
+  const cacheKey = credentialsCacheKey(creds);
+
+  // Reconfigure when env changes (tests / hot reload).
+  if (!configured || configuredFrom !== cacheKey) {
+    // Keep env + SDK in sync so the SDK does not parse a stale/quoted URL.
+    process.env.CLOUDINARY_URL = `cloudinary://${encodeURIComponent(creds.api_key)}:${encodeURIComponent(creds.api_secret)}@${creds.cloud_name}`;
+    cloudinary.config({
+      cloud_name: creds.cloud_name,
+      api_key: creds.api_key,
+      api_secret: creds.api_secret,
+      secure: true,
+    });
+    configured = true;
+    configuredFrom = cacheKey;
   }
 
   return cloudinary;
 }
 
-export function isCloudinaryConfigured(): boolean {
-  const raw = process.env.CLOUDINARY_URL?.trim();
-  if (!raw) return false;
+/** Live credential check. Parse-only `isCloudinaryConfigured` can still be a bad secret. */
+export async function pingCloudinary(timeoutMs = 5000): Promise<boolean> {
   try {
-    parseCloudinaryUrl(raw);
-    return true;
+    const api = getCloudinary();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
+    });
+    try {
+      await Promise.race([api.api.ping(), timeout]);
+      return true;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}
+
+export function isCloudinaryConfigured(): boolean {
+  try {
+    return readCloudinaryCredentials() !== null;
   } catch {
     return false;
   }
@@ -287,10 +336,12 @@ export async function uploadBufferToCloudinary(opts: {
     });
     if (
       httpCode === 401 ||
-      /invalid signature|invalid api_key|unauthorized|api_secret/i.test(message)
+      /invalid signature|invalid api_key|unauthorized|api_secret mismatch|api_secret/i.test(
+        message
+      )
     ) {
       throw new AppError(
-        "Cloudinary credentials are invalid. Update CLOUDINARY_URL on the server (API key + secret from Cloudinary Dashboard → Settings → API Keys).",
+        "Cloudinary credentials are invalid (api_secret mismatch). Copy a fresh API Key + API Secret from Cloudinary Dashboard → Settings → API Keys into .env.local AND the same values on Render. Then restart the server.",
         502,
         "STORAGE_AUTH_FAILED"
       );

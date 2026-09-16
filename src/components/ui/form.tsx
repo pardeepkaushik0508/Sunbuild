@@ -34,7 +34,7 @@ export function Input({
   return (
     <input
       className={cn(
-        "h-10 w-full rounded-[10px] border border-sb-border bg-white px-3 text-sm outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20 disabled:bg-sb-canvas",
+        "h-10 w-full rounded-[10px] border border-sb-border bg-sb-surface px-3 text-sm text-sb-ink outline-none placeholder:text-sb-muted focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20 disabled:bg-sb-canvas",
         className
       )}
       {...props}
@@ -49,7 +49,7 @@ export function Textarea({
   return (
     <textarea
       className={cn(
-        "min-h-24 w-full rounded-[10px] border border-sb-border bg-white px-3 py-2 text-sm outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20",
+        "min-h-24 w-full rounded-[10px] border border-sb-border bg-sb-surface px-3 py-2 text-sm text-sb-ink outline-none placeholder:text-sb-muted focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20",
         className
       )}
       {...props}
@@ -65,7 +65,7 @@ export function Select({
   return (
     <select
       className={cn(
-        "h-10 w-full rounded-[10px] border border-sb-border bg-white px-3 text-sm outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20",
+        "h-10 w-full rounded-[10px] border border-sb-border bg-sb-surface px-3 text-sm text-sb-ink outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20",
         className
       )}
       {...props}

@@ -218,17 +218,32 @@ export async function notifyUserBySmsBestEffort(input: {
 }): Promise<void> {
   try {
     const config = getTwilioConfig();
-    if (!config) return;
+    if (!config) {
+      console.warn("[twilio] best-effort SMS skipped: Twilio is not configured");
+      return;
+    }
 
     const text = input.body.trim();
     if (!text) return;
 
     const user = await prisma.user.findUnique({
       where: { id: input.userId },
-      select: { phone: true },
+      select: { phone: true, name: true },
     });
-    const toNumber = user?.phone ? toE164(user.phone) : null;
-    if (!toNumber) return;
+    if (!user?.phone?.trim()) {
+      console.warn("[twilio] best-effort SMS skipped: user has no phone", {
+        userId: input.userId,
+        name: user?.name ?? null,
+      });
+      return;
+    }
+    const toNumber = toE164(user.phone);
+    if (!toNumber) {
+      console.warn("[twilio] best-effort SMS skipped: invalid phone format", {
+        userId: input.userId,
+      });
+      return;
+    }
 
     const { status: statusCallback } = getTwilioWebhookUrls();
     const queued = await prisma.smsMessage.create({
@@ -264,6 +279,15 @@ export async function notifyUserBySmsBestEffort(input: {
         errorMessage: sent.errorMessage,
       },
     });
+
+    if (twilioFailed) {
+      console.error("[twilio] best-effort SMS failed", {
+        userId: input.userId,
+        errorCode: sent.errorCode,
+        errorMessage: sent.errorMessage,
+        unverifiedRecipient: sent.unverifiedRecipient,
+      });
+    }
   } catch (err) {
     console.error("[twilio] best-effort SMS did not send", {
       userId: input.userId,

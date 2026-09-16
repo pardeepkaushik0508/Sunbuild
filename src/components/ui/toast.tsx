@@ -127,9 +127,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             className={cn(
               "pointer-events-auto flex items-start gap-3 rounded-[12px] border px-4 py-3 text-sm shadow-lg",
               item.type === "success" &&
-                "border-emerald-200 bg-white text-emerald-800",
-              item.type === "error" && "border-red-200 bg-white text-[#dc2626]",
-              item.type === "info" && "border-sb-border bg-white text-sb-ink"
+                "border-emerald-200 bg-sb-surface text-emerald-800 dark:border-emerald-800 dark:text-emerald-300",
+              item.type === "error" &&
+                "border-red-200 bg-sb-surface text-[#dc2626] dark:border-red-800 dark:text-red-300",
+              item.type === "info" &&
+                "border-sb-border bg-sb-surface text-sb-ink"
             )}
           >
             <p className="min-w-0 flex-1 font-medium leading-snug">

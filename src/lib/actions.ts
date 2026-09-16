@@ -1182,6 +1182,11 @@ export async function assignSubcontractorAction(form: FormData) {
     throw new AppError("User must be a subcontractor in this company");
   }
 
+  const existingAccess = await prisma.projectAccess.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+    select: { id: true },
+  });
+
   await prisma.projectAccess.upsert({
     where: { projectId_userId: { projectId, userId } },
     update: { role: Role.SUBCONTRACTOR, canEdit: true },
@@ -1195,7 +1200,35 @@ export async function assignSubcontractorAction(form: FormData) {
     entityType: "ProjectAccess",
     entityId: userId,
   });
+
+  // Always attempt notify/SMS. createNotificationOnce prevents duplicate unread spam.
+  // Also covers re-assign after the pre-fix path that never notified.
+  {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, companyId: session.membership.companyId },
+      select: { name: true },
+    });
+    try {
+      await createNotificationOnce({
+        userId,
+        companyId: session.membership.companyId,
+        type: "SUBCONTRACTOR_PROJECT_ASSIGNED",
+        title: `You have been assigned to ${project?.name ?? "a project"}`,
+        body: existingAccess
+          ? `Project access confirmed by ${session.user.name}.`
+          : `Assigned by ${session.user.name}.`,
+        href: `/sub/jobs/${projectId}`,
+        entityType: "Project",
+        entityId: projectId,
+      });
+      revalidateNotificationInbox();
+    } catch (err) {
+      console.error("[project] subcontractor assignment notification/SMS skipped", err);
+    }
+  }
+
   revalidatePath(`/pm/projects/${projectId}`);
+  revalidatePath("/notifications");
 }
 
 export async function createScheduleItemAction(form: FormData) {

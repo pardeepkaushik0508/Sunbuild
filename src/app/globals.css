@@ -243,7 +243,7 @@ textarea {
   padding: 3px;
   border-radius: 999px;
   border: 1px solid var(--sb-border);
-  background: #f3f4f6;
+  background: color-mix(in srgb, var(--sb-canvas) 80%, var(--sb-border));
 }
 
 .sb-pill-toggle a,
@@ -259,15 +259,126 @@ textarea {
 }
 
 .sb-pill-toggle .is-active {
-  background: #ffffff;
+  background: var(--sb-surface);
   color: var(--sb-ink);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  box-shadow: var(--sb-shadow);
 }
 
 .sb-brand {
   font-family: var(--font-pacifico), cursive;
   color: var(--sb-orange);
   letter-spacing: 0.02em;
+}
+
+/*
+ * Dark-mode safety net: many screens still hard-code light Tailwind colors
+ * (bg-white, text-[#111827], etc.). Map those onto theme tokens so tables,
+ * cards, and forms stay readable without redesigning every page.
+ */
+html[data-theme="dark"] .bg-white,
+html.dark .bg-white {
+  background-color: var(--sb-surface);
+}
+
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-gray-100,
+html[data-theme="dark"] .bg-neutral-50,
+html[data-theme="dark"] .bg-neutral-100,
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-\[\#fafafa\],
+html[data-theme="dark"] .bg-\[\#FAFAFA\],
+html[data-theme="dark"] .bg-\[\#F8FAFC\],
+html[data-theme="dark"] .bg-\[\#f8fafc\],
+html[data-theme="dark"] .bg-\[\#f3f4f6\],
+html[data-theme="dark"] .bg-\[\#F3F4F6\],
+html[data-theme="dark"] .bg-\[\#f5f5f5\],
+html[data-theme="dark"] .bg-\[\#f0f2f5\],
+html[data-theme="dark"] .bg-\[\#fffbeb\],
+html.dark .bg-gray-50,
+html.dark .bg-gray-100,
+html.dark .bg-neutral-50,
+html.dark .bg-neutral-100,
+html.dark .bg-slate-50,
+html.dark .bg-\[\#fafafa\],
+html.dark .bg-\[\#FAFAFA\],
+html.dark .bg-\[\#F8FAFC\],
+html.dark .bg-\[\#f8fafc\],
+html.dark .bg-\[\#f3f4f6\],
+html.dark .bg-\[\#F3F4F6\],
+html.dark .bg-\[\#f5f5f5\],
+html.dark .bg-\[\#f0f2f5\] {
+  background-color: color-mix(in srgb, var(--sb-surface) 88%, var(--sb-canvas));
+}
+
+html[data-theme="dark"] .text-\[\#111827\],
+html[data-theme="dark"] .text-\[\#1f2937\],
+html[data-theme="dark"] .text-\[\#374151\],
+html[data-theme="dark"] .text-\[\#4b5563\],
+html[data-theme="dark"] .text-\[\#444\],
+html[data-theme="dark"] .text-neutral-900,
+html[data-theme="dark"] .text-gray-900,
+html.dark .text-\[\#111827\],
+html.dark .text-\[\#1f2937\],
+html.dark .text-\[\#374151\],
+html.dark .text-\[\#4b5563\],
+html.dark .text-\[\#444\],
+html.dark .text-neutral-900,
+html.dark .text-gray-900 {
+  color: var(--sb-ink);
+}
+
+html[data-theme="dark"] .text-\[\#6b7280\],
+html[data-theme="dark"] .text-\[\#888\],
+html[data-theme="dark"] .text-\[\#9ca3af\],
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-600,
+html[data-theme="dark"] .text-neutral-500,
+html.dark .text-\[\#6b7280\],
+html.dark .text-\[\#888\],
+html.dark .text-\[\#9ca3af\],
+html.dark .text-gray-500,
+html.dark .text-gray-600,
+html.dark .text-neutral-500 {
+  color: var(--sb-muted);
+}
+
+html[data-theme="dark"] .border-\[\#e5e7eb\],
+html[data-theme="dark"] .border-\[\#E2E8F0\],
+html[data-theme="dark"] .border-\[\#d1d5db\],
+html[data-theme="dark"] .border-gray-200,
+html[data-theme="dark"] .border-neutral-200,
+html.dark .border-\[\#e5e7eb\],
+html.dark .border-\[\#E2E8F0\],
+html.dark .border-\[\#d1d5db\],
+html.dark .border-gray-200,
+html.dark .border-neutral-200 {
+  border-color: var(--sb-border);
+}
+
+html[data-theme="dark"] .hover\:bg-\[\#fafafa\]:hover,
+html[data-theme="dark"] .hover\:bg-\[\#f3f4f6\]:hover,
+html[data-theme="dark"] .hover\:bg-gray-50:hover,
+html[data-theme="dark"] .hover\:bg-gray-100:hover,
+html.dark .hover\:bg-\[\#fafafa\]:hover,
+html.dark .hover\:bg-\[\#f3f4f6\]:hover,
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover {
+  background-color: color-mix(in srgb, var(--sb-canvas) 70%, var(--sb-border));
+}
+
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.dark select,
+html.dark textarea {
+  color-scheme: dark;
+}
+
+/* Keep intentional brand/white text on dark fills */
+html[data-theme="dark"] .text-white,
+html.dark .text-white {
+  color: #ffffff;
 }
 
 /* Global route-change progress bar */

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ImageOff } from "lucide-react";
-import { cn, mediaThumbnailUrl, mediaUrl } from "@/lib/utils";
+import { cn, isImageFileName, mediaThumbnailUrl, mediaUrl } from "@/lib/utils";
 
 type MediaImageProps = {
   src?: string | null;
@@ -28,11 +28,31 @@ export function MediaImage({
   height = 320,
   aspectClassName = "aspect-video",
 }: MediaImageProps) {
-  const resolved = thumbnail
+  const primary = thumbnail
     ? mediaThumbnailUrl(src, { width, height })
     : mediaUrl(src);
+  const bundled =
+    src &&
+    !src.startsWith("http") &&
+    !src.startsWith("/") &&
+    !src.startsWith("data:") &&
+    isImageFileName(src)
+      ? `/legacy-media/${src
+          .split("/")
+          .map((seg) => encodeURIComponent(seg))
+          .join("/")}`
+      : null;
+  const [useBundled, setUseBundled] = useState(false);
+  const resolved =
+    useBundled && bundled && bundled !== primary ? bundled : primary;
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    setUseBundled(false);
+    setFailedFor(null);
+    setLoadedFor(null);
+  }, [src]);
 
   const failed = !resolved || failedFor === resolved;
   const ready = Boolean(resolved) && loadedFor === resolved;
@@ -78,7 +98,13 @@ export function MediaImage({
           ready ? "opacity-100" : "opacity-0"
         )}
         onLoad={() => setLoadedFor(resolved)}
-        onError={() => setFailedFor(resolved)}
+        onError={() => {
+          if (!useBundled && bundled && bundled !== resolved) {
+            setUseBundled(true);
+            return;
+          }
+          setFailedFor(resolved);
+        }}
       />
     </div>
   );
