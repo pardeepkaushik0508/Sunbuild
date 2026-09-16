@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Role } from "@prisma/client";
-import { requireRole } from "@/lib/session";
+import { requireRole, assertProjectAccess } from "@/lib/session";
+import { requireCapability } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -20,8 +21,8 @@ export default async function PrintSoaPage({ params }: PageProps) {
   ]);
   const { id } = await params;
 
-  const soa = await prisma.scheduleOfAllowances.findUnique({
-    where: { id },
+  const soa = await prisma.scheduleOfAllowances.findFirst({
+    where: { id, companyId: session.membership.companyId },
     include: {
       contract: true,
       buyer: true,
@@ -31,6 +32,11 @@ export default async function PrintSoaPage({ params }: PageProps) {
   });
 
   if (!soa) notFound();
+  if (soa.projectId) {
+    await assertProjectAccess(session, soa.projectId);
+  } else {
+    requireCapability(session, "manageContracts");
+  }
 
   const buyerName = soa.buyer
     ? fullName(soa.buyer.firstName, soa.buyer.lastName)

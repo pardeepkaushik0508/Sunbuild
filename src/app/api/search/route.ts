@@ -237,7 +237,8 @@ export async function GET(request: Request) {
     ];
 
     return NextResponse.json({ results: results.slice(0, 24) });
-  } catch {
+  } catch (error) {
+    console.error("[search] request failed", error);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }

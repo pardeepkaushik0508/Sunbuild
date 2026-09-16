@@ -26,9 +26,6 @@ import {
   Calendar,
   Layers,
   Lock,
-  DollarSign,
-  Tag,
-  CheckCircle,
   X,
 } from "lucide-react";
 

@@ -32,7 +32,7 @@ import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
 import { formatPersonOptionLabel } from "@/lib/users/person-label";
-import { FileText, FileSpreadsheet, Lock, ExternalLink } from "lucide-react";
+import { FileText, FileSpreadsheet, Lock } from "lucide-react";
 import { SendSmsButton } from "@/components/twilio/send-sms-button";
 import { ProjectHeroImageCard } from "@/components/projects/project-hero-image-card";
 
@@ -695,7 +695,11 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           {MODULE_LINKS.map((mod) => (
             <Link
               key={mod.href}
-              href={`/pm/${mod.href}?projectId=${project.id}`}
+              href={
+                mod.href === "statement-of-adjustments"
+                  ? `/pm/projects/${project.id}/statement-of-adjustments`
+                  : `/pm/${mod.href}?projectId=${project.id}`
+              }
               className="rounded-[12px] border border-sb-border bg-sb-canvas/40 px-4 py-3 text-sm font-medium text-sb-ink shadow-sm transition hover:border-sb-orange/40 hover:bg-sb-yellow-soft"
             >
               {mod.label}

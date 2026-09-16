@@ -7,7 +7,7 @@ import { ContractStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/session";
 import { requireCapability } from "@/lib/authorization";
-import { AppError } from "@/lib/errors";
+import { AppError, ForbiddenError } from "@/lib/errors";
 import { saveCompanyUpload, storageMeta } from "@/lib/storage";
 import { writeAudit } from "@/lib/audit";
 import { ACTION_RATE, UPLOAD_RATE, assertRateLimit, clientKeyFromHeaders } from "@/lib/rate-limit";
@@ -214,6 +214,9 @@ export async function updatePurchaseContractAction(
   });
 
   if (!contract) throw new AppError("Contract not found");
+  if (contract.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
   if (contract.status === ContractStatus.EXECUTED) {
     throw new AppError(
       "Contract is executed and locked. Modifications must be processed via Change Order."
@@ -305,6 +308,9 @@ export async function createContractRevisionAction(
   });
 
   if (!contract) throw new AppError("Contract not found");
+  if (contract.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
   if (contract.status === ContractStatus.EXECUTED) {
     throw new AppError(
       "Executed contracts cannot be revised directly. Use Change Orders."
@@ -390,6 +396,12 @@ export async function uploadSignedContractAction(
     "contracts/signed"
   );
 
+  const existing = await prisma.purchaseContract.findFirst({
+    where: { id: contractId, companyId: session.membership.companyId },
+    select: { id: true },
+  });
+  if (!existing) throw new AppError("Contract not found");
+
   await prisma.purchaseContract.update({
     where: { id: contractId },
     data: {
@@ -455,6 +467,9 @@ export async function deleteDraftContractAction(contractId: string) {
   });
 
   if (!contract) throw new AppError("Contract not found");
+  if (contract.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
   if (contract.status === ContractStatus.EXECUTED) {
     throw new AppError("Executed contracts cannot be deleted.");
   }

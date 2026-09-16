@@ -2,25 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 import { safeInternalPath } from "@/lib/safe-redirect";
-
-const publicPaths = [
-  "/login",
-  "/forgot-password",
-  "/reset-password",
-  "/privacy",
-  "/terms",
-  "/api/auth",
-  // Public-safe password policy for reset forms (no secrets returned)
-  "/api/settings/password-policy",
-  // External provider webhooks — handlers enforce signatures / verify tokens
-  "/api/twilio/status",
-  "/api/twilio/inbound",
-  "/api/whatsapp/webhook",
-];
+import { MIDDLEWARE_PUBLIC_PATHS } from "@/lib/middleware-public-paths";
 
 function isPublicPath(pathname: string) {
   if (pathname === "/") return true;
-  return publicPaths.some(
+  return MIDDLEWARE_PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
 }

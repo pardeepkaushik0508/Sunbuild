@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWhatsAppConfig } from "@/lib/whatsapp/config";
+import {
+  getWhatsAppAppSecret,
+  getWhatsAppVerifyToken,
+} from "@/lib/whatsapp/config";
 import { handleWhatsAppWebhookPayload } from "@/lib/whatsapp/service";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp/webhook-signature";
 
@@ -16,8 +19,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const config = getWhatsAppConfig();
-  const expectedToken = config?.verifyToken;
+  const expectedToken = getWhatsAppVerifyToken();
 
   // Reject handshake when verify token is not configured (no hardcoded fallback).
   if (!expectedToken) {
@@ -43,11 +45,11 @@ export async function GET(request: NextRequest) {
  * Requires X-Hub-Signature-256 verified against WHATSAPP_APP_SECRET.
  */
 export async function POST(request: NextRequest) {
-  const config = getWhatsAppConfig();
   const rawBody = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
+  const appSecret = getWhatsAppAppSecret();
 
-  if (!verifyWhatsAppSignature(rawBody, signature, config?.appSecret)) {
+  if (!verifyWhatsAppSignature(rawBody, signature, appSecret)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 

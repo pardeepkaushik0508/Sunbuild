@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireSession } from "@/lib/session";
+import { requireSession, assertProjectAccess } from "@/lib/session";
+import { requireCapability } from "@/lib/authorization";
 import { generateSoaPdfBuffer } from "@/lib/contracts/pdf-service";
 import { fullName } from "@/lib/utils";
 
@@ -26,6 +27,12 @@ export async function GET(
 
   if (!soa) {
     return new NextResponse("Schedule of Allowances not found", { status: 404 });
+  }
+
+  if (soa.projectId) {
+    await assertProjectAccess(session, soa.projectId);
+  } else {
+    requireCapability(session, "manageContracts");
   }
 
   const clientName =

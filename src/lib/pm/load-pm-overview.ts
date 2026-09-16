@@ -1,6 +1,5 @@
 import {
   ChangeOrderStatus,
-  Priority,
   ProjectStatus,
   RfiStatus,
   ScheduleStatus,

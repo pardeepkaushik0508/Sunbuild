@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Role } from "@prisma/client";
-import { requireRole } from "@/lib/session";
+import { requireRole, assertContractAccess } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -20,8 +20,8 @@ export default async function PrintContractPage({ params }: PageProps) {
   ]);
   const { id } = await params;
 
-  const contract = await prisma.purchaseContract.findUnique({
-    where: { id },
+  const contract = await prisma.purchaseContract.findFirst({
+    where: { id, companyId: session.membership.companyId },
     include: {
       scheduleOfAllowances: {
         include: { items: { orderBy: { sortOrder: "asc" } } },
@@ -32,6 +32,7 @@ export default async function PrintContractPage({ params }: PageProps) {
   });
 
   if (!contract) notFound();
+  await assertContractAccess(session, contract.id);
 
   const buyerName = contract.buyer
     ? fullName(contract.buyer.firstName, contract.buyer.lastName)

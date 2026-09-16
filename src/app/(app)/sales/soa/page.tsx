@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
-import { FileSpreadsheet, FileText, Eye, Printer, ArrowLeft } from "lucide-react";
+import { FileSpreadsheet, FileText, Eye, Printer } from "lucide-react";
 
 export default async function SalesSoaListPage() {
   const session = await requireRole([

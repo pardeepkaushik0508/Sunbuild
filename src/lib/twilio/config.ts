@@ -126,7 +126,10 @@ export async function getPublicTwilioSettings(
         errorMessage: true,
       },
     })
-    .catch(() => []);
+    .catch((error) => {
+      console.warn("[twilio] failed to load recent SMS failures", error);
+      return [];
+    });
 
   const recentFailures: TwilioFailureSample[] = failedRows.map((row) => ({
     sentAt: row.sentAt.toISOString(),

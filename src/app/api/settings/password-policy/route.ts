@@ -4,6 +4,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getPasswordPolicy } from "@/lib/settings/store";
 import { DEFAULT_PASSWORD_POLICY } from "@/lib/settings/defaults";
+import {
+  AUTH_RATE,
+  checkRateLimit,
+  clientKeyFromHeaders,
+} from "@/lib/rate-limit";
 
 /**
  * Public-safe password policy for reset/create forms.
@@ -12,8 +17,26 @@ import { DEFAULT_PASSWORD_POLICY } from "@/lib/settings/defaults";
  */
 export async function GET() {
   try {
+    const h = await headers();
+    const limited = checkRateLimit(
+      clientKeyFromHeaders(h, "password-policy"),
+      AUTH_RATE.limit,
+      AUTH_RATE.windowMs
+    );
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil(limited.retryAfterMs / 1000)),
+          },
+        }
+      );
+    }
+
     const session = await auth.api.getSession({
-      headers: await headers(),
+      headers: h,
     });
 
     let companyId: string | null = null;
@@ -45,7 +68,8 @@ export async function GET() {
       requireNumber: policy.requireNumber,
       requireSpecial: policy.requireSpecial,
     });
-  } catch {
+  } catch (error) {
+    console.error("[password-policy] failed to load policy", error);
     return NextResponse.json(DEFAULT_PASSWORD_POLICY);
   }
 }

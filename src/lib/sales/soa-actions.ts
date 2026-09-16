@@ -6,7 +6,7 @@ import { AllowanceItemStatus, ContractStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/session";
 import { requireCapability } from "@/lib/authorization";
-import { AppError } from "@/lib/errors";
+import { AppError, ForbiddenError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { ACTION_RATE, assertRateLimit, clientKeyFromHeaders } from "@/lib/rate-limit";
 import { calculateContractTotals, calculateSoaTotals, roundMoney } from "@/lib/contracts/contracts";
@@ -96,6 +96,9 @@ export async function addAllowanceItemAction(soaId: string, form: FormData) {
   });
 
   if (!soa) throw new AppError("Schedule of Allowances not found");
+  if (soa.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
   if (soa.status === "LOCKED" || soa.contract?.status === ContractStatus.EXECUTED) {
     throw new AppError("Executed Schedule of Allowances is locked and cannot be modified.");
   }
@@ -173,6 +176,9 @@ export async function updateAllowanceItemAction(itemId: string, form: FormData) 
   });
 
   if (!item) throw new AppError("Allowance item not found");
+  if (item.soa.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
   if (item.soa.status === "LOCKED" || item.soa.contract?.status === ContractStatus.EXECUTED) {
     throw new AppError("Executed Schedule of Allowances is locked and cannot be modified.");
   }
@@ -240,6 +246,9 @@ export async function deleteAllowanceItemAction(itemId: string) {
   });
 
   if (!item) throw new AppError("Allowance item not found");
+  if (item.soa.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
   if (item.soa.status === "LOCKED" || item.soa.contract?.status === ContractStatus.EXECUTED) {
     throw new AppError("Executed Schedule of Allowances is locked and cannot be modified.");
   }
@@ -279,7 +288,18 @@ export async function applySoaRecommendationAction(
   const actionType = formString(form, "actionType");
   const suggestedValue = formString(form, "suggestedValue");
 
+  const soa = await prisma.scheduleOfAllowances.findFirst({
+    where: { id: soaId, companyId: session.membership.companyId },
+    select: { id: true },
+  });
+  if (!soa) throw new AppError("Schedule of Allowances not found");
+
   if (actionType === "CATEGORY_SUGGESTION" && itemId && suggestedValue) {
+    const item = await prisma.allowanceItem.findFirst({
+      where: { id: itemId, soaId, soa: { companyId: session.membership.companyId } },
+      select: { id: true },
+    });
+    if (!item) throw new AppError("Allowance item not found");
     await prisma.allowanceItem.update({
       where: { id: itemId },
       data: { category: suggestedValue },

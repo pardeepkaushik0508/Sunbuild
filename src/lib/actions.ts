@@ -2881,6 +2881,12 @@ export async function addWarrantyCommentAction(ticketId: string, form: FormData)
   if (role === Role.CLIENT && ticket.clientUserId !== session.user.id) {
     throw new ForbiddenError();
   }
+  if (
+    role === Role.SUBCONTRACTOR &&
+    ticket.subcontractorId !== session.user.id
+  ) {
+    throw new ForbiddenError();
+  }
   if (ticket.status === WarrantyStatus.CLOSED && role === Role.CLIENT) {
     throw new AppError("This warranty ticket is closed");
   }

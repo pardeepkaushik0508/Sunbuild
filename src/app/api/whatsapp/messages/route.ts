@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Role } from "@prisma/client";
 import { requireApiSession, getAccessibleProjectIds } from "@/lib/session";
+import { sessionHasClientCommunication } from "@/lib/authorization";
 import {
   getConversationMessages,
   getOrCreateProjectConversation,
   sendWhatsAppMessage,
 } from "@/lib/whatsapp/service";
 import { toSafeErrorMessage } from "@/lib/errors";
+import {
+  ACTION_RATE,
+  assertRateLimit,
+  clientKeyFromHeaders,
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+const WA_SEND_LIMIT = 20;
+
+function canUseWhatsApp(session: Awaited<ReturnType<typeof requireApiSession>>) {
+  if (
+    session.membership.role === Role.CLIENT ||
+    session.membership.role === Role.SUBCONTRACTOR
+  ) {
+    return false;
+  }
+  return sessionHasClientCommunication(session);
+}
 
 /**
  * Fetch messages for a conversation or project.
@@ -15,6 +34,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const session = await requireApiSession();
+    if (!canUseWhatsApp(session)) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
     const accessibleProjectIds = await getAccessibleProjectIds(session);
     const { searchParams } = new URL(request.url);
 
@@ -55,6 +77,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requireApiSession();
+    if (!canUseWhatsApp(session)) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+    assertRateLimit(
+      clientKeyFromHeaders(request.headers, `whatsapp-send:${session.user.id}`),
+      WA_SEND_LIMIT,
+      ACTION_RATE.windowMs
+    );
     const accessibleProjectIds = await getAccessibleProjectIds(session);
 
     const body = (await request.json().catch(() => null)) as {

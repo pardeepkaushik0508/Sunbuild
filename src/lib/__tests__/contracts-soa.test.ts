@@ -11,8 +11,6 @@ import {
   calculateContractTotals,
   calculateSoaTotals,
   roundMoney,
-  generateContractNumber,
-  generateSoaNumber,
 } from "../contracts/contracts";
 import { extractContractData } from "../contracts/contract-extractor";
 import { analyzeSoaItems, suggestAllowanceCategory } from "../contracts/soa-recommendations";

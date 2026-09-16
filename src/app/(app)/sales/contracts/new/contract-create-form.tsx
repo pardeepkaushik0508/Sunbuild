@@ -123,10 +123,9 @@ export function ContractCreateForm({ projects, leads, buyers, defaultProjectId =
     try {
       // Parse file name patterns for quick hints
       const name = file.name;
-      let matchedCount = 0;
 
       if (name.includes("Agreement") || name.includes("Contract") || name.includes("PC-")) {
-        matchedCount++;
+        // name hint only — extraction is simulated for UX feedback
       }
 
       // Try reading text if text or small buffer

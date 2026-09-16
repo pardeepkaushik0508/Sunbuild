@@ -8,7 +8,7 @@ import {
   AllowanceItemStatus,
   Prisma,
 } from "@prisma/client";
-import { AppError } from "@/lib/errors";
+import { AppError, ForbiddenError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 
 /**
@@ -239,6 +239,9 @@ export async function executeContractTransaction(opts: {
     });
 
     if (!contract) throw new AppError("Contract not found");
+    if (contract.companyId !== companyId) {
+      throw new ForbiddenError();
+    }
     if (contract.status === ContractStatus.EXECUTED) {
       throw new AppError("Contract is already executed and locked");
     }

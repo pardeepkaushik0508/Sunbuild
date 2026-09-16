@@ -27,6 +27,8 @@ export async function GET(
     return new NextResponse("Contract not found", { status: 404 });
   }
 
+  await assertContractAccess(session, contract.id);
+
   const buyerName =
     fullName(contract.buyerFirstName, contract.buyerLastName) || "Client";
 
