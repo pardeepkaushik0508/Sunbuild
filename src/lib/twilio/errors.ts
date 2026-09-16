@@ -1,16 +1,26 @@
 /**
- * Safe Twilio send-error parsing. Never includes hardcoded recipient numbers.
+ * Safe Twilio send-error parsing. Never includes tokens or full Account SIDs.
  */
 
 export type ParsedTwilioSendError = {
   errorCode: string | null;
   errorMessage: string;
   unverifiedRecipient: boolean;
+  authFailed: boolean;
+  trialRestriction: boolean;
 };
 
 const TRIAL_UNVERIFIED_CODES = new Set(["21608", "21610"]);
 const INVALID_FROM_CODES = new Set(["21212", "21606", "21601"]);
 const INDIA_TEMPLATE_CODES = new Set(["572006", "63027", "63016"]);
+const AUTH_FAILED_CODES = new Set(["20003"]);
+const TRIAL_GEO_CODES = new Set([
+  "21408",
+  "21612",
+  "21215",
+  "21214",
+  "21614",
+]);
 
 function asRecord(err: unknown): Record<string, unknown> | null {
   if (!err || typeof err !== "object") return null;
@@ -52,23 +62,53 @@ export function isUnverifiedRecipientError(
   return /unverified/i.test(message) && /trial|verify/i.test(message);
 }
 
+export function isTrialRestrictionError(
+  code: string | null,
+  message: string
+): boolean {
+  if (code && TRIAL_GEO_CODES.has(code)) return true;
+  if (code && INDIA_TEMPLATE_CODES.has(code)) return true;
+  return (
+    /permission.*region|not.*enabled.*region|geographic|country.*(not|isn't) supported|trial.*(cannot|can't|not).*(send|deliver)|destination.*(not|isn't).*(supported|allowed)/i.test(
+      message
+    )
+  );
+}
+
 export const UNVERIFIED_RECIPIENT_DIAGNOSTIC =
   "Recipient must be verified in the Twilio console, or the Twilio account must be upgraded. The original CRM action was not rolled back.";
 
 export const INVALID_FROM_DIAGNOSTIC =
-  "TWILIO_PHONE_NUMBER must be a Twilio Console phone number (Phone Numbers → Manage), not a personal mobile. Get a number in Twilio and update the env on Render and .env.local.";
+  "TWILIO_PHONE_NUMBER must be a Twilio Console phone number (Phone Numbers → Manage) owned by this account. Update the env on Render and .env.local, then redeploy.";
 
-export const INDIA_TEMPLATE_DIAGNOSTIC =
-  "This Twilio trial/account requires an approved SMS template for this destination (common for India). Use a Twilio phone number from Console → Phone Numbers, verify the recipient, or upgrade/register SMS templates.";
+export const TRIAL_RESTRICTION_DIAGNOSTIC =
+  "Recipient is not supported by the current Twilio trial configuration. Verify the recipient in Twilio Console → Messaging → Try out SMS and use a destination allowed by this trial.";
+
+export const AUTH_FAILED_DIAGNOSTIC =
+  "TWILIO_AUTH_FAILED: Twilio rejected Account SID / Auth Token (often error 20003). Check server env only — never expose the token.";
+
+export const INVALID_TRIAL_TEMPLATE_DIAGNOSTIC =
+  "INVALID_TRIAL_TEMPLATE: TWILIO_TRIAL_TEMPLATE must be one of Twilio's supported trial template identifiers (default sms_internal_alerts).";
+
+export const INVALID_RECIPIENT_DIAGNOSTIC =
+  "INVALID_RECIPIENT_NUMBER: Recipient phone must be a valid E.164 number (example +14035550100). Ambiguous local numbers are not auto-converted without country context.";
 
 export function parseTwilioSendError(err: unknown): ParsedTwilioSendError {
   const errorCode = readCode(err);
   const sanitized = sanitizeTwilioErrorMessage(readRawMessage(err));
   const unverifiedRecipient = isUnverifiedRecipientError(errorCode, sanitized);
+  const authFailed =
+    (errorCode != null && AUTH_FAILED_CODES.has(errorCode)) ||
+    /authenticate|authentication error/i.test(sanitized);
+  const trialRestriction = isTrialRestrictionError(errorCode, sanitized);
 
   let errorMessage = sanitized || "Twilio could not send this SMS";
-  if (unverifiedRecipient) {
+  if (authFailed) {
+    errorMessage = AUTH_FAILED_DIAGNOSTIC;
+  } else if (unverifiedRecipient) {
     errorMessage = UNVERIFIED_RECIPIENT_DIAGNOSTIC;
+  } else if (trialRestriction) {
+    errorMessage = TRIAL_RESTRICTION_DIAGNOSTIC;
   } else if (
     (errorCode && INVALID_FROM_CODES.has(errorCode)) ||
     /not a valid|not a twilio|from phone number/i.test(sanitized)
@@ -78,13 +118,15 @@ export function parseTwilioSendError(err: unknown): ParsedTwilioSendError {
     (errorCode && INDIA_TEMPLATE_CODES.has(errorCode)) ||
     /template name|predefined sms templates/i.test(sanitized)
   ) {
-    errorMessage = INDIA_TEMPLATE_DIAGNOSTIC;
+    errorMessage = TRIAL_RESTRICTION_DIAGNOSTIC;
   }
 
   return {
     errorCode,
     errorMessage,
     unverifiedRecipient,
+    authFailed,
+    trialRestriction,
   };
 }
 

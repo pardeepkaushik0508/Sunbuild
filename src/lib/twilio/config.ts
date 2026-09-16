@@ -10,13 +10,21 @@ import {
   type TwilioSenderMode,
 } from "@/lib/twilio/sender";
 import { isUnverifiedRecipientRecord } from "@/lib/twilio/errors";
+import {
+  getTwilioMode,
+  maskAccountSid,
+  resolveTwilioTrialTemplate,
+  type TwilioMode,
+} from "@/lib/twilio/mode";
 
 export type TwilioConfig = {
+  mode: TwilioMode;
   accountSid: string;
   authToken: string;
   messagingServiceSid: string | null;
   phoneNumber: string | null;
   senderMode: Exclude<TwilioSenderMode, "not_configured">;
+  trialTemplate: string | null;
 };
 
 export type TwilioFailureSample = {
@@ -30,13 +38,19 @@ export type TwilioFailureSample = {
 export type PublicTwilioSettings = {
   status: "connected" | "setup_required";
   provider: "twilio" | null;
+  mode: TwilioMode;
   senderMode: TwilioSenderMode;
   fromDisplay: string | null;
+  accountSidDisplay: string | null;
+  authTokenConfigured: boolean;
+  trialTemplate: string | null;
   messagingServiceConfigured: boolean;
   /** Live Twilio API auth succeeded with current env. */
   liveAuthOk: boolean | null;
-  /** TWILIO_PHONE_NUMBER exists on this Twilio account (Incoming Numbers). */
+  /** TWILIO_PHONE_NUMBER exists on this Twilio account (Incoming Numbers). Production only. */
   fromNumberOwned: boolean | null;
+  /** Trial readiness: auth OK + valid template (From not required). */
+  trialReady: boolean | null;
   statusCallbackUrl: string;
   inboundWebhookUrl: string;
   recentFailures: TwilioFailureSample[];
@@ -44,6 +58,7 @@ export type PublicTwilioSettings = {
 };
 
 export function getTwilioConfig(): TwilioConfig | null {
+  const mode = getTwilioMode();
   const rawSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const accountSid = rawSid ? normalizeTwilioAccountSid(rawSid) : "";
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
@@ -62,12 +77,20 @@ export function getTwilioConfig(): TwilioConfig | null {
     );
   }
 
+  let trialTemplate: string | null = null;
+  if (mode === "trial") {
+    const resolved = resolveTwilioTrialTemplate();
+    trialTemplate = resolved.ok ? resolved.template : null;
+  }
+
   return {
+    mode,
     accountSid,
     authToken,
     messagingServiceSid,
     phoneNumber,
     senderMode,
+    trialTemplate,
   };
 }
 
@@ -78,8 +101,11 @@ export function isTwilioConfigured(): boolean {
 export function requireTwilioConfig(): TwilioConfig {
   const config = getTwilioConfig();
   if (!config) {
+    const mode = getTwilioMode();
     throw new AppError(
-      "SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER (trial) or TWILIO_MESSAGING_SERVICE_SID (production).",
+      mode === "trial"
+        ? "SMS is not configured. For trial set TWILIO_MODE=trial, TWILIO_ACCOUNT_SID, and TWILIO_AUTH_TOKEN (TWILIO_PHONE_NUMBER is not required)."
+        : "SMS is not configured. For production set TWILIO_MODE=production, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER (or TWILIO_MESSAGING_SERVICE_SID).",
       503,
       "TWILIO_CONFIG"
     );
@@ -88,35 +114,85 @@ export function requireTwilioConfig(): TwilioConfig {
 }
 
 function diagnosticsFor(
+  mode: TwilioMode,
   senderMode: TwilioSenderMode,
   recentFailures: TwilioFailureSample[],
   live?: {
     liveAuthOk: boolean | null;
     fromNumberOwned: boolean | null;
     phoneNumber: string | null;
+    trialTemplate: string | null;
+    accountSidDisplay: string | null;
+    authTokenConfigured: boolean;
+    statusCallbackUrl: string;
   }
 ): string[] {
   const lines: string[] = [];
+
+  lines.push(`Twilio mode: ${mode.toUpperCase()}`);
+
   if (senderMode === "not_configured") {
+    if (mode === "trial") {
+      lines.push(
+        "SMS is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN. TWILIO_PHONE_NUMBER is not required in trial."
+      );
+    } else {
+      lines.push(
+        "SMS is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER (or TWILIO_MESSAGING_SERVICE_SID)."
+      );
+    }
+    return lines;
+  }
+
+  if (live?.accountSidDisplay) {
+    lines.push(`Account SID: ${live.accountSidDisplay}`);
+  }
+  lines.push(
+    `Auth Token: ${live?.authTokenConfigured ? "configured" : "missing"}`
+  );
+
+  if (live?.liveAuthOk === false) {
     lines.push(
-      "SMS is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER for trial, or TWILIO_MESSAGING_SERVICE_SID for production."
+      "Authentication: FAILED (TWILIO_AUTH_FAILED / 20003). On Render, set TWILIO_ACCOUNT_SID to a single AC… value and the matching TWILIO_AUTH_TOKEN, then redeploy. Never paste the token into the UI."
+    );
+  } else if (live?.liveAuthOk === true) {
+    lines.push("Authentication: OK");
+  } else {
+    lines.push("Authentication: Not checked");
+  }
+
+  if (mode === "trial") {
+    const resolved = resolveTwilioTrialTemplate();
+    if (!resolved.ok) {
+      lines.push(
+        `Trial template: INVALID (${resolved.raw}) — fix TWILIO_TRIAL_TEMPLATE`
+      );
+    } else {
+      lines.push(
+        `Trial template: ${live?.trialTemplate || resolved.template}`
+      );
+    }
+    lines.push("Purchased From number: Not required in trial");
+    lines.push(
+      "Recipient verification: Cannot reliably confirm locally; verify recipient in Twilio Console → Messaging → Try out SMS"
+    );
+    if (live?.statusCallbackUrl) {
+      lines.push(`Status callback: ${live.statusCallbackUrl}`);
+    }
+    const trialReady = live?.liveAuthOk === true && resolved.ok;
+    lines.push(`Ready for trial API test: ${trialReady ? "YES" : "NO"}`);
+    lines.push(
+      "Trial SMS body is a Twilio template id (not custom CRM text). Intended notification text is still stored in SMS history."
     );
     return lines;
   }
 
-  if (live?.liveAuthOk === false) {
-    lines.push(
-      "Live Twilio login failed (20003). On Render, set TWILIO_ACCOUNT_SID to a single AC… value (34 characters, not pasted twice) and the matching TWILIO_AUTH_TOKEN, then redeploy."
-    );
-  } else if (live?.liveAuthOk === true) {
-    lines.push("Live Twilio authentication is OK with the current Account SID + Auth Token.");
-  }
-
+  // Production diagnostics
   if (senderMode === "phone_number") {
     lines.push(
-      "Sending with TWILIO_PHONE_NUMBER (direct From). This must be a number from Twilio Console → Phone Numbers → Manage, not the subcontractor’s personal mobile."
+      "Sending with TWILIO_PHONE_NUMBER (direct From). This must be a number from Twilio Console → Phone Numbers → Manage."
     );
-  } else {
+  } else if (senderMode === "messaging_service") {
     lines.push(
       "Sending with TWILIO_MESSAGING_SERVICE_SID. Direct TWILIO_PHONE_NUMBER is unused while the Messaging Service is set."
     );
@@ -124,23 +200,16 @@ function diagnosticsFor(
 
   if (live?.fromNumberOwned === false && senderMode === "phone_number") {
     lines.push(
-      "BLOCKER: TWILIO_PHONE_NUMBER is not on this Twilio account (no Incoming Phone Numbers match). Open Twilio Console → Phone Numbers → Buy a number, then set that exact number as TWILIO_PHONE_NUMBER on Render and .env.local, then redeploy."
+      "BLOCKER: TWILIO_PHONE_NUMBER is not on this Twilio account (no Incoming Phone Numbers match). Open Twilio Console → Phone Numbers, then set that exact number as TWILIO_PHONE_NUMBER on Render and .env.local, then redeploy."
     );
   } else if (live?.fromNumberOwned === true) {
-    lines.push("TWILIO_PHONE_NUMBER is present on this Twilio account.");
+    lines.push("From number on Twilio account: YES");
   }
 
-  if (live?.phoneNumber?.startsWith("+91")) {
-    lines.push(
-      "India (+91) destinations on trial often require approved SMS templates (error 572006). Prefer a Twilio US/CA number as From, verify the recipient under Verified Caller IDs, or upgrade/register templates."
-    );
-  }
-
-  lines.push(
-    "Twilio trial accounts can only SMS verified numbers. Unverified recipients are stored as FAILED; project/task actions still succeed."
-  );
-
-  if (recentFailures.some((f) => f.errorCode === "20003") && live?.liveAuthOk !== true) {
+  if (
+    recentFailures.some((f) => f.errorCode === "20003") &&
+    live?.liveAuthOk !== true
+  ) {
     lines.push(
       "A stored SMS failed with Authentication Error 20003. Fix TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN on Render and redeploy."
     );
@@ -153,29 +222,32 @@ function diagnosticsFor(
         /TWILIO_PHONE_NUMBER must be a Twilio Console phone number/i.test(
           f.errorMessage || ""
         ) ||
-        /not a valid|not a twilio|from phone number/i.test(f.errorMessage || "")
-    )
-  ) {
-    lines.push(
-      "A stored SMS failed because the From number is invalid. Buy a Twilio number and update TWILIO_PHONE_NUMBER."
-    );
-  }
-  if (
-    recentFailures.some(
-      (f) =>
-        f.errorCode === "572006" ||
-        /approved SMS template|predefined SMS templates/i.test(
+        /not a valid|not a twilio|from phone number/i.test(
           f.errorMessage || ""
         )
     )
   ) {
     lines.push(
-      "A stored SMS failed with India/template trial rules (572006). Get a Twilio From number, verify the recipient, or use approved templates."
+      "A stored SMS failed because the From number is invalid. Update TWILIO_PHONE_NUMBER to a number owned by this Twilio account."
+    );
+  }
+  if (
+    recentFailures.some(
+      (f) =>
+        /not supported by the current Twilio trial|Try out SMS/i.test(
+          f.errorMessage || ""
+        ) ||
+        f.errorCode === "21408" ||
+        f.errorCode === "21612"
+    )
+  ) {
+    lines.push(
+      "A stored SMS failed due to trial recipient/geographic restrictions. Verify an allowed destination in Twilio Console → Messaging → Try out SMS (do not buy a number solely for this)."
     );
   }
   if (recentFailures.some((f) => f.unverifiedRecipient)) {
     lines.push(
-      "A stored SMS was rejected because the recipient is not verified. Verify the number in Twilio Console → Verified Caller IDs, or upgrade the account."
+      "A stored SMS was rejected because the recipient is not verified. Verify the number in Twilio Console, or upgrade the account."
     );
   }
   return lines;
@@ -189,6 +261,11 @@ async function probeTwilioAccount(config: TwilioConfig): Promise<{
     const twilio = (await import("twilio")).default;
     const client = twilio(config.accountSid, config.authToken);
     await client.api.accounts(config.accountSid).fetch();
+
+    // Trial: never require IncomingPhoneNumbers ownership.
+    if (config.mode === "trial") {
+      return { liveAuthOk: true, fromNumberOwned: null };
+    }
 
     if (config.senderMode === "messaging_service") {
       return { liveAuthOk: true, fromNumberOwned: null };
@@ -205,7 +282,6 @@ async function probeTwilioAccount(config: TwilioConfig): Promise<{
       return { liveAuthOk: true, fromNumberOwned: true };
     }
 
-    // Some accounts store formatting differently — fall back to a short list compare.
     const all = await client.incomingPhoneNumbers.list({ limit: 50 });
     const digits = phone.replace(/\D/g, "");
     const match = all.some(
@@ -231,6 +307,9 @@ export async function getPublicTwilioSettings(
   const config = getTwilioConfig();
   const webhooks = getTwilioWebhookUrls(request);
   const senderMode = getTwilioSenderMode();
+  const mode = getTwilioMode();
+  const trialResolved = resolveTwilioTrialTemplate();
+  const trialTemplate = trialResolved.ok ? trialResolved.template : null;
 
   const failedRows = await prisma.smsMessage
     .findMany({
@@ -260,45 +339,77 @@ export async function getPublicTwilioSettings(
     ),
   }));
 
+  const baseDiagLive = {
+    liveAuthOk: null as boolean | null,
+    fromNumberOwned: null as boolean | null,
+    phoneNumber: config?.phoneNumber ?? null,
+    trialTemplate,
+    accountSidDisplay: config ? maskAccountSid(config.accountSid) : null,
+    authTokenConfigured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim()),
+    statusCallbackUrl: webhooks.status,
+  };
+
   if (!config) {
     return {
       status: "setup_required",
       provider: null,
+      mode,
       senderMode,
       fromDisplay: null,
+      accountSidDisplay: null,
+      authTokenConfigured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim()),
+      trialTemplate: mode === "trial" ? trialTemplate : null,
       messagingServiceConfigured: false,
       liveAuthOk: null,
       fromNumberOwned: null,
+      trialReady: null,
       statusCallbackUrl: webhooks.status,
       inboundWebhookUrl: webhooks.inbound,
       recentFailures,
-      diagnostics: diagnosticsFor(senderMode, recentFailures),
+      diagnostics: diagnosticsFor(mode, senderMode, recentFailures, baseDiagLive),
     };
   }
 
   const live = await probeTwilioAccount(config);
+  const templateOk = mode !== "trial" || trialResolved.ok;
+  const trialReady =
+    mode === "trial" ? live.liveAuthOk && templateOk : null;
   const sendReady =
-    live.liveAuthOk &&
-    (config.senderMode === "messaging_service" || live.fromNumberOwned === true);
+    mode === "trial"
+      ? Boolean(trialReady)
+      : live.liveAuthOk &&
+        (config.senderMode === "messaging_service" ||
+          live.fromNumberOwned === true);
 
   return {
     status: sendReady ? "connected" : "setup_required",
     provider: "twilio",
+    mode,
     senderMode,
     fromDisplay:
-      senderMode === "messaging_service"
-        ? maskSid(config.messagingServiceSid)
-        : maskPhone(config.phoneNumber),
+      mode === "trial"
+        ? "Not required in trial"
+        : senderMode === "messaging_service"
+          ? maskSid(config.messagingServiceSid)
+          : maskPhone(config.phoneNumber),
+    accountSidDisplay: maskAccountSid(config.accountSid),
+    authTokenConfigured: true,
+    trialTemplate: mode === "trial" ? trialTemplate : null,
     messagingServiceConfigured: senderMode === "messaging_service",
     liveAuthOk: live.liveAuthOk,
     fromNumberOwned: live.fromNumberOwned,
+    trialReady,
     statusCallbackUrl: webhooks.status,
     inboundWebhookUrl: webhooks.inbound,
     recentFailures,
-    diagnostics: diagnosticsFor(senderMode, recentFailures, {
+    diagnostics: diagnosticsFor(mode, senderMode, recentFailures, {
       liveAuthOk: live.liveAuthOk,
       fromNumberOwned: live.fromNumberOwned,
       phoneNumber: config.phoneNumber,
+      trialTemplate,
+      accountSidDisplay: maskAccountSid(config.accountSid),
+      authTokenConfigured: true,
+      statusCallbackUrl: webhooks.status,
     }),
   };
 }

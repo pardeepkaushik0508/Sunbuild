@@ -62,7 +62,10 @@ export type TwilioFailureSample = {
   unverifiedRecipient: boolean;
 };
 
+export type TwilioMode = "trial" | "production";
+
 export type TwilioSenderMode =
+  | "trial"
   | "messaging_service"
   | "phone_number"
   | "not_configured";
@@ -70,11 +73,16 @@ export type TwilioSenderMode =
 export type TwilioIntegrationSettings = {
   status: IntegrationStatus;
   provider: "twilio" | null;
+  mode?: TwilioMode;
   senderMode: TwilioSenderMode;
   fromDisplay: string | null;
+  accountSidDisplay?: string | null;
+  authTokenConfigured?: boolean;
+  trialTemplate?: string | null;
   messagingServiceConfigured: boolean;
   liveAuthOk?: boolean | null;
   fromNumberOwned?: boolean | null;
+  trialReady?: boolean | null;
   statusCallbackUrl: string;
   inboundWebhookUrl: string;
   recentFailures: TwilioFailureSample[];

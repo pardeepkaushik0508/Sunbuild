@@ -10,6 +10,7 @@ import { getCompanySettings } from "@/lib/settings/store";
 import { canEditSettings } from "@/lib/permissions";
 import { getPublicConnection } from "@/lib/google/auth-client";
 import { getPublicMicrosoftConnection } from "@/lib/microsoft/todo";
+import { maskPhone } from "@/lib/twilio/phone";
 
 export default async function OwnerSettingsPage({
   searchParams,
@@ -66,7 +67,7 @@ export default async function OwnerSettingsPage({
             } as const)
           : null;
 
-  const [delayed, depositSum, docs] = await Promise.all([
+  const [delayed, depositSum, docs, smsMembers] = await Promise.all([
     prisma.scheduleItem.count({
       where: {
         status: "DELAYED",
@@ -81,7 +82,29 @@ export default async function OwnerSettingsPage({
       _sum: { amount: true },
     }),
     prisma.document.count({ where: { project: { companyId } } }),
+    prisma.membership.findMany({
+      where: {
+        companyId,
+        user: { phone: { not: null } },
+      },
+      take: 40,
+      orderBy: { user: { name: "asc" } },
+      select: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true },
+        },
+      },
+    }),
   ]);
+
+  const smsTestRecipients = smsMembers
+    .filter((m) => m.user.phone?.trim())
+    .map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      email: m.user.email,
+      phoneDisplay: maskPhone(m.user.phone) || "••••",
+    }));
 
   const insights = buildProjectInsights({
     delayedScheduleCount: delayed,
@@ -127,6 +150,7 @@ export default async function OwnerSettingsPage({
           googleFlash={googleFlash}
           microsoftTodo={microsoftTodo}
           microsoftFlash={microsoftFlash}
+          smsTestRecipients={smsTestRecipients}
         />
       )}
     </div>

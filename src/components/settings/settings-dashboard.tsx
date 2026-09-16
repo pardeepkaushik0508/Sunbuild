@@ -150,6 +150,94 @@ function WebhookUrlRow({ label, url }: { label: string; url: string }) {
   );
 }
 
+function TrialSmsTestPanel({
+  recipients,
+}: {
+  recipients: Array<{
+    id: string;
+    name: string | null;
+    email: string;
+    phoneDisplay: string;
+  }>;
+}) {
+  const toast = useOptionalToast();
+  const [userId, setUserId] = useState(recipients[0]?.id ?? "");
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function sendTrial() {
+    if (!userId || pending) return;
+    setPending(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/twilio/trial-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        twilioSid?: string | null;
+        status?: string;
+        toDisplay?: string;
+        trialTemplate?: string;
+        errorCode?: string | null;
+        errorMessage?: string | null;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        const msg = data?.error || "Trial SMS test failed";
+        setResult(msg);
+        toast?.error(msg);
+        return;
+      }
+      const summary = data?.success
+        ? `Sent · ${data.twilioSid ?? "no sid"} · ${data.status ?? ""} · ${data.toDisplay ?? ""} · template ${data.trialTemplate ?? "sms_internal_alerts"}`
+        : `Failed · ${data?.errorCode ?? ""} · ${data?.errorMessage ?? "unknown"} · ${data?.toDisplay ?? ""}`;
+      setResult(summary);
+      if (data?.success) toast?.success("Trial SMS accepted by Twilio");
+      else toast?.error(data?.errorMessage || "Trial SMS failed");
+    } catch {
+      setResult("Trial SMS request failed");
+      toast?.error("Trial SMS request failed");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-[10px] border border-sb-border bg-sb-canvas px-3 py-3">
+      <p className="font-medium text-sb-ink">Send Trial SMS</p>
+      <p className="text-[12px] text-sb-muted">
+        Uses <code className="text-sb-ink">sms_internal_alerts</code> via the
+        server. Destination must be an existing company user (verified in Twilio).
+      </p>
+      <Select
+        value={userId}
+        onChange={(e) => setUserId(e.target.value)}
+        disabled={pending}
+      >
+        {recipients.map((r) => (
+          <option key={r.id} value={r.id}>
+            {(r.name || r.email) + " · " + r.phoneDisplay}
+          </option>
+        ))}
+      </Select>
+      <Button
+        variant="yellow"
+        size="sm"
+        disabled={!userId || pending}
+        onClick={() => void sendTrial()}
+      >
+        {pending ? "Sending…" : "Send Trial SMS"}
+      </Button>
+      {result ? (
+        <p className="break-all text-[12px] text-sb-muted">{result}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function Phase2Notice({
   title,
   body,
@@ -186,6 +274,7 @@ export function SettingsDashboard({
   googleFlash,
   microsoftTodo,
   microsoftFlash,
+  smsTestRecipients = [],
 }: {
   initialSettings: CompanySettingsSnapshot;
   insights: InsightCard[];
@@ -195,6 +284,12 @@ export function SettingsDashboard({
   googleFlash?: { kind: "connected" | "disconnected" | "error"; message?: string } | null;
   microsoftTodo: PublicMicrosoftTodoConnection;
   microsoftFlash?: { kind: "connected" | "disconnected" | "error"; message?: string } | null;
+  smsTestRecipients?: Array<{
+    id: string;
+    name: string | null;
+    email: string;
+    phoneDisplay: string;
+  }>;
 }) {
   const router = useRouter();
   const toast = useOptionalToast();
@@ -306,9 +401,13 @@ export function SettingsDashboard({
             <SettingCard
               title="Twilio SMS"
               description={
-                settings.twilio.status === "connected"
-                  ? "Same-origin SMS via this Next.js app"
-                  : "Server env setup required"
+                settings.twilio.mode === "trial"
+                  ? settings.twilio.status === "connected"
+                    ? "Trial mode — Twilio template SMS via this Next.js app"
+                    : "Trial mode setup required (no purchased From number needed)"
+                  : settings.twilio.status === "connected"
+                    ? "Same-origin SMS via this Next.js app"
+                    : "Server env setup required"
               }
               action={
                 <Button variant="yellow" size="sm" onClick={() => open("twilio")}>
@@ -454,14 +553,113 @@ export function SettingsDashboard({
       ) : null}
 
       {modal === "twilio" ? (
-        <DialogShell title="Twilio SMS" onClose={close}>
-          {settings.twilio.status === "connected" ? (
+        <DialogShell title="Twilio SMS" onClose={close} wide>
+          {settings.twilio.mode === "trial" ? (
+            <div className="space-y-3 text-sm text-sb-body">
+              <p
+                className={
+                  settings.twilio.status === "connected"
+                    ? "rounded-[10px] border border-sb-green-border bg-sb-green-soft px-3 py-2 text-sb-ink"
+                    : "rounded-[10px] border border-sb-yellow/50 bg-sb-yellow-soft px-3 py-2 text-sb-ink"
+                }
+              >
+                <span className="font-semibold">SMS Trial Mode</span>
+                <span className="mt-1 block text-sb-muted">
+                  Twilio supplies the trial sender. Custom CRM text is stored in
+                  history but the API body is a trial template. Secrets stay
+                  server-only — never NEXT_PUBLIC_.
+                </span>
+              </p>
+              <ul className="list-disc space-y-1 pl-5 text-sb-muted">
+                <li>Twilio mode: TRIAL</li>
+                <li>
+                  Authentication:{" "}
+                  {settings.twilio.liveAuthOk === true
+                    ? "OK"
+                    : settings.twilio.liveAuthOk === false
+                      ? "FAILED"
+                      : "Not checked"}
+                </li>
+                <li>
+                  Account SID:{" "}
+                  {settings.twilio.accountSidDisplay ?? "Not set"}
+                </li>
+                <li>
+                  Auth Token:{" "}
+                  {settings.twilio.authTokenConfigured
+                    ? "configured"
+                    : "missing"}
+                </li>
+                <li>
+                  Trial template:{" "}
+                  {settings.twilio.trialTemplate ?? "sms_internal_alerts"}
+                </li>
+                <li>Purchased Twilio From number: Not required</li>
+                <li>
+                  Recipient trial verification: Verify in Twilio Console
+                </li>
+                <li>
+                  Ready for trial API test:{" "}
+                  {settings.twilio.trialReady === true
+                    ? "YES"
+                    : settings.twilio.trialReady === false
+                      ? "NO"
+                      : "Not checked"}
+                </li>
+              </ul>
+              {settings.twilio.diagnostics.length ? (
+                <div className="rounded-[10px] border border-sb-yellow/50 bg-sb-yellow-soft px-3 py-2 text-sb-ink">
+                  <p className="font-semibold">Admin diagnostics</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sb-muted">
+                    {settings.twilio.diagnostics.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {settings.twilio.recentFailures.length ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-sb-ink">Recent failed SMS</p>
+                  <ul className="space-y-1 text-[12px] text-sb-muted">
+                    {settings.twilio.recentFailures.map((fail) => (
+                      <li
+                        key={`${fail.sentAt}-${fail.toDisplay}-${fail.errorCode ?? "x"}`}
+                      >
+                        {fail.toDisplay}
+                        {fail.errorCode ? ` · ${fail.errorCode}` : ""}
+                        {fail.unverifiedRecipient
+                          ? " · unverified trial recipient"
+                          : ""}
+                        {fail.errorMessage ? ` — ${fail.errorMessage}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <WebhookUrlRow
+                label="Status callback"
+                url={settings.twilio.statusCallbackUrl}
+              />
+              <WebhookUrlRow
+                label="Inbound SMS"
+                url={settings.twilio.inboundWebhookUrl}
+              />
+              {canEditSecurity && smsTestRecipients.length > 0 ? (
+                <TrialSmsTestPanel recipients={smsTestRecipients} />
+              ) : canEditSecurity ? (
+                <p className="text-[12px] text-sb-muted">
+                  Add a phone number to a company user to enable Send Trial SMS.
+                </p>
+              ) : null}
+            </div>
+          ) : settings.twilio.status === "connected" ? (
             <div className="space-y-3 text-sm text-sb-body">
               <p className="rounded-[10px] border border-sb-green-border bg-sb-green-soft px-3 py-2 text-sb-ink">
                 Twilio is configured on this application. SMS is sent from
                 the same Next.js server — there is no separate API domain.
               </p>
               <ul className="list-disc space-y-1 pl-5 text-sb-muted">
+                <li>Twilio mode: PRODUCTION</li>
                 <li>
                   Status: Connected (
                   {settings.twilio.senderMode === "messaging_service"
@@ -470,6 +668,10 @@ export function SettingsDashboard({
                   )
                 </li>
                 <li>Provider: Twilio</li>
+                <li>
+                  Account SID:{" "}
+                  {settings.twilio.accountSidDisplay ?? "Not shown"}
+                </li>
                 <li>
                   From: {settings.twilio.fromDisplay ?? "Not shown"}
                 </li>
@@ -535,6 +737,10 @@ export function SettingsDashboard({
               </p>
               <ul className="list-disc space-y-1 pl-5 text-sb-muted">
                 <li>
+                  Twilio mode:{" "}
+                  {(settings.twilio.mode || "trial").toUpperCase()}
+                </li>
+                <li>
                   Live auth:{" "}
                   {settings.twilio.liveAuthOk === true
                     ? "OK"
@@ -547,8 +753,8 @@ export function SettingsDashboard({
                   {settings.twilio.fromNumberOwned === true
                     ? "Yes"
                     : settings.twilio.fromNumberOwned === false
-                      ? "NO — buy a Twilio number and set TWILIO_PHONE_NUMBER"
-                      : "Not checked"}
+                      ? "NO — set TWILIO_PHONE_NUMBER to a number owned by this account"
+                      : "Not checked (not required in trial)"}
                 </li>
                 <li>
                   From display: {settings.twilio.fromDisplay ?? "Not set"}

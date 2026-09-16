@@ -14,8 +14,12 @@ import { requireTwilioConfig, getTwilioConfig } from "@/lib/twilio/config";
 import { sendTwilioSms } from "@/lib/twilio/client";
 import { getTwilioWebhookUrls } from "@/lib/twilio/webhooks";
 import { mapTwilioMessageStatus } from "@/lib/twilio/status";
-import { phoneMatchTail, toE164 } from "@/lib/twilio/phone";
-import { parseTwilioSendError } from "@/lib/twilio/errors";
+import { maskPhone, phoneMatchTail, toE164 } from "@/lib/twilio/phone";
+import {
+  INVALID_RECIPIENT_DIAGNOSTIC,
+  parseTwilioSendError,
+} from "@/lib/twilio/errors";
+import { resolveOutboundTwilioBody } from "@/lib/twilio/payload";
 import type { TwilioFormParams } from "@/lib/twilio/webhook";
 
 export type PublicSmsMessage = {
@@ -72,6 +76,12 @@ function toPublic(row: {
   };
 }
 
+/**
+ * Resolve the body Twilio receives vs the intended CRM text we store.
+ * Trial always sends a whitelist template id; production sends the real text.
+ */
+export { resolveOutboundTwilioBody };
+
 export async function sendSmsMessage(input: {
   session: AppSession;
   to?: string;
@@ -124,10 +134,15 @@ export async function sendSmsMessage(input: {
 
   const toNumber = toE164(toRaw);
   if (!toNumber) {
-    throw new AppError("A valid recipient phone number is required", 400);
+    throw new AppError(INVALID_RECIPIENT_DIAGNOSTIC, 400, "INVALID_RECIPIENT_NUMBER");
   }
 
   const config = requireTwilioConfig();
+  const outbound = resolveOutboundTwilioBody(config, body);
+  if (!outbound.ok) {
+    throw new AppError(outbound.message, 400, outbound.code);
+  }
+
   const { status: statusCallback } = getTwilioWebhookUrls(input.request);
 
   const queued = await prisma.smsMessage.create({
@@ -138,16 +153,17 @@ export async function sendSmsMessage(input: {
       buyerId,
       senderUserId: input.session.user.id,
       direction: "OUTBOUND",
-      fromNumber: config.phoneNumber,
+      fromNumber: config.mode === "production" ? config.phoneNumber : null,
       toNumber,
-      body,
+      // Persist intended CRM text even when trial sends a template id to Twilio.
+      body: outbound.intendedBody.slice(0, 1600),
       status: "QUEUED",
     },
   });
 
   const sent = await sendTwilioSms(config, {
     to: toNumber,
-    body,
+    body: outbound.twilioBody,
     statusCallback,
   });
   const twilioFailed = !sent.sid || sent.status === "failed";
@@ -161,7 +177,7 @@ export async function sendSmsMessage(input: {
     data: {
       twilioSid: sent.sid,
       status,
-      fromNumber: sent.from || config.phoneNumber,
+      fromNumber: sent.from || (config.mode === "production" ? config.phoneNumber : null),
       errorCode: sent.errorCode,
       errorMessage: sent.errorMessage,
     },
@@ -175,11 +191,13 @@ export async function sendSmsMessage(input: {
     entityType: "SmsMessage",
     entityId: updated.id,
     metadata: {
-      to: toNumber,
+      to: maskPhone(toNumber),
       leadId,
       projectId,
       twilioSid: sent.sid,
       errorCode: sent.errorCode,
+      mode: config.mode,
+      trialTemplate: outbound.trialTemplate,
     },
   });
 
@@ -192,7 +210,7 @@ export async function sendSmsMessage(input: {
         title: twilioFailed ? "SMS failed" : "SMS sent",
         content: twilioFailed
           ? sent.errorMessage || "Twilio could not send this SMS"
-          : body,
+          : outbound.intendedBody,
       },
     });
     if (!twilioFailed) {
@@ -204,6 +222,127 @@ export async function sendSmsMessage(input: {
   }
 
   return toPublic(updated);
+}
+
+/**
+ * Owner-only trial SMS against an existing company user's phone.
+ * Never accepts arbitrary destinations that are not in the directory.
+ */
+export async function sendTrialSmsToCompanyUser(input: {
+  session: AppSession;
+  userId: string;
+  request?: Request;
+}): Promise<{
+  success: boolean;
+  twilioSid: string | null;
+  status: string;
+  toDisplay: string;
+  trialTemplate: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+}> {
+  if (input.session.membership.role !== Role.OWNER) {
+    throw new ForbiddenError("Only owners can send trial SMS tests.");
+  }
+
+  const config = requireTwilioConfig();
+  if (config.mode !== "trial") {
+    throw new AppError(
+      "Trial SMS test is only available when TWILIO_MODE=trial.",
+      400,
+      "TWILIO_NOT_TRIAL"
+    );
+  }
+
+  const outbound = resolveOutboundTwilioBody(
+    config,
+    "Sunbuild trial SMS diagnostic (intended body retained in history)"
+  );
+  if (!outbound.ok) {
+    throw new AppError(outbound.message, 400, outbound.code);
+  }
+
+  const companyId = input.session.membership.companyId;
+  const membership = await prisma.membership.findFirst({
+    where: {
+      companyId,
+      userId: input.userId,
+    },
+    select: {
+      user: { select: { id: true, phone: true, name: true } },
+    },
+  });
+  if (!membership?.user) {
+    throw new AppError(
+      "User not found in this company. Trial test is limited to existing users.",
+      404,
+      "USER_NOT_FOUND"
+    );
+  }
+
+  const toNumber = toE164(membership.user.phone || "");
+  if (!toNumber) {
+    throw new AppError(INVALID_RECIPIENT_DIAGNOSTIC, 400, "INVALID_RECIPIENT_NUMBER");
+  }
+
+  const { status: statusCallback } = getTwilioWebhookUrls(input.request);
+  const queued = await prisma.smsMessage.create({
+    data: {
+      companyId,
+      senderUserId: input.session.user.id,
+      direction: "OUTBOUND",
+      fromNumber: null,
+      toNumber,
+      body: outbound.intendedBody,
+      status: "QUEUED",
+    },
+  });
+
+  const sent = await sendTwilioSms(config, {
+    to: toNumber,
+    body: outbound.twilioBody,
+    statusCallback,
+  });
+  const twilioFailed = !sent.sid || sent.status === "failed";
+  const mapped = twilioFailed
+    ? "FAILED"
+    : mapTwilioMessageStatus(sent.status) || "SENT";
+
+  await prisma.smsMessage.update({
+    where: { id: queued.id },
+    data: {
+      twilioSid: sent.sid,
+      status: mapped === "RECEIVED" ? "SENT" : mapped,
+      fromNumber: sent.from,
+      errorCode: sent.errorCode,
+      errorMessage: sent.errorMessage,
+    },
+  });
+
+  await writeAudit({
+    userId: input.session.user.id,
+    companyId,
+    action: twilioFailed ? "sms.trial_test_failed" : "sms.trial_test",
+    entityType: "SmsMessage",
+    entityId: queued.id,
+    metadata: {
+      to: maskPhone(toNumber),
+      targetUserId: membership.user.id,
+      twilioSid: sent.sid,
+      errorCode: sent.errorCode,
+      trialTemplate: outbound.trialTemplate,
+    },
+  });
+
+  return {
+    success: !twilioFailed,
+    twilioSid: sent.sid,
+    status: mapped === "RECEIVED" ? "SENT" : mapped,
+    toDisplay: maskPhone(toNumber) || "••••",
+    trialTemplate: outbound.trialTemplate || outbound.twilioBody,
+    errorCode: sent.errorCode,
+    errorMessage: sent.errorMessage,
+  };
 }
 
 /**
@@ -237,11 +376,54 @@ export async function notifyUserBySmsBestEffort(input: {
       });
       return;
     }
+
     const toNumber = toE164(user.phone);
     if (!toNumber) {
-      console.warn("[twilio] best-effort SMS skipped: invalid phone format", {
+      console.warn("[twilio] best-effort SMS failed: invalid recipient", {
         userId: input.userId,
+        toDisplay: maskPhone(user.phone),
       });
+      await prisma.smsMessage
+        .create({
+          data: {
+            companyId: input.companyId,
+            projectId: input.projectId || null,
+            senderUserId: null,
+            direction: "OUTBOUND",
+            fromNumber: null,
+            toNumber: user.phone.trim().slice(0, 32),
+            body: text.slice(0, 1600),
+            status: "FAILED",
+            errorCode: "INVALID_RECIPIENT_NUMBER",
+            errorMessage: INVALID_RECIPIENT_DIAGNOSTIC,
+          },
+        })
+        .catch((err) => {
+          console.warn("[twilio] could not persist invalid-recipient SMS row", err);
+        });
+      return;
+    }
+
+    const outbound = resolveOutboundTwilioBody(config, text.slice(0, 1600));
+    if (!outbound.ok) {
+      await prisma.smsMessage
+        .create({
+          data: {
+            companyId: input.companyId,
+            projectId: input.projectId || null,
+            senderUserId: null,
+            direction: "OUTBOUND",
+            fromNumber: null,
+            toNumber,
+            body: text.slice(0, 1600),
+            status: "FAILED",
+            errorCode: "INVALID_TRIAL_TEMPLATE",
+            errorMessage: outbound.message,
+          },
+        })
+        .catch((err) => {
+          console.warn("[twilio] could not persist invalid-template SMS row", err);
+        });
       return;
     }
 
@@ -252,16 +434,16 @@ export async function notifyUserBySmsBestEffort(input: {
         projectId: input.projectId || null,
         senderUserId: null,
         direction: "OUTBOUND",
-        fromNumber: config.phoneNumber,
+        fromNumber: config.mode === "production" ? config.phoneNumber : null,
         toNumber,
-        body: text.slice(0, 1600),
+        body: outbound.intendedBody.slice(0, 1600),
         status: "QUEUED",
       },
     });
 
     const sent = await sendTwilioSms(config, {
       to: toNumber,
-      body: text.slice(0, 1600),
+      body: outbound.twilioBody,
       statusCallback,
     });
     const twilioFailed = !sent.sid || sent.status === "failed";
@@ -274,7 +456,8 @@ export async function notifyUserBySmsBestEffort(input: {
       data: {
         twilioSid: sent.sid,
         status: mapped === "RECEIVED" ? "SENT" : mapped,
-        fromNumber: sent.from || config.phoneNumber,
+        fromNumber:
+          sent.from || (config.mode === "production" ? config.phoneNumber : null),
         errorCode: sent.errorCode,
         errorMessage: sent.errorMessage,
       },
@@ -283,9 +466,12 @@ export async function notifyUserBySmsBestEffort(input: {
     if (twilioFailed) {
       console.error("[twilio] best-effort SMS failed", {
         userId: input.userId,
+        toDisplay: maskPhone(toNumber),
         errorCode: sent.errorCode,
         errorMessage: sent.errorMessage,
         unverifiedRecipient: sent.unverifiedRecipient,
+        trialRestriction: sent.trialRestriction,
+        mode: config.mode,
       });
     }
   } catch (err) {
