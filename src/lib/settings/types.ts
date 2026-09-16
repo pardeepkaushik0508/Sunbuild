@@ -73,6 +73,8 @@ export type TwilioIntegrationSettings = {
   senderMode: TwilioSenderMode;
   fromDisplay: string | null;
   messagingServiceConfigured: boolean;
+  liveAuthOk?: boolean | null;
+  fromNumberOwned?: boolean | null;
   statusCallbackUrl: string;
   inboundWebhookUrl: string;
   recentFailures: TwilioFailureSample[];

@@ -74,6 +74,8 @@ export const DEFAULT_TWILIO: TwilioIntegrationSettings = {
   senderMode: "not_configured",
   fromDisplay: null,
   messagingServiceConfigured: false,
+  liveAuthOk: null,
+  fromNumberOwned: null,
   statusCallbackUrl: "/api/twilio/status",
   inboundWebhookUrl: "/api/twilio/inbound",
   recentFailures: [],

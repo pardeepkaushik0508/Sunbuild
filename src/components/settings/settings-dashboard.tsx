@@ -526,25 +526,59 @@ export function SettingsDashboard({
           ) : (
             <div className="space-y-3 text-sm text-sb-body">
               <p className="rounded-[10px] border border-sb-yellow/50 bg-sb-yellow-soft px-3 py-2 text-sb-ink">
-                <span className="font-semibold">Setup required</span>
+                <span className="font-semibold">SMS not ready</span>
                 <span className="mt-1 block text-sb-muted">
-                  Twilio credentials are server-only environment variables on
-                  this Next.js app. Never use NEXT_PUBLIC_ for Twilio secrets.
+                  Env vars may be present, but Twilio cannot send until the
+                  blockers below are fixed. Secrets stay server-only — never
+                  NEXT_PUBLIC_.
                 </span>
               </p>
-              <p>
-                Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and
-                TWILIO_PHONE_NUMBER for trial sending. TWILIO_MESSAGING_SERVICE_SID
-                is optional and preferred later in production. Point Twilio
-                webhooks at this same application origin — do not create a
-                second Render service or api subdomain.
-              </p>
+              <ul className="list-disc space-y-1 pl-5 text-sb-muted">
+                <li>
+                  Live auth:{" "}
+                  {settings.twilio.liveAuthOk === true
+                    ? "OK"
+                    : settings.twilio.liveAuthOk === false
+                      ? "FAILED — fix Account SID / Auth Token on Render"
+                      : "Not checked"}
+                </li>
+                <li>
+                  From number on Twilio account:{" "}
+                  {settings.twilio.fromNumberOwned === true
+                    ? "Yes"
+                    : settings.twilio.fromNumberOwned === false
+                      ? "NO — buy a Twilio number and set TWILIO_PHONE_NUMBER"
+                      : "Not checked"}
+                </li>
+                <li>
+                  From display: {settings.twilio.fromDisplay ?? "Not set"}
+                </li>
+              </ul>
               {settings.twilio.diagnostics.length ? (
-                <ul className="list-disc space-y-1 pl-5 text-sb-muted">
-                  {settings.twilio.diagnostics.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
+                <div className="rounded-[10px] border border-sb-yellow/50 bg-sb-yellow-soft px-3 py-2 text-sb-ink">
+                  <p className="font-semibold">Admin diagnostics</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sb-muted">
+                    {settings.twilio.diagnostics.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {settings.twilio.recentFailures.length ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-sb-ink">Recent failed SMS</p>
+                  <ul className="space-y-1 text-[12px] text-sb-muted">
+                    {settings.twilio.recentFailures.map((fail) => (
+                      <li
+                        key={`${fail.sentAt}-${fail.toDisplay}-${fail.errorCode ?? "x"}`}
+                      >
+                        {fail.toDisplay}
+                        {fail.errorCode ? ` · ${fail.errorCode}` : ""}
+                        {fail.errorMessage ? ` — ${fail.errorMessage}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
               <WebhookUrlRow
                 label="Status callback"

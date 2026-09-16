@@ -3216,37 +3216,42 @@ export async function inviteUserAction(form: FormData): Promise<
       }
     }
 
-    const { after } = await import("next/server");
-    after(async () => {
+    // Send invite email in-request (not after()). Dev/hot-reload often aborts
+    // after() callbacks ("destination stream closed early"), which silently
+    // drops invites while the UI still claimed emailSent: true.
+    let emailSent = false;
+    let emailMessage: string | null = null;
+    try {
+      const {
+        isEmailConfigured,
+        accountCreatedEmail,
+        trySendEmail,
+        createPasswordSetupLink,
+      } = await import("@/lib/email");
+      const company = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      });
+      const { getAppOrigin } = await import("@/lib/app-url");
+      const appUrl = getAppOrigin();
+      let setupPasswordUrl: string | null = null;
       try {
-        const {
-          isEmailConfigured,
-          accountCreatedEmail,
-          trySendEmail,
-          createPasswordSetupLink,
-        } = await import("@/lib/email");
-        const company = await prisma.company.findUnique({
-          where: { id: companyId },
-          select: { name: true },
+        setupPasswordUrl = await createPasswordSetupLink(userId);
+      } catch (linkError) {
+        console.error("[invite] password setup link failed", {
+          message: linkError instanceof Error ? linkError.message : "unknown",
         });
-        const { getAppOrigin } = await import("@/lib/app-url");
-        const appUrl = getAppOrigin();
-        let setupPasswordUrl: string | null = null;
-        try {
-          setupPasswordUrl = await createPasswordSetupLink(userId);
-        } catch (linkError) {
-          console.error("[invite] password setup link failed", {
-            message: linkError instanceof Error ? linkError.message : "unknown",
-          });
+      }
+
+      if (!isEmailConfigured()) {
+        emailMessage =
+          "User created, but email is not configured. Set SMTP_* (local) or RESEND_API_KEY (Render).";
+        if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
+          console.info(
+            `[invite:dev] password setup URL for ${email}: ${setupPasswordUrl}`
+          );
         }
-        if (!isEmailConfigured()) {
-          if (process.env.NODE_ENV !== "production" && setupPasswordUrl) {
-            console.info(
-              `[invite:dev] password setup URL for ${email}: ${setupPasswordUrl}`
-            );
-          }
-          return;
-        }
+      } else {
         const template = accountCreatedEmail({
           userName: name,
           companyName: company?.name || "Sunbuild",
@@ -3262,20 +3267,26 @@ export async function inviteUserAction(form: FormData): Promise<
           text: template.text,
           tags: { type: "account_created", role },
         });
-        if (!mail.success) {
+        if (mail.success) {
+          emailSent = true;
+          emailMessage = "Invite email sent.";
+        } else {
+          emailMessage = `User created, but invite email failed: ${mail.message}`;
           console.error("[invite] account email failed:", mail.message);
         }
-      } catch (error) {
-        console.error("[invite] account email unexpected error", {
-          message: error instanceof Error ? error.message : "unknown",
-        });
       }
-    });
+    } catch (error) {
+      emailMessage =
+        "User created, but invite email could not be sent. Check SMTP/Resend settings and server logs.";
+      console.error("[invite] account email unexpected error", {
+        message: error instanceof Error ? error.message : "unknown",
+      });
+    }
 
     return {
       ok: true as const,
-      emailSent: true,
-      emailMessage: "User created successfully.",
+      emailSent,
+      emailMessage,
     };
   } catch (e) {
     // Prisma unique race on email
