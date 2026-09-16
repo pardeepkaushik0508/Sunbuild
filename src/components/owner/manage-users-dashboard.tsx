@@ -117,6 +117,11 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
   const [prevFilterQ, setPrevFilterQ] = useState(data.filters.q);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Local row overrides so edit form never reopens on stale server props mid-refresh. */
+  const [rowOverrides, setRowOverrides] = useState<
+    Record<string, Partial<ManageUserRow>>
+  >({});
+  const [formNonce, setFormNonce] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(
     data.filters.role !== "ALL" ||
       data.filters.status !== "ALL" ||
@@ -127,6 +132,54 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
   if (data.filters.q !== prevFilterQ) {
     setPrevFilterQ(data.filters.q);
     setSearchValue(data.filters.q);
+  }
+
+  const users = useMemo(
+    () =>
+      data.users.map((u) => {
+        const override = rowOverrides[u.userId];
+        return override ? { ...u, ...override } : u;
+      }),
+    [data.users, rowOverrides]
+  );
+
+  // Drop overrides once server data has caught up (same updatedAt / fields).
+  useEffect(() => {
+    setRowOverrides((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const u of data.users) {
+        const o = next[u.userId];
+        if (!o) continue;
+        if (
+          (!o.updatedAt || o.updatedAt === u.updatedAt) &&
+          (!o.name || o.name === u.name) &&
+          (!o.email || o.email === u.email) &&
+          (o.phone === undefined || o.phone === u.phone) &&
+          (o.trade === undefined || o.trade === u.trade) &&
+          (!o.role || o.role === u.role) &&
+          (!o.status || o.status === u.status)
+        ) {
+          delete next[u.userId];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [data.users]);
+
+  // Keep the open dialog's selected user in sync with latest list data.
+  useEffect(() => {
+    setSelectedUser((prev) => {
+      if (!prev) return prev;
+      const fresh = users.find((u) => u.userId === prev.userId);
+      return fresh ?? prev;
+    });
+  }, [users]);
+
+  function resolveUser(user: ManageUserRow): ManageUserRow {
+    return users.find((u) => u.userId === user.userId) ?? user;
   }
 
   const pushQuery = useCallback(
@@ -174,25 +227,27 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
 
   const allSelected = useMemo(
     () =>
-      data.users.length > 0 &&
-      data.users.every((u) => selectedIds.has(u.userId)),
-    [data.users, selectedIds]
+      users.length > 0 &&
+      users.every((u) => selectedIds.has(u.userId)),
+    [users, selectedIds]
   );
 
   function openAdd() {
     setSelectedUser(null);
+    setFormNonce((n) => n + 1);
     setDialog("add");
     setError(null);
   }
 
   function openView(user: ManageUserRow) {
-    setSelectedUser(user);
+    setSelectedUser(resolveUser(user));
     setDialog("view");
     setError(null);
   }
 
   function openEdit(user: ManageUserRow) {
-    setSelectedUser(user);
+    setSelectedUser(resolveUser(user));
+    setFormNonce((n) => n + 1);
     setDialog("edit");
     setError(null);
   }
@@ -211,7 +266,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(data.users.map((u) => u.userId)));
+    setSelectedIds(new Set(users.map((u) => u.userId)));
   }
 
   async function handleExport() {
@@ -432,7 +487,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
           </div>
         ) : null}
 
-        {data.users.length === 0 ? (
+        {users.length === 0 ? (
           <EmptyState
             title={
               data.filters.q || data.filters.role !== "ALL" || data.filters.status !== "ALL"
@@ -472,7 +527,7 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
             </div>
 
             <ul className="divide-y divide-[#e5e7eb]">
-              {data.users.map((user) => (
+              {users.map((user) => (
                 <li key={user.userId} className="px-4 py-4">
                   <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[auto_minmax(0,1.4fr)_auto_auto_auto_auto_auto] lg:items-center lg:gap-3">
                     <label className="inline-flex items-center">
@@ -672,11 +727,19 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
 
       {(dialog === "add" || dialog === "edit") && (
         <UserFormDialog
+          key={
+            dialog === "edit" && selectedUser
+              ? `edit-${selectedUser.userId}-${selectedUser.updatedAt}-${formNonce}`
+              : `add-${formNonce}`
+          }
           mode={dialog}
           user={selectedUser}
           inviteRoles={data.inviteRoles}
           projects={data.projects}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            setSelectedUser(null);
+          }}
           onSubmit={async (formData) => {
             if (dialog === "add") {
               const result = await inviteUserAction(formData);
@@ -700,19 +763,43 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
               return { ok: true as const };
             }
 
+            let updated: Awaited<ReturnType<typeof updateUserAction>>;
             try {
-              await updateUserAction(formData);
+              updated = await updateUserAction(formData);
             } catch (e) {
               return {
                 ok: false as const,
                 error: toSafeErrorMessage(e),
               };
             }
+
+            if (updated?.userId) {
+              const roleLabel =
+                ROLE_LABELS[updated.role] ?? String(updated.role);
+              setRowOverrides((prev) => ({
+                ...prev,
+                [updated.userId]: {
+                  name: updated.name,
+                  email: updated.email,
+                  phone: updated.phone,
+                  trade: updated.trade,
+                  role: updated.role,
+                  roleLabel,
+                  status: updated.status,
+                  projects: updated.projects,
+                  projectCount: updated.projectCount,
+                  updatedAt: updated.updatedAt,
+                },
+              }));
+            }
+
             setNotice("User updated.");
             toast?.success("User updated");
             setDialog(null);
             setSelectedUser(null);
-            router.refresh();
+            startTransition(() => {
+              router.refresh();
+            });
             return { ok: true as const };
           }}
         />
@@ -721,8 +808,16 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
       {dialog === "view" && selectedUser ? (
         <UserViewDialog
           user={selectedUser}
-          onClose={() => setDialog(null)}
-          onEdit={() => setDialog("edit")}
+          onClose={() => {
+            setDialog(null);
+            setSelectedUser(null);
+          }}
+          onEdit={() => {
+            const fresh = resolveUser(selectedUser);
+            setSelectedUser(fresh);
+            setFormNonce((n) => n + 1);
+            setDialog("edit");
+          }}
         />
       ) : null}
 
@@ -809,16 +904,35 @@ function UserFormDialog({
   const toast = useOptionalToast();
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const names = splitName(user?.name ?? "");
+  const [firstName, setFirstName] = useState(names.firstName);
+  const [lastName, setLastName] = useState(names.lastName);
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState(user?.phone ?? "");
+  const [trade, setTrade] = useState(user?.trade ?? "");
   const [role, setRole] = useState<Role>(
     user?.role ?? inviteRoles[0] ?? Role.PROJECT_MANAGER
   );
-  const names = splitName(user?.name ?? "");
-  const assigned = new Set(user?.projects.map((p) => p.id) ?? []);
+  const [status, setStatus] = useState(user?.status ?? "ACTIVE");
+  const [projectIds, setProjectIds] = useState<string[]>(
+    user?.projects.map((p) => p.id) ?? []
+  );
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
     setFormError(null);
     try {
+      // Controlled fields win over any stale browser autofill.
+      formData.set("firstName", firstName.trim());
+      formData.set("lastName", lastName.trim());
+      formData.set("email", email.trim());
+      formData.set("phone", phone.trim());
+      formData.set("trade", trade.trim());
+      formData.set("role", role);
+      formData.set("status", status);
+      formData.delete("projectIds");
+      for (const id of projectIds) formData.append("projectIds", id);
+
       if (mode === "edit" && user) {
         formData.set("userId", user.userId);
         formData.set("syncProjects", "1");
@@ -850,22 +964,34 @@ function UserFormDialog({
         action={handleSubmit}
         encType="multipart/form-data"
         className="grid gap-4 sm:grid-cols-2"
+        autoComplete="off"
       >
         {formError ? (
           <p className="sm:col-span-2 text-sm text-sb-red">{formError}</p>
         ) : null}
         <FormField label="First Name" required>
-          <Input name="firstName" required defaultValue={names.firstName} />
+          <Input
+            name="firstName"
+            required
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+          />
         </FormField>
         <FormField label="Last Name" required>
-          <Input name="lastName" required defaultValue={names.lastName} />
+          <Input
+            name="lastName"
+            required
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+          />
         </FormField>
         <FormField label="Email" required className="sm:col-span-2">
           <Input
             name="email"
             type="email"
             required
-            defaultValue={user?.email ?? ""}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="name@company.com"
           />
         </FormField>
@@ -873,7 +999,8 @@ function UserFormDialog({
           <Input
             name="phone"
             type="tel"
-            defaultValue={user?.phone ?? ""}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             placeholder="+1 403 555 0100"
           />
         </FormField>
@@ -897,12 +1024,19 @@ function UserFormDialog({
         >
           <Input
             name="trade"
-            defaultValue={user?.trade ?? ""}
+            value={trade}
+            onChange={(e) => setTrade(e.target.value)}
             placeholder="Painter, Plumber…"
           />
         </FormField>
         <FormField label="Account status" required>
-          <Select name="status" defaultValue={user?.status ?? "ACTIVE"}>
+          <Select
+            name="status"
+            value={status}
+            onChange={(e) =>
+              setStatus(e.target.value as ManageUserRow["status"])
+            }
+          >
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
             {mode === "add" ? <option value="INVITED">Invited</option> : null}
@@ -932,8 +1066,13 @@ function UserFormDialog({
           <select
             name="projectIds"
             multiple
-            defaultValue={[...assigned]}
-            className="min-h-28 w-full rounded-[10px] border border-sb-border bg-white px-3 py-2 text-sm outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20"
+            value={projectIds}
+            onChange={(e) =>
+              setProjectIds(
+                Array.from(e.target.selectedOptions).map((o) => o.value)
+              )
+            }
+            className="min-h-28 w-full rounded-[10px] border border-sb-border bg-sb-surface px-3 py-2 text-sm text-sb-ink outline-none focus:border-sb-orange focus:ring-2 focus:ring-sb-orange/20"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>

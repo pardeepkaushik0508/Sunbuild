@@ -40,6 +40,15 @@ export function ConfigureJobDialog({
 
   if (!open) return null;
 
+  const formKey = [
+    job.id,
+    job.name,
+    job.pmId ?? "",
+    job.status,
+    job.hasBudget ? String(job.budgetTotal) : "",
+    job.deadline ? new Date(job.deadline).toISOString().slice(0, 10) : "",
+  ].join("|");
+
   function onSubmit(formData: FormData) {
     setError(null);
     startTransition(async () => {
@@ -86,7 +95,13 @@ export function ConfigureJobDialog({
           </button>
         </div>
 
-        <form ref={formRef} action={onSubmit} className="grid gap-4">
+        <form
+          key={formKey}
+          ref={formRef}
+          action={onSubmit}
+          className="grid gap-4"
+          autoComplete="off"
+        >
           <input type="hidden" name="projectId" value={job.id} />
 
           <FormField label="Project name" required>

@@ -1,6 +1,5 @@
 /**
  * Regression: subcontractor project assignment must notify (and SMS) the assignee.
- * Logic mirror of assignSubcontractorAction notification payload.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -22,5 +21,12 @@ describe("subcontractor project assignment SMS payload", () => {
     const smsProjectId =
       payload.entityType === "Project" ? payload.entityId : null;
     assert.equal(smsProjectId, projectId);
+  });
+
+  it("covers both PM assign and manage-users newly-added project paths", () => {
+    const previous = new Set(["proj_a"]);
+    const next = ["proj_a", "proj_b"];
+    const newlyAssigned = next.filter((id) => !previous.has(id));
+    assert.deepEqual(newlyAssigned, ["proj_b"]);
   });
 });

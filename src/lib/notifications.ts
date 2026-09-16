@@ -117,6 +117,43 @@ async function smsForNotification(input: CreateNotificationInput) {
   }
 }
 
+export async function notifySubcontractorProjectAssigned(opts: {
+  userId: string;
+  companyId: string;
+  projectId: string;
+  projectName?: string | null;
+  assignedByName: string;
+  /** True when access already existed (re-confirm). */
+  existingAccess?: boolean;
+}) {
+  const payload: CreateNotificationInput = {
+    userId: opts.userId,
+    companyId: opts.companyId,
+    type: "SUBCONTRACTOR_PROJECT_ASSIGNED",
+    title: `You have been assigned to ${opts.projectName ?? "a project"}`,
+    body: opts.existingAccess
+      ? `Project access confirmed by ${opts.assignedByName}.`
+      : `Assigned by ${opts.assignedByName}.`,
+    href: `/sub/jobs/${opts.projectId}`,
+    entityType: "Project",
+    entityId: opts.projectId,
+  };
+  try {
+    const created = await createNotificationOnce(payload);
+    revalidateNotificationInbox();
+    // createNotificationOnce already SMSes when it inserts a new row.
+    // If an unread row already existed (and a prior Twilio send failed), retry SMS.
+    if (!created) {
+      await smsForNotification(payload);
+    }
+  } catch (err) {
+    console.error(
+      "[project] subcontractor assignment notification/SMS skipped",
+      err
+    );
+  }
+}
+
 export async function notifyProjectManager(opts: {
   projectId: string;
   companyId: string;

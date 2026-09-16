@@ -12,6 +12,18 @@ export type TwilioSenderMode =
   | "phone_number"
   | "not_configured";
 
+/**
+ * Normalize TWILIO_ACCOUNT_SID.
+ * Common copy/paste glues the SID twice (AC…32hex + AC…32hex) which Twilio
+ * rejects as Authentication Error 20003 "invalid username".
+ */
+export function normalizeTwilioAccountSid(raw: string): string {
+  const sid = raw.trim();
+  const dup = sid.match(/^(AC[a-f0-9]{32})\1$/i);
+  if (dup) return dup[1];
+  return sid;
+}
+
 export function getTwilioSenderMode(): TwilioSenderMode {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();

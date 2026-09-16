@@ -6,6 +6,7 @@ import { maskPhone, maskSid } from "@/lib/twilio/phone";
 import { getTwilioWebhookUrls } from "@/lib/twilio/webhooks";
 import {
   getTwilioSenderMode,
+  normalizeTwilioAccountSid,
   type TwilioSenderMode,
 } from "@/lib/twilio/sender";
 import { isUnverifiedRecipientRecord } from "@/lib/twilio/errors";
@@ -39,7 +40,8 @@ export type PublicTwilioSettings = {
 };
 
 export function getTwilioConfig(): TwilioConfig | null {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const rawSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const accountSid = rawSid ? normalizeTwilioAccountSid(rawSid) : "";
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const messagingServiceSid =
     process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() || null;
@@ -48,6 +50,12 @@ export function getTwilioConfig(): TwilioConfig | null {
 
   if (!accountSid || !authToken || senderMode === "not_configured") {
     return null;
+  }
+
+  if (rawSid && rawSid !== accountSid) {
+    console.warn(
+      "[twilio] TWILIO_ACCOUNT_SID looked duplicated; using the first AC…32hex value. Fix Render/.env.local to the single SID."
+    );
   }
 
   return {
@@ -88,7 +96,7 @@ function diagnosticsFor(
   }
   if (senderMode === "phone_number") {
     lines.push(
-      "Sending with TWILIO_PHONE_NUMBER (direct From). Add TWILIO_MESSAGING_SERVICE_SID later to switch to a Messaging Service without changing CRM notification flows."
+      "Sending with TWILIO_PHONE_NUMBER (direct From). This must be a Twilio phone number from Console → Phone Numbers, not the subcontractor’s personal mobile."
     );
   } else {
     lines.push(
@@ -98,9 +106,42 @@ function diagnosticsFor(
   lines.push(
     "Twilio trial accounts can only SMS verified numbers. Unverified recipients are stored as FAILED; project, task, RFI, payment, and warranty actions still succeed."
   );
+  if (recentFailures.some((f) => f.errorCode === "20003")) {
+    lines.push(
+      "Recent SMS failed with Authentication Error 20003. Check TWILIO_ACCOUNT_SID (must be a single AC… value, not pasted twice) and TWILIO_AUTH_TOKEN on Render."
+    );
+  }
+  if (
+    recentFailures.some(
+      (f) =>
+        f.errorCode === "21212" ||
+        f.errorCode === "21606" ||
+        /TWILIO_PHONE_NUMBER must be a Twilio Console phone number/i.test(
+          f.errorMessage || ""
+        ) ||
+        /not a valid|not a twilio|from phone number/i.test(f.errorMessage || "")
+    )
+  ) {
+    lines.push(
+      "Recent SMS failed because TWILIO_PHONE_NUMBER is not a Twilio From number. Buy/get a number in Twilio Console → Phone Numbers and set that as TWILIO_PHONE_NUMBER."
+    );
+  }
+  if (
+    recentFailures.some(
+      (f) =>
+        f.errorCode === "572006" ||
+        /approved SMS template|predefined SMS templates/i.test(
+          f.errorMessage || ""
+        )
+    )
+  ) {
+    lines.push(
+      "Recent SMS failed due to SMS template / India trial rules. Get a Twilio phone number in Console, verify the recipient, or register/use an approved template."
+    );
+  }
   if (recentFailures.some((f) => f.unverifiedRecipient)) {
     lines.push(
-      "A recent SMS was rejected because the recipient is not verified. Verify the number in Twilio or upgrade the account."
+      "A recent SMS was rejected because the recipient is not verified. Verify the number in Twilio Console → Verified Caller IDs, or upgrade the account."
     );
   }
   return lines;

@@ -27,10 +27,12 @@ export function ProfileForm({
   return (
     <Card className="max-w-xl">
       <ActionForm
+        key={`profile-${user.name}-${user.image ?? ""}`}
         action={updateOwnProfileAction}
         successMessage="Profile updated"
         encType="multipart/form-data"
         className="space-y-6"
+        autoComplete="off"
       >
         <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
           <button

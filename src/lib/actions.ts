@@ -42,6 +42,7 @@ import {
   createNotificationOnce,
   notifyProjectManager,
   notifyProjectManagersOfDailyLog,
+  notifySubcontractorProjectAssigned,
   revalidateNotificationInbox,
 } from "@/lib/notifications";
 import {
@@ -1208,23 +1209,14 @@ export async function assignSubcontractorAction(form: FormData) {
       where: { id: projectId, companyId: session.membership.companyId },
       select: { name: true },
     });
-    try {
-      await createNotificationOnce({
-        userId,
-        companyId: session.membership.companyId,
-        type: "SUBCONTRACTOR_PROJECT_ASSIGNED",
-        title: `You have been assigned to ${project?.name ?? "a project"}`,
-        body: existingAccess
-          ? `Project access confirmed by ${session.user.name}.`
-          : `Assigned by ${session.user.name}.`,
-        href: `/sub/jobs/${projectId}`,
-        entityType: "Project",
-        entityId: projectId,
-      });
-      revalidateNotificationInbox();
-    } catch (err) {
-      console.error("[project] subcontractor assignment notification/SMS skipped", err);
-    }
+    await notifySubcontractorProjectAssigned({
+      userId,
+      companyId: session.membership.companyId,
+      projectId,
+      projectName: project?.name,
+      assignedByName: session.user.name,
+      existingAccess: Boolean(existingAccess),
+    });
   }
 
   revalidatePath(`/pm/projects/${projectId}`);
@@ -3208,6 +3200,22 @@ export async function inviteUserAction(form: FormData): Promise<
 
     revalidateUserSurfaces(projectIds);
 
+    if (role === Role.SUBCONTRACTOR && projectIds.length > 0) {
+      const projects = await prisma.project.findMany({
+        where: { id: { in: projectIds }, companyId },
+        select: { id: true, name: true },
+      });
+      for (const project of projects) {
+        await notifySubcontractorProjectAssigned({
+          userId,
+          companyId,
+          projectId: project.id,
+          projectName: project.name,
+          assignedByName: session.user.name,
+        });
+      }
+    }
+
     const { after } = await import("next/server");
     after(async () => {
       try {
@@ -3444,6 +3452,13 @@ export async function updateUserAction(form: FormData) {
       select: { projectId: true },
     })
   ).map((p) => p.projectId);
+  const previousProjectIdSet = new Set(previousProjectIds);
+  const newlyAssignedProjectIds =
+    form.has("projectIds") ||
+    form.getAll("projectIds").length > 0 ||
+    form.get("syncProjects") === "1"
+      ? projectIds.filter((id) => !previousProjectIdSet.has(id))
+      : [];
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
@@ -3576,6 +3591,47 @@ export async function updateUserAction(form: FormData) {
   }
 
   revalidateUserSurfaces([...new Set([...previousProjectIds, ...projectIds])]);
+
+  if (
+    nextRole === Role.SUBCONTRACTOR &&
+    newlyAssignedProjectIds.length > 0
+  ) {
+    const assignedProjects = await prisma.project.findMany({
+      where: { id: { in: newlyAssignedProjectIds }, companyId },
+      select: { id: true, name: true },
+    });
+    for (const project of assignedProjects) {
+      await notifySubcontractorProjectAssigned({
+        userId,
+        companyId,
+        projectId: project.id,
+        projectName: project.name,
+        assignedByName: session.user.name,
+      });
+    }
+  }
+
+  const projectRows = await prisma.project.findMany({
+    where: { id: { in: projectIds }, companyId },
+    select: { id: true, name: true },
+  });
+
+  return {
+    userId,
+    name,
+    email,
+    phone: phone || null,
+    trade: nextRole === Role.SUBCONTRACTOR ? trade : null,
+    role: nextRole,
+    status: (setActive
+      ? statusRaw === "INVITED"
+        ? "INVITED"
+        : "ACTIVE"
+      : "INACTIVE") as "ACTIVE" | "INACTIVE" | "INVITED",
+    projects: projectRows,
+    projectCount: projectRows.length,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function bulkUpdateUsersAction(form: FormData) {

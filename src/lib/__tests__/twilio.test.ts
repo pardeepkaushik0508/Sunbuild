@@ -23,7 +23,7 @@ import {
   isUnverifiedRecipientError,
   UNVERIFIED_RECIPIENT_DIAGNOSTIC,
 } from "../twilio/errors";
-import { getTwilioSenderMode, selectTwilioFromFields } from "../twilio/sender";
+import { getTwilioSenderMode, selectTwilioFromFields, normalizeTwilioAccountSid } from "../twilio/sender";
 
 const KEYS = [
   "APP_URL",
@@ -209,6 +209,15 @@ describe("Twilio trial send errors", () => {
     assert.doesNotMatch(parsed.errorMessage, /\+1\d{10}/);
   });
 
+  it("maps India/template trial errors to a clear diagnostic", () => {
+    const parsed = parseTwilioSendError({
+      code: 572006,
+      message: "Invalid template name. Trial accounts can only use predefined SMS templates.",
+    });
+    assert.equal(parsed.errorCode, "572006");
+    assert.match(parsed.errorMessage, /template|India|Twilio phone number/i);
+  });
+
   it("sanitizes other Twilio errors without crashing", () => {
     const parsed = parseTwilioSendError({
       code: 20003,
@@ -217,5 +226,47 @@ describe("Twilio trial send errors", () => {
     assert.equal(parsed.unverifiedRecipient, false);
     assert.match(parsed.errorMessage, /AC…/);
     assert.doesNotMatch(parsed.errorMessage, /ACaaaaaaaa/);
+  });
+});
+
+describe("Twilio Account SID normalization", () => {
+  // Use Twilio's documented dummy SID shape — never a real account SID.
+  const FAKE_SID = "ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+  it("collapses an accidentally duplicated Account SID", () => {
+    const once = FAKE_SID;
+    const twice = once + once;
+    assert.equal(normalizeTwilioAccountSid(twice), once);
+    assert.equal(normalizeTwilioAccountSid(once), once);
+  });
+
+  it("getTwilioSenderMode still works when SID was pasted twice", () => {
+    const once = FAKE_SID;
+    const KEYS2 = [
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_MESSAGING_SERVICE_SID",
+      "TWILIO_PHONE_NUMBER",
+    ] as const;
+    const savedTwilio: Partial<
+      Record<(typeof KEYS2)[number], string | undefined>
+    > = {};
+    for (const key of KEYS2) {
+      savedTwilio[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.TWILIO_ACCOUNT_SID = once + once;
+    process.env.TWILIO_AUTH_TOKEN = "token123";
+    process.env.TWILIO_PHONE_NUMBER = "+14035550100";
+    try {
+      assert.equal(getTwilioSenderMode(), "phone_number");
+      assert.equal(normalizeTwilioAccountSid(process.env.TWILIO_ACCOUNT_SID!), once);
+    } finally {
+      for (const key of KEYS2) {
+        const value = savedTwilio[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 });

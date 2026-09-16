@@ -115,7 +115,13 @@ export function EditTaskButton({
               </button>
             </div>
 
-            <form ref={formRef} action={onSubmit} className="grid gap-4">
+            <form
+              key={`${task.id}-${task.title}-${task.status}-${task.assigneeId}-${task.dueDate}-${task.startDate}`}
+              ref={formRef}
+              action={onSubmit}
+              className="grid gap-4"
+              autoComplete="off"
+            >
               <FormField label="Project" required>
                 <Select
                   name="projectId"
