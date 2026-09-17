@@ -15,4 +15,6 @@ export const MIDDLEWARE_PUBLIC_PATHS = [
   "/api/twilio/status",
   "/api/twilio/inbound",
   "/api/whatsapp/webhook",
+  // Cron jobs authenticate via CRON_SECRET bearer token
+  "/api/cron",
 ] as const;

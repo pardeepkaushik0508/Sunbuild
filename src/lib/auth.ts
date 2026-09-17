@@ -104,6 +104,27 @@ export const auth = betterAuth({
         defaultValue: true,
         input: false,
       },
+      deletedAt: {
+        type: "date",
+        required: false,
+        input: false,
+      },
+    },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { isActive: true, deletedAt: true },
+          });
+          if (!user || !user.isActive || user.deletedAt) {
+            throw new Error("Account is disabled or deleted");
+          }
+          return { data: session };
+        },
+      },
     },
   },
   session: {

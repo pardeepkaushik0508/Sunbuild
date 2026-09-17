@@ -9,7 +9,7 @@ const globalForPrisma = globalThis as unknown as {
  * Bump when Selection/Photo Prisma fields change so `next dev` does not
  * keep a stale PrismaClient on globalThis after generate.
  */
-const PRISMA_SCHEMA_ID = "twilio-sms-v1";
+const PRISMA_SCHEMA_ID = "soft-delete-trash-v1";
 
 function createPrismaClient() {
   return new PrismaClient({

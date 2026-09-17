@@ -152,6 +152,7 @@ export async function loadManageUsersData(
 
   const membershipWhere: Prisma.MembershipWhereInput = {
     companyId,
+    user: { deletedAt: null },
   };
 
   if (roleFilter !== "ALL") {
@@ -343,13 +344,13 @@ export async function loadManageUsersData(
           select: {
             id: true,
             projectAccess: {
-              where: { project: { companyId } },
+              where: { project: { companyId, deletedAt: null } },
               select: {
                 project: { select: { id: true, name: true } },
               },
             },
             assignedProjects: {
-              where: { companyId },
+              where: { companyId, deletedAt: null },
               select: { id: true, name: true },
             },
           },
@@ -431,7 +432,7 @@ export async function loadManageUsersData(
         },
       }),
       prisma.project.findMany({
-        where: { companyId },
+        where: { companyId, deletedAt: null },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
         take: 300,
@@ -442,11 +443,13 @@ export async function loadManageUsersData(
   const distinctActive = await prisma.user.count({
     where: {
       isActive: true,
+      deletedAt: null,
       memberships: { some: { companyId, isActive: true } },
     },
   });
   const distinctInactive = await prisma.user.count({
     where: {
+      deletedAt: null,
       memberships: { some: { companyId } },
       OR: [
         { isActive: false },

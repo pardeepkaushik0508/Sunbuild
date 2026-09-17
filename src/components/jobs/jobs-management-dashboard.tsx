@@ -84,6 +84,7 @@ export function JobsManagementDashboard({ data }: { data: JobsDashboardData }) {
                 key={job.id}
                 job={job}
                 canConfigure={data.canConfigure}
+                canDelete={data.canDelete}
                 canViewBudget={data.canViewBudget}
                 projectManagers={data.pmOptions}
               />

@@ -29,7 +29,11 @@ export async function resolveClientProject(
   await assertProjectAccess(session, selected);
 
   return prisma.project.findFirst({
-    where: { id: selected, companyId: session.membership.companyId },
+    where: {
+      id: selected,
+      companyId: session.membership.companyId,
+      deletedAt: null,
+    },
     include: {
       buyer: true,
       pm: {

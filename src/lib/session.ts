@@ -76,6 +76,7 @@ const loadAppSession = cache(async (): Promise<AppSession | null> => {
       image: true,
       phone: true,
       isActive: true,
+      deletedAt: true,
       memberships: {
         where: { isActive: true },
         select: {
@@ -97,7 +98,7 @@ const loadAppSession = cache(async (): Promise<AppSession | null> => {
     },
   });
 
-  if (!user || !user.isActive) return null;
+  if (!user || !user.isActive || user.deletedAt) return null;
 
   const activeMemberships = user.memberships.filter(
     (m) => m.company.isActive && isCompanyVisibleInMvp(m.company.slug)
@@ -207,7 +208,7 @@ export const getAccessibleProjectIds = cache(async (session: AppSession) => {
     role === Role.BOOKKEEPER
   ) {
     const projects = await prisma.project.findMany({
-      where: { companyId },
+      where: { companyId, deletedAt: null },
       select: { id: true },
     });
     return projects.map((p) => p.id);
@@ -217,7 +218,7 @@ export const getAccessibleProjectIds = cache(async (session: AppSession) => {
   // Stale ProjectAccess rows from a previous PM must not grant visibility.
   if (role === Role.PROJECT_MANAGER) {
     const projects = await prisma.project.findMany({
-      where: { companyId, pmId: userId },
+      where: { companyId, pmId: userId, deletedAt: null },
       select: { id: true },
     });
     return projects.map((p) => p.id);
@@ -227,6 +228,7 @@ export const getAccessibleProjectIds = cache(async (session: AppSession) => {
     const projects = await prisma.project.findMany({
       where: {
         companyId,
+        deletedAt: null,
         access: { some: { userId } },
       },
       select: { id: true },
@@ -237,7 +239,7 @@ export const getAccessibleProjectIds = cache(async (session: AppSession) => {
   const access = await prisma.projectAccess.findMany({
     where: {
       userId,
-      project: { companyId },
+      project: { companyId, deletedAt: null },
     },
     select: { projectId: true },
   });
@@ -254,6 +256,7 @@ export async function assertProjectAccess(
     where: {
       id: projectId,
       companyId: session.membership.companyId,
+      deletedAt: null,
     },
     select: { id: true, pmId: true },
   });

@@ -23,6 +23,7 @@ import {
   Users,
   UserPlus,
   X,
+  Trash2,
 } from "lucide-react";
 import {
   bulkUpdateUsersAction,
@@ -30,6 +31,7 @@ import {
   inviteUserAction,
   updateUserAction,
 } from "@/lib/actions";
+import { softDeleteUserAction } from "@/lib/trash/actions";
 import type { ManageUsersData, ManageUserRow } from "@/lib/users/load-manage-users";
 import { OrganizationHeader } from "@/components/dashboard/organization-header";
 import { AiInsightsPanel } from "@/components/dashboard/ai-insights";
@@ -367,15 +369,23 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
               Manage access for {data.company.brand || data.company.name}
             </p>
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="bg-[#facc15] text-[#111827] hover:bg-[#eab308] border-[#facc15]"
-            onClick={openAdd}
-          >
-            <Plus size={16} />
-            Add User
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/owner/trash">
+              <Button type="button" variant="outline">
+                <Trash2 size={16} />
+                Trash
+              </Button>
+            </Link>
+            <Button
+              type="button"
+              variant="secondary"
+              className="bg-[#facc15] text-[#111827] hover:bg-[#eab308] border-[#facc15]"
+              onClick={openAdd}
+            >
+              <Plus size={16} />
+              Add User
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 rounded-[16px] border border-[#e5e7eb] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:flex-row sm:items-center">
@@ -600,6 +610,34 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
                       >
                         <Pencil size={16} />
                       </button>
+                      {!user.isSelf ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                `Move ${user.name} to Trash? They will not be able to sign in. You can restore within 30 days from Trash.`
+                              )
+                            ) {
+                              return;
+                            }
+                            startTransition(async () => {
+                              try {
+                                await softDeleteUserAction(user.userId);
+                                toast?.success("User moved to Trash");
+                                router.refresh();
+                              } catch (err) {
+                                toast?.error(toSafeErrorMessage(err));
+                              }
+                            });
+                          }}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] text-[#6b7280] hover:bg-red-50 hover:text-red-700"
+                          aria-label={`Delete ${user.name}`}
+                          disabled={pending}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </li>

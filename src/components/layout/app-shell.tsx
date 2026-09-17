@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   LineChart,
   FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
 import { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -108,6 +109,11 @@ function navForRole(
     href: "/owner/users",
     icon: Users,
   };
+  const trashItem: NavDef = {
+    label: "Trash",
+    href: "/owner/trash",
+    icon: Trash2,
+  };
 
   function withOptionalModules(
     items: NavDef[],
@@ -142,6 +148,7 @@ function navForRole(
           children: [
             { label: "List", href: "/owner/users", icon: Users },
             { label: "Permissions", href: "/owner/permissions", icon: Shield },
+            { label: "Trash", href: "/owner/trash", icon: Trash2 },
           ],
         },
         { label: "Settings", href: "/owner/settings", icon: Settings },
@@ -156,20 +163,22 @@ function navForRole(
           { label: "Overview", href: "/ceo", icon: LayoutDashboard },
           { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
           { label: "Approvals", href: "/ceo/approvals", icon: CheckSquare },
+          trashItem,
           { label: "Settings", href: "/settings", icon: Settings },
         ],
-        { financeAt: 3, usersAt: 2 }
+        { financeAt: 4, usersAt: 2 }
       );
     case Role.OPERATIONS_ADMIN: {
       const items: NavDef[] = [
         { label: "Overview", href: "/admin", icon: LayoutDashboard },
         { label: "Jobs Management", href: "/pm/projects", icon: Briefcase },
         { label: "Contracts", href: "/sales/contracts", icon: FileText },
+        trashItem,
         { label: "Settings", href: "/settings", icon: Settings },
       ];
       if (showUsersNav) items.splice(2, 0, usersItem);
       if (showFinanceNav) {
-        const at = showUsersNav ? 4 : 3;
+        const at = showUsersNav ? 5 : 4;
         items.splice(at, 0, financeItem);
       }
       return items;

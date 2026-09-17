@@ -92,6 +92,7 @@ export type JobsDashboardData = {
   insights: InsightCard[];
   canCreateJob: boolean;
   canConfigure: boolean;
+  canDelete?: boolean;
   canViewBudget: boolean;
   canManageSchedule: boolean;
   createJobHref: string;
@@ -157,7 +158,7 @@ const accessibleProjectIdsForCompany = cache(
       role === Role.BOOKKEEPER
     ) {
       const projects = await prisma.project.findMany({
-        where: { companyId },
+        where: { companyId, deletedAt: null },
         select: { id: true },
       });
       return projects.map((p) => p.id);
@@ -165,7 +166,7 @@ const accessibleProjectIdsForCompany = cache(
 
     if (role === Role.PROJECT_MANAGER) {
       const projects = await prisma.project.findMany({
-        where: { companyId, pmId: userId },
+        where: { companyId, pmId: userId, deletedAt: null },
         select: { id: true },
       });
       return projects.map((p) => p.id);
@@ -251,6 +252,7 @@ export async function loadJobsDashboardData(input: {
   const baseWhere = {
     id: { in: projectIds },
     companyId: selectedCompanyId,
+    deletedAt: null,
   };
 
   const [
@@ -716,6 +718,7 @@ export async function loadJobsDashboardData(input: {
     insights: insights.slice(0, 3),
     canCreateJob,
     canConfigure,
+    canDelete: canConfigure,
     canViewBudget,
     canManageSchedule,
     createJobHref: "/pm/contracts/new",

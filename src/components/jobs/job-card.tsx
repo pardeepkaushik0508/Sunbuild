@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { Settings, Trash2 } from "lucide-react";
 import { ProjectStatus } from "@prisma/client";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
@@ -12,6 +13,9 @@ import {
 import { JobsProgressBar } from "@/components/jobs/jobs-progress-bar";
 import { ConfigureJobDialog } from "@/components/jobs/configure-job-dialog";
 import type { JobsListItem } from "@/lib/jobs/load-jobs";
+import { softDeleteProjectAction } from "@/lib/trash/actions";
+import { useOptionalToast } from "@/components/ui/toast";
+import { toSafeErrorMessage } from "@/lib/errors";
 
 function formatDeadline(date: Date | null) {
   if (!date) return "—";
@@ -25,15 +29,20 @@ function formatDeadline(date: Date | null) {
 export function JobCard({
   job,
   canConfigure,
+  canDelete = false,
   canViewBudget,
   projectManagers,
 }: {
   job: JobsListItem;
   canConfigure: boolean;
+  canDelete?: boolean;
   canViewBudget: boolean;
   projectManagers: Array<{ id: string; name: string }>;
 }) {
   const [configureOpen, setConfigureOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const toast = useOptionalToast();
 
   return (
     <>
@@ -76,6 +85,35 @@ export function JobCard({
               >
                 <Settings size={15} />
                 Configure
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (
+                    !window.confirm(
+                      `Move project "${job.name}" to Trash? It will be hidden from all users. You can restore it within 30 days from Trash.`
+                    )
+                  ) {
+                    return;
+                  }
+                  startTransition(async () => {
+                    try {
+                      await softDeleteProjectAction(job.id);
+                      toast?.success("Project moved to Trash");
+                      router.refresh();
+                    } catch (err) {
+                      toast?.error(toSafeErrorMessage(err));
+                    }
+                  });
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-red-200 bg-white px-3 text-[13px] font-medium text-red-700 transition hover:bg-red-50"
+              >
+                <Trash2 size={15} />
+                Delete
               </button>
             ) : null}
           </div>
