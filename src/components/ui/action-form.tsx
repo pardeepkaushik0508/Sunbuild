@@ -56,7 +56,9 @@ export function ActionForm({
       {...props}
       action={formAction}
       onSubmit={(e) => {
+        // Let React handle the action; callers may still observe the event.
         onSubmit?.(e);
+        if (e.defaultPrevented) return;
       }}
     >
       {children}

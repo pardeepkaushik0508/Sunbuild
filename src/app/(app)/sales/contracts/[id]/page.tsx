@@ -16,7 +16,6 @@ import {
   FileSpreadsheet,
   Printer,
   Download,
-  Upload,
   Lock,
   CheckCircle2,
   History,
@@ -29,10 +28,10 @@ import {
 import {
   updatePurchaseContractAction,
   createContractRevisionAction,
-  uploadSignedContractAction,
   executeContractAction,
   deleteDraftContractAction,
 } from "@/lib/sales/contract-actions";
+import { SignedContractUploadForm } from "@/components/contracts/signed-contract-upload-form";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -112,7 +111,6 @@ export default async function SalesContractWorkspacePage({
 
   const updateContract = updatePurchaseContractAction.bind(null, contract.id);
   const createRevision = createContractRevisionAction.bind(null, contract.id);
-  const uploadSigned = uploadSignedContractAction.bind(null, contract.id);
   const executeContract = executeContractAction.bind(null, contract.id);
   const deleteDraft = deleteDraftContractAction.bind(null, contract.id);
 
@@ -533,17 +531,7 @@ export default async function SalesContractWorkspacePage({
                   <span className="text-xs font-semibold text-sb-ink block mb-1">
                     1. Upload Signed PDF (Optional)
                   </span>
-                  <ActionForm
-                    action={uploadSigned}
-                    encType="multipart/form-data"
-                    className="space-y-2"
-                  >
-                    <Input name="file" type="file" accept=".pdf,application/pdf" required className="text-xs" />
-                    <SubmitButton size="sm" variant="outline" pendingLabel="Uploading…">
-                      <Upload className="mr-1.5 h-3.5 w-3.5" />
-                      Attach Signed PDF
-                    </SubmitButton>
-                  </ActionForm>
+                  <SignedContractUploadForm contractId={contract.id} />
                 </div>
               ) : (
                 <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg text-xs text-emerald-800">

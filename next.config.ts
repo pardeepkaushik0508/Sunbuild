@@ -68,6 +68,28 @@ const nextConfig: NextConfig = {
     // (see DEFAULT_FILE_STORAGE). Leave headroom for multipart overhead.
     serverActions: {
       bodySizeLimit: "25mb",
+      // Render / reverse proxies often set x-forwarded-host differently from
+      // Origin, which makes Next abort actions with 403 / unexpected response.
+      allowedOrigins: (() => {
+        const hosts = new Set<string>([
+          "localhost:3000",
+          "sunbuild.onrender.com",
+        ]);
+        for (const key of [
+          "APP_URL",
+          "NEXT_PUBLIC_APP_URL",
+          "BETTER_AUTH_URL",
+        ] as const) {
+          const raw = process.env[key]?.trim();
+          if (!raw) continue;
+          try {
+            hosts.add(new URL(raw).host);
+          } catch {
+            // ignore invalid env URLs
+          }
+        }
+        return Array.from(hosts);
+      })(),
     },
     // Render Free reports many CPUs; default worker count can OOM.
     // Cap hard for constrained build environments (TypeScript + static gen).

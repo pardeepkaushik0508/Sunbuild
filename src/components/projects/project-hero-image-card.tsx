@@ -1,14 +1,14 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { ImageIcon } from "lucide-react";
-import {
-  updateProjectHeroImageAction,
-  clearProjectHeroImageAction,
-  removeProjectHeroImageAction,
-} from "@/lib/actions";
-import { ActionForm } from "@/components/ui/action-form";
+import { useState, useTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { MediaImage } from "@/components/ui/media-image";
-import { SubmitButton } from "@/components/ui/submit-button";
+import { Button } from "@/components/ui/button";
+import { useOptionalToast } from "@/components/ui/toast";
+import { toSafeErrorMessage } from "@/lib/errors";
 import {
   heroSquareGridClass,
   MAX_HERO_IMAGES,
@@ -29,6 +29,81 @@ export function ProjectHeroImageCard({
 }) {
   const urls = projectHeroImageUrls({ heroImageUrl, heroImageUrls });
   const canAddMore = urls.length < MAX_HERO_IMAGES;
+  const toast = useOptionalToast();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [uploading, setUploading] = useState(false);
+  const busy = pending || uploading;
+
+  async function upload(formData: FormData) {
+    setUploading(true);
+    try {
+      formData.set("projectId", projectId);
+      const res = await fetch(`/api/projects/${projectId}/hero`, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        success?: boolean;
+      };
+      if (!res.ok) {
+        toast?.error(
+          toSafeErrorMessage(data.error || `Upload failed (${res.status})`)
+        );
+        return;
+      }
+      toast?.success("Client home banner saved");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast?.error(toSafeErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeOne(imageUrl: string) {
+    setUploading(true);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/hero?imageUrl=${encodeURIComponent(imageUrl)}`,
+        { method: "DELETE", credentials: "same-origin" }
+      );
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast?.error(toSafeErrorMessage(data.error || "Remove failed"));
+        return;
+      }
+      toast?.success("Banner image removed");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast?.error(toSafeErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeAll() {
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/hero`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast?.error(toSafeErrorMessage(data.error || "Remove failed"));
+        return;
+      }
+      toast?.success("Client home banner removed");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast?.error(toSafeErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  }
 
   return (
     <Card className={cn("space-y-4", className)}>
@@ -59,21 +134,17 @@ export function ProjectHeroImageCard({
                 aspectClassName="aspect-square"
                 objectFit="contain"
               />
-              <ActionForm
-                action={removeProjectHeroImageAction}
-                successMessage="Banner image removed"
-                className="border-t border-sb-border p-2"
-              >
-                <input type="hidden" name="projectId" value={projectId} />
-                <input type="hidden" name="imageUrl" value={url} />
-                <SubmitButton
+              <div className="border-t border-sb-border p-2">
+                <Button
+                  type="button"
                   variant="outline"
-                  pendingLabel="Removing…"
                   className="h-8 w-full text-xs"
+                  disabled={busy}
+                  onClick={() => void removeOne(url)}
                 >
                   Remove
-                </SubmitButton>
-              </ActionForm>
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
@@ -87,19 +158,18 @@ export function ProjectHeroImageCard({
       )}
 
       {canAddMore ? (
-        <ActionForm
-          action={updateProjectHeroImageAction}
-          successMessage="Client home banner saved"
-          encType="multipart/form-data"
+        <form
           className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            void upload(fd);
+          }}
         >
-          <input type="hidden" name="projectId" value={projectId} />
           <ImageUploadField
             name="heroImage"
             label={
-              urls.length > 0
-                ? "Add more banner images"
-                : "House mockup images"
+              urls.length > 0 ? "Add more banner images" : "House mockup images"
             }
             multiple
             maxFiles={MAX_HERO_IMAGES - urls.length}
@@ -110,11 +180,15 @@ export function ProjectHeroImageCard({
             } together (Ctrl/Cmd+click). Max ${MAX_HERO_IMAGES} total.`}
           />
           <div className="flex flex-wrap gap-2">
-            <SubmitButton pendingLabel="Uploading…">
-              {urls.length > 0 ? "Add images" : "Save banner"}
-            </SubmitButton>
+            <Button type="submit" disabled={busy}>
+              {uploading
+                ? "Uploading…"
+                : urls.length > 0
+                  ? "Add images"
+                  : "Save banner"}
+            </Button>
           </div>
-        </ActionForm>
+        </form>
       ) : (
         <p className="text-xs text-sb-muted">
           Maximum of {MAX_HERO_IMAGES} banner images reached. Remove one to add
@@ -123,15 +197,14 @@ export function ProjectHeroImageCard({
       )}
 
       {urls.length > 0 ? (
-        <ActionForm
-          action={clearProjectHeroImageAction}
-          successMessage="Client home banner removed"
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void removeAll()}
         >
-          <input type="hidden" name="projectId" value={projectId} />
-          <SubmitButton variant="outline" pendingLabel="Removing…">
-            Remove all banners
-          </SubmitButton>
-        </ActionForm>
+          {uploading ? "Removing…" : "Remove all banners"}
+        </Button>
       ) : null}
     </Card>
   );

@@ -51,7 +51,16 @@ export function toSafeErrorMessage(error: unknown): string {
     const msg = error.message?.trim() || "";
     // Handle React production / Server Action masked errors
     if (/Minified React error #441/i.test(msg) || /digest/i.test(msg)) {
-      return "Server error during upload. Please verify file storage configuration or server logs.";
+      return "Upload failed. Please refresh the page and try again.";
+    }
+    if (/unexpected response was received from the server/i.test(msg)) {
+      return "Upload failed (session or network). Please refresh and try again.";
+    }
+    if (/Invalid Server Actions request/i.test(msg)) {
+      return "Upload blocked by security check. Please refresh and try again.";
+    }
+    if (/A React form was unexpectedly submitted/i.test(msg)) {
+      return "Form submit failed. Please try again.";
     }
     if (/Minified React error #418/i.test(msg)) {
       return "Page hydration mismatch. Please refresh the page.";

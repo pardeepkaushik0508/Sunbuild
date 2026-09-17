@@ -381,47 +381,78 @@ export async function uploadSignedContractAction(
   contractId: string,
   form: FormData
 ) {
-  const session = await requireSession();
-  requireCapability(session, "manageContracts");
-  await rateLimit(session.user.id, "contract-signed-upload", true);
+  try {
+    const session = await requireSession();
+    requireCapability(session, "manageContracts");
+    await rateLimit(session.user.id, "contract-signed-upload", true);
 
-  const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    throw new AppError("Signed PDF file required");
+    const file = form.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { error: "Signed PDF file required" };
+    }
+
+    const companyId = session.membership.companyId;
+    const existing = await prisma.purchaseContract.findFirst({
+      where: {
+        id: contractId,
+        OR: [
+          { companyId },
+          { companyId: null, project: { companyId } },
+          { companyId: null },
+        ],
+      },
+      select: {
+        id: true,
+        companyId: true,
+        project: { select: { companyId: true } },
+      },
+    });
+    if (!existing) return { error: "Contract not found" };
+
+    const tenantId =
+      existing.companyId ?? existing.project?.companyId ?? null;
+    if (tenantId && tenantId !== companyId) {
+      return { error: "Forbidden" };
+    }
+
+    const saved = await saveCompanyUpload(
+      companyId,
+      file,
+      "contracts/signed"
+    );
+
+    await prisma.purchaseContract.update({
+      where: { id: contractId },
+      data: {
+        ...(existing.companyId ? {} : { companyId }),
+        signedFilePath: saved.filePath,
+        signedFileName: saved.fileName,
+        signedStoragePublicId: saved.publicId,
+        status: ContractStatus.SIGNED,
+      },
+    });
+
+    await writeAudit({
+      userId: session.user.id,
+      companyId,
+      action: "CONTRACT_SIGNED_UPLOADED",
+      entityType: "PurchaseContract",
+      entityId: contractId,
+      metadata: { fileName: saved.fileName },
+    });
+
+    revalidatePath(`/sales/contracts/${contractId}`);
+    return { success: true };
+  } catch (err) {
+    if (err instanceof AppError || err instanceof ForbiddenError) {
+      return { error: err.message };
+    }
+    console.error("[uploadSignedContractAction]", err);
+    return {
+      error:
+        "Failed to upload signed PDF. Please verify file storage configuration or try again.",
+    };
   }
-
-  const saved = await saveCompanyUpload(
-    session.membership.companyId,
-    file,
-    "contracts/signed"
-  );
-
-  const existing = await prisma.purchaseContract.findFirst({
-    where: { id: contractId, companyId: session.membership.companyId },
-    select: { id: true },
-  });
-  if (!existing) throw new AppError("Contract not found");
-
-  await prisma.purchaseContract.update({
-    where: { id: contractId },
-    data: {
-      signedFilePath: saved.filePath,
-      signedFileName: saved.fileName,
-      signedStoragePublicId: saved.publicId,
-      status: ContractStatus.SIGNED,
-    },
-  });
-
-  await writeAudit({
-    userId: session.user.id,
-    companyId: session.membership.companyId,
-    action: "CONTRACT_SIGNED_UPLOADED",
-    entityType: "PurchaseContract",
-    entityId: contractId,
-    metadata: { fileName: saved.fileName },
-  });
-
-  revalidatePath(`/sales/contracts/${contractId}`);
 }
 
 /**
