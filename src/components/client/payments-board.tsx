@@ -7,13 +7,14 @@ import { ChangeOrderStatus, type InvoiceStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
-import { FormField, Textarea } from "@/components/ui/form";
+import { FormField, Textarea, Input } from "@/components/ui/form";
 import { useOptionalToast } from "@/components/ui/toast";
 import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { clientChangeOrderDecisionAction } from "@/lib/client/actions";
 import { reportInvoicePaidAction } from "@/lib/actions";
 import { canClientReportPayment } from "@/lib/payments/invoice-flow";
 import { toSafeErrorMessage } from "@/lib/errors";
+import { clientChangeOrderLabel } from "@/lib/client/flow";
 
 export type ClientInvoiceCardData = {
   id: string;
@@ -37,6 +38,7 @@ export type ClientCoCardData = {
   title: string;
   description: string | null;
   amount: number;
+  displayAmount?: number;
   status: ChangeOrderStatus;
   phase: string | null;
   scheduleImpact?: string | null;
@@ -47,12 +49,25 @@ export type ClientCoCardData = {
   clientComment?: string | null;
 };
 
+export type ClientDepositCardData = {
+  id: string;
+  label: string;
+  amount: number;
+  status: string;
+  paymentLabel: string;
+  paymentTone: "success" | "warning" | "danger" | "default" | "info";
+  dueDate: string | null;
+  reference: string | null;
+};
+
 export function ClientPaymentsBoard({
   invoices,
   changeOrders,
+  deposits = [],
 }: {
   invoices: ClientInvoiceCardData[];
   changeOrders: ClientCoCardData[];
+  deposits?: ClientDepositCardData[];
 }) {
   const router = useRouter();
   const toast = useOptionalToast();
@@ -104,6 +119,50 @@ export function ClientPaymentsBoard({
 
   return (
     <div className="space-y-8">
+      <section>
+        <h2 className="mb-4 font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-ink">
+          Deposit schedule
+        </h2>
+        {deposits.length === 0 ? (
+          <EmptyState
+            title="No deposits on this contract"
+            description="Deposit lines from your purchase agreement will appear here."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {deposits.map((dep) => (
+              <Card key={dep.id} className="flex flex-col">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="text-base font-semibold text-sb-ink">
+                    {dep.label}
+                  </h3>
+                  <StatusBadge tone={dep.paymentTone}>
+                    {dep.paymentLabel}
+                  </StatusBadge>
+                </div>
+                <p className="mt-3 font-[family-name:var(--font-outfit)] text-xl font-semibold">
+                  {formatCurrency(dep.amount)}
+                </p>
+                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-sb-muted">
+                  <div>
+                    <dt>Due</dt>
+                    <dd className="font-medium text-sb-ink">
+                      {dep.dueDate ? formatDate(dep.dueDate) : "Event-driven"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Reference</dt>
+                    <dd className="font-medium text-sb-ink">
+                      {dep.reference || "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section>
         <h2 className="mb-4 font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-ink">
           Invoices & payments
@@ -220,16 +279,14 @@ export function ClientPaymentsBoard({
                     {co.title}
                   </h3>
                   <StatusBadge tone={statusTone(co.status)}>
-                    {co.status === ChangeOrderStatus.REJECTED
-                      ? "DENIED"
-                      : co.status.replace(/_/g, " ")}
+                    {clientChangeOrderLabel(co.status)}
                   </StatusBadge>
                 </div>
                 <p className="mt-2 line-clamp-3 text-sm text-sb-muted">
                   {co.description || "Change order"}
                 </p>
                 <p className="mt-3 text-lg font-semibold">
-                  {formatCurrency(co.amount)}
+                  {formatCurrency(co.displayAmount ?? co.amount)}
                 </p>
                 <p className="mt-1 text-xs text-sb-muted">
                   {co.phase ? `${co.phase} · ` : ""}
@@ -403,12 +460,12 @@ export function ClientPaymentsBoard({
             {coDetail.description || "Review this change order."}
           </p>
           <p className="mt-3 text-lg font-semibold">
-            {formatCurrency(coDetail.amount)}
+            {formatCurrency(coDetail.displayAmount ?? coDetail.amount)}
           </p>
           <p className="mt-2 text-xs text-sb-muted">
-            Electronic acceptance records your authenticated user, confirmation,
-            and timestamp. This is not a third-party certified e-signature
-            service.
+            Only the household authorized signatory may decide. The signature
+            record stores the named individual, household account, authority
+            basis, timestamp, and IP.
           </p>
           {coDetail.canDecide ? (
             <div className="mt-4 space-y-4">
@@ -416,6 +473,14 @@ export function ClientPaymentsBoard({
                 action={(fd) => decide(coDetail.id, "APPROVED", fd)}
                 className="space-y-3"
               >
+                <FormField label="Authorized signatory full name">
+                  <Input
+                    name="signatoryName"
+                    required
+                    placeholder="e.g. Liam Thompson"
+                    autoComplete="name"
+                  />
+                </FormField>
                 <FormField label="Comment (optional)">
                   <Textarea name="comment" />
                 </FormField>
@@ -427,6 +492,14 @@ export function ClientPaymentsBoard({
                 action={(fd) => decide(coDetail.id, "REJECTED", fd)}
                 className="space-y-3 border-t border-sb-border pt-4"
               >
+                <FormField label="Authorized signatory full name">
+                  <Input
+                    name="signatoryName"
+                    required
+                    placeholder="e.g. Liam Thompson"
+                    autoComplete="name"
+                  />
+                </FormField>
                 <FormField label="Denial reason">
                   <Textarea name="comment" required />
                 </FormField>

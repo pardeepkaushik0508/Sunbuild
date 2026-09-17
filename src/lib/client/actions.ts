@@ -209,6 +209,58 @@ export async function clientChangeOrderDecisionAction(
   }
 
   const comment = formString(form, "comment") || null;
+  const signatoryName = formString(form, "signatoryName");
+
+  // Master Test Data v2.2 §4.3 — only the designated authorized signatory may
+  // approve/e-sign; signature record names the individual + household account.
+  const {
+    authorizedSignatoryName,
+    namesMatch,
+  } = await import("@/lib/contracts/signatory");
+  const contract = await prisma.purchaseContract.findFirst({
+    where: { projectId: co.projectId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      buyerFirstName: true,
+      buyerLastName: true,
+      contractNumber: true,
+    },
+  });
+  const expectedSignatory = authorizedSignatoryName(contract);
+  if (!expectedSignatory) {
+    throw new AppError(
+      "Authorized signatory is not set on the purchase contract — contact your project manager"
+    );
+  }
+  if (!signatoryName) {
+    throw new AppError(
+      `Enter the authorized signatory name (${expectedSignatory}) to continue`
+    );
+  }
+  if (!namesMatch(signatoryName, expectedSignatory)) {
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      projectId: co.projectId,
+      action: "CHANGE_ORDER_SIGNATORY_REJECTED",
+      entityType: "ChangeOrder",
+      entityId: id,
+      metadata: {
+        attemptedName: signatoryName,
+        expectedSignatory,
+        decision,
+      },
+    });
+    throw new AppError(
+      `Only the authorized signatory (${expectedSignatory}) may approve or reject this change order`
+    );
+  }
+
+  const h = await headers();
+  const ip =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    null;
 
   const updated = await prisma.changeOrder.updateMany({
     where: { id, status: ChangeOrderStatus.PENDING_CLIENT },
@@ -219,7 +271,8 @@ export async function clientChangeOrderDecisionAction(
           : ChangeOrderStatus.REJECTED,
       clientActionAt: new Date(),
       clientComment: comment,
-      clientResponseBy: session.user.id,
+      // Named individual (not merely the household login id).
+      clientResponseBy: expectedSignatory,
     },
   });
   if (updated.count !== 1) {
@@ -240,6 +293,13 @@ export async function clientChangeOrderDecisionAction(
       comment,
       title: co.title,
       amount: co.amount,
+      // Signature record (§4.3)
+      namedIndividual: expectedSignatory,
+      householdAccountId: session.user.id,
+      householdEmail: session.user.email,
+      authorityBasis: "AUTHORIZED_SIGNATORY",
+      contractNumber: contract?.contractNumber ?? null,
+      ip,
     },
   });
 

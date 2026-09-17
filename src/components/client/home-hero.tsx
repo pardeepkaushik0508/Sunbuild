@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { MediaImage } from "@/components/ui/media-image";
-import { heroSquareGridClass } from "@/lib/projects/hero-image-shared";
 import { cn } from "@/lib/utils";
 
 /**
- * Client portal home hero — project status + square house-mockup gallery.
+ * Client portal home hero — full-width project banner, then status strip.
  */
 export function ClientHomeHero({
   projectName,
@@ -30,7 +29,43 @@ export function ClientHomeHero({
         : [];
 
   return (
-    <section className="space-y-3">
+    <section className="w-full space-y-3">
+      {urls.length > 0 ? (
+        <ul
+          className={cn(
+            "grid w-full gap-2",
+            urls.length === 1
+              ? "grid-cols-1"
+              : urls.length === 2
+                ? "grid-cols-1 sm:grid-cols-2"
+                : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+          )}
+        >
+          {urls.map((src, index) => (
+            <li
+              key={`${src}-${index}`}
+              className="w-full overflow-hidden rounded-[16px] border border-sb-border bg-sb-ink shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+            >
+              <MediaImage
+                src={src}
+                alt={`${projectName} banner ${index + 1}`}
+                thumbnail
+                priority={index < 4}
+                width={1600}
+                height={900}
+                aspectClassName={
+                  urls.length === 1
+                    ? "aspect-[21/9] min-h-[200px] sm:min-h-[260px]"
+                    : "aspect-video"
+                }
+                objectFit="cover"
+                className="w-full"
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       <div className="rounded-[16px] border border-sb-border bg-sb-ink p-5 text-white shadow-[0_1px_2px_rgba(16,24,40,0.06)] sm:p-7">
         <p className="text-xs font-semibold tracking-[0.14em] text-sb-yellow uppercase">
           {statusLabel}
@@ -63,28 +98,6 @@ export function ClientHomeHero({
           </Link>
         </div>
       </div>
-
-      {urls.length > 0 ? (
-        <ul className={cn("grid gap-3", heroSquareGridClass(urls.length))}>
-          {urls.map((src, index) => (
-            <li
-              key={`${src}-${index}`}
-              className="overflow-hidden rounded-[16px] border border-sb-border bg-sb-canvas shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
-            >
-              <MediaImage
-                src={src}
-                alt={`${projectName} banner ${index + 1}`}
-                thumbnail
-                priority={index < 4}
-                width={800}
-                height={800}
-                aspectClassName="aspect-square"
-                objectFit="contain"
-              />
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </section>
   );
 }

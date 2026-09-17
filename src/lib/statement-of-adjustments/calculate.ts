@@ -52,6 +52,11 @@ export type SoaCalculationInput = {
     dueDate?: Date | null;
     updatedAt?: Date;
   }>;
+  /**
+   * Change-order invoice prepayments already received (Master Test Data §13–14).
+   * Reduces cash to close; does not change total sales price.
+   */
+  changeOrderPrepayments?: number;
   /** When false, GST is omitted from totals and the printable statement. Default true. */
   includeGst?: boolean;
 };
@@ -71,6 +76,7 @@ export type SoaCalculationResult = {
   totalSalesPrice: number;
   deposits: SoaDepositLine[];
   depositsToDate: number;
+  changeOrderPrepayments: number;
   cashToClose: number;
 };
 
@@ -155,9 +161,11 @@ export function calculateStatementOfAdjustments(
     0
   );
 
+  const prepayCents = toCents(Math.max(0, input.changeOrderPrepayments ?? 0));
+
   const cashToCloseCents = addCents(
-    totalSalesPriceCents,
-    -depositsToDateCents
+    addCents(totalSalesPriceCents, -depositsToDateCents),
+    -prepayCents
   );
 
   return {
@@ -175,6 +183,7 @@ export function calculateStatementOfAdjustments(
     totalSalesPrice: fromCents(totalSalesPriceCents),
     deposits: depositLines,
     depositsToDate: fromCents(depositsToDateCents),
+    changeOrderPrepayments: fromCents(prepayCents),
     cashToClose: fromCents(cashToCloseCents),
   };
 }

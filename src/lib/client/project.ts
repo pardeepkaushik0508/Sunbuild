@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import {
   assertProjectAccess,
@@ -23,7 +24,7 @@ export async function resolveClientProject(
     projectId && ids.includes(projectId) ? projectId : ids[0];
 
   if (projectId && !ids.includes(projectId)) {
-    throw new ForbiddenError("Forbidden: no project access");
+    notFound();
   }
 
   await assertProjectAccess(session, selected);

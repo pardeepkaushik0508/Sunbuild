@@ -38,7 +38,10 @@ export default async function PMContractDetailPage({ params }: PageProps) {
 
   const contract = await prisma.purchaseContract.findUnique({
     where: { id },
-    include: { project: { select: { id: true, name: true } } },
+    include: {
+      project: { select: { id: true, name: true } },
+      deposits: { select: { label: true, amount: true } },
+    },
   });
 
   if (!contract) notFound();
@@ -77,6 +80,22 @@ export default async function PMContractDetailPage({ params }: PageProps) {
   const saveReview = updateContractReviewAction.bind(null, contract.id);
   const confirmContract = confirmContractAction.bind(null, contract.id);
 
+  const { validateContractActivation } = await import(
+    "@/lib/contracts/activation-validation"
+  );
+  const activationIssues =
+    confirmed ||
+    (contract.status !== ContractStatus.IN_REVIEW &&
+      contract.status !== ContractStatus.UPLOADED)
+      ? []
+      : validateContractActivation({
+          totalPurchasePrice:
+            contract.totalContractPrice ?? contract.purchasePrice ?? null,
+          deposits: contract.deposits,
+          possessionDate:
+            contract.firmPossessionDate ?? contract.targetClosing ?? null,
+        });
+
   return (
     <div>
       <PageHeader
@@ -112,6 +131,22 @@ export default async function PMContractDetailPage({ params }: PageProps) {
           </span>
         ) : null}
       </div>
+
+      {activationIssues.length > 0 ? (
+        <Card className="mb-6 border-amber-300 bg-amber-50">
+          <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-amber-950">
+            Activation blocked
+          </h2>
+          <p className="mt-1 text-sm text-amber-900">
+            Fix every validation error below before confirming this contract.
+          </p>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-950">
+            {activationIssues.map((issue) => (
+              <li key={issue.code}>{issue.message}</li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <Card className="mb-6">
         <h2 className="font-[family-name:var(--font-outfit)] text-lg font-semibold text-sb-black">
@@ -261,7 +296,15 @@ export default async function PMContractDetailPage({ params }: PageProps) {
               <p className="mb-2 text-sm text-sb-muted">
                 Price: {formatCurrency(contract.purchasePrice)}
               </p>
-              <SubmitButton pendingLabel="Creating project…">
+              {activationIssues.length > 0 ? (
+                <p className="mb-2 text-sm font-medium text-amber-800">
+                  Confirm is disabled until validation errors are fixed.
+                </p>
+              ) : null}
+              <SubmitButton
+                pendingLabel="Creating project…"
+                disabled={activationIssues.length > 0}
+              >
                 Confirm & create project
               </SubmitButton>
             </div>

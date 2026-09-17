@@ -629,10 +629,20 @@ export async function loadJobsDashboardData(input: {
 
   const canViewBudget = sessionHasFinanceAccess(session);
 
+  const jobsForClient = canViewBudget
+    ? pageJobs
+    : pageJobs.map((j) => ({
+        ...j,
+        budgetUsed: 0,
+        budgetTotal: 0,
+        budgetPercent: 0,
+        hasBudget: false,
+      }));
+
   // Budget overrun insights (rule-based)
   const insights = buildProjectInsights({
     delayedScheduleCount: delayedCount,
-    expectedDepositAmount: depositsOpen._sum.amount ?? 0,
+    expectedDepositAmount: canViewBudget ? depositsOpen._sum.amount ?? 0 : 0,
     pendingDocCount: Math.min(pendingDocs, 12),
     overdueTaskCount: overdueTasks,
     openRfiCount: openRfis,
@@ -700,7 +710,7 @@ export async function loadJobsDashboardData(input: {
       inPlanning,
       upcomingDeadlines,
     },
-    jobs: pageJobs,
+    jobs: jobsForClient,
     totalCount,
     page: safePage,
     pageSize,

@@ -497,6 +497,41 @@ export async function executeContractAction(
   requireCapability(session, "manageContracts");
   await rateLimit(session.user.id, "contract-execute");
 
+  const contract = await prisma.purchaseContract.findUnique({
+    where: { id: contractId },
+    include: {
+      deposits: { select: { label: true, amount: true } },
+    },
+  });
+  if (!contract) throw new AppError("Contract not found");
+  if (contract.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
+
+  const {
+    validateContractActivation,
+    formatActivationBlockMessage,
+  } = await import("@/lib/contracts/activation-validation");
+  const activationIssues = validateContractActivation({
+    totalPurchasePrice:
+      contract.totalContractPrice ?? contract.purchasePrice ?? null,
+    deposits: contract.deposits,
+    possessionDate:
+      contract.firmPossessionDate ?? contract.targetClosing ?? null,
+  });
+  if (activationIssues.length) {
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      projectId: contract.projectId,
+      action: "CONTRACT_ACTIVATION_BLOCKED",
+      entityType: "PurchaseContract",
+      entityId: contractId,
+      metadata: { issues: activationIssues, path: "execute" },
+    });
+    throw new AppError(formatActivationBlockMessage(activationIssues));
+  }
+
   const pmId = formString(form, "pmId") || null;
 
   const result = await executeContractTransaction({

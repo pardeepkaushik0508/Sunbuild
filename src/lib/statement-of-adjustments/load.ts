@@ -123,6 +123,14 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
       contracts: { orderBy: { createdAt: "desc" } },
       changeOrders: { orderBy: { createdAt: "asc" } },
       deposits: { orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }] },
+      invoices: {
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          notes: true,
+        },
+      },
       statementsOfAdjustments: {
         orderBy: { version: "desc" },
       },
@@ -198,11 +206,18 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
       project.lotInfo ||
       null,
     possessionDate:
-      contract?.targetClosing || project.targetClosing || null,
+      contract?.firmPossessionDate ||
+      contract?.targetClosing ||
+      project.targetClosing ||
+      null,
   };
 
+  // Master Test Data §14: SOA base = base selling price + extras at signing.
+  // Allowances stay inside base and are not re-added here.
   const baseHomePrice =
-    contract?.basePrice ??
+    (contract?.basePrice != null
+      ? Number(contract.basePrice) + Number(contract.upgradesTotal ?? 0)
+      : null) ??
     contract?.purchasePrice ??
     project.purchasePrice ??
     0;
@@ -216,7 +231,9 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
     record.financialSnapshot
       ? ((record.financialSnapshot as { promoCreditAdjustment?: number })
           .promoCreditAdjustment ?? record.promoCreditAdjustment)
-      : (record?.promoCreditAdjustment ?? contract?.discountsTotal ?? 0);
+      : (record?.promoCreditAdjustment ?? 0);
+
+  const changeOrderPrepayments = sumChangeOrderPrepayments(project.invoices);
 
   let calculations: SoaCalculationResult;
 
@@ -232,12 +249,19 @@ export async function loadStatementOfAdjustmentsForProject(opts: {
         includeGst: (calculations.totalGst ?? 0) > 0,
       };
     }
+    if (calculations.changeOrderPrepayments === undefined) {
+      calculations = {
+        ...calculations,
+        changeOrderPrepayments: 0,
+      };
+    }
   } else {
     calculations = calculateStatementOfAdjustments({
       baseHomePrice,
       gstRate,
       includeGst,
       promoCreditAdjustment: promo,
+      changeOrderPrepayments,
       changeOrders: project.changeOrders.map((co) => ({
         id: co.id,
         title: co.title,
@@ -288,6 +312,26 @@ async function nextStatementNumber(
   const seq = String(count + 1).padStart(4, "0");
   const contractBit = contractNumber?.replace(/[^\w-]/g, "") || `PC-${year}`;
   return `SOA-${contractBit}-${seq}`;
+}
+
+/** Paid / partially paid CO invoices reduce cash to close (§13–14). */
+function sumChangeOrderPrepayments(
+  invoices: Array<{ amount: number; status: string; notes: string | null }>
+): number {
+  let sum = 0;
+  for (const inv of invoices) {
+    if (inv.status === "PAID") {
+      sum += inv.amount;
+      continue;
+    }
+    if (inv.status === "PAYMENT_REPORTED") {
+      const m = inv.notes?.match(/received\s*\$?\s*([\d,]+(?:\.\d+)?)/i);
+      if (m) {
+        sum += parseFloat(m[1].replace(/,/g, "")) || 0;
+      }
+    }
+  }
+  return sum;
 }
 
 export async function nextStatementVersion(projectId: string) {

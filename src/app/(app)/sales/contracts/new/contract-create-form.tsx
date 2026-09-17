@@ -114,10 +114,12 @@ export function ContractCreateForm({ projects, leads, buyers, defaultProjectId =
 
   const subtotalBeforeTax = Math.max(
     0,
-    roundMoney(basePrice + allowanceTotal + upgradesTotal - gstRebate)
+    roundMoney(basePrice + upgradesTotal)
   );
   const taxAmount = roundMoney((subtotalBeforeTax * taxRate) / 100);
-  const totalContractPrice = roundMoney(subtotalBeforeTax + taxAmount);
+  const totalContractPrice = roundMoney(
+    Math.max(0, subtotalBeforeTax + taxAmount - gstRebate)
+  );
 
   const depositPaid = useMemo(() => {
     return roundMoney(

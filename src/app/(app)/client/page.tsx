@@ -4,7 +4,6 @@ import {
   DocumentVisibility,
   PhotoVisibility,
   Priority,
-  ProjectStatus,
   Role,
   TaskStatus,
 } from "@prisma/client";
@@ -38,6 +37,11 @@ import {
   getClientVisibleSectionIds,
   idInFilter,
 } from "@/lib/selections/query";
+import { ClientLifecycleCard } from "@/components/client/lifecycle-card";
+import {
+  clientLifecycleStatusLabel,
+  isWarrantyCoverageActive,
+} from "@/lib/client/flow";
 
 export default async function ClientHomePage({
   searchParams,
@@ -161,6 +165,42 @@ export default async function ClientHomePage({
     );
   }
 
+  const [conditions, deposits, latestContract] = await Promise.all([
+    prisma.condition.findMany({
+      where: { projectId: full.id },
+      orderBy: { dueDate: "asc" },
+    }),
+    prisma.deposit.findMany({
+      where: { projectId: full.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.purchaseContract.findFirst({
+      where: { projectId: full.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        status: true,
+        contractNumber: true,
+        specialConditions: true,
+        reviewNotes: true,
+      },
+    }),
+  ]);
+
+  const openPurchaserConditions = conditions.filter(
+    (c) =>
+      c.status === "OPEN" &&
+      (c.party ?? "").toLowerCase() === "purchaser"
+  ).length;
+  const lifecycleLabel = clientLifecycleStatusLabel({
+    projectStatus: full.status,
+    contractStatus: latestContract?.status,
+    openPurchaserConditions,
+  });
+  const warrantyOpen = isWarrantyCoverageActive({
+    warrantyStart: full.warrantyStart,
+    warrantyEnd: full.warrantyEnd,
+  });
+
   const progressById = await loadProgressByProjectIds(projects.map((p) => p.id));
 
   const liveProgress = computeProjectProgress({
@@ -208,6 +248,34 @@ export default async function ClientHomePage({
       projectName: full.name,
       href: "/client/payments",
     })),
+    ...deposits
+      .filter((d) => d.status === "OVERDUE" || d.status === "DUE")
+      .map((d) => ({
+        id: `dep-${d.id}`,
+        title: d.label,
+        description: d.reference || "Deposit requires attention",
+        dueDate: d.dueDate ?? today,
+        priority: Priority.HIGH,
+        projectName: full.name,
+        href: `/client/payments?projectId=${full.id}`,
+      })),
+    ...(openPurchaserConditions > 0
+      ? conditions
+          .filter(
+            (c) =>
+              c.status === "OPEN" &&
+              (c.party ?? "").toLowerCase() === "purchaser"
+          )
+          .map((c) => ({
+            id: `cond-${c.id}`,
+            title: c.title,
+            description: c.description || "Purchaser condition still open",
+            dueDate: c.dueDate ?? today,
+            priority: Priority.HIGH,
+            projectName: full.name,
+            href: `/client/documents?projectId=${full.id}`,
+          }))
+      : []),
     ...milestones
       .filter((m) => m.status !== "COMPLETED" && m.dueDate)
       .slice(0, 8)
@@ -288,7 +356,7 @@ export default async function ClientHomePage({
     <div className="w-full space-y-5">
       <ClientHomeHero
         projectName={full.name}
-        statusLabel={full.status.replace(/_/g, " ")}
+        statusLabel={lifecycleLabel}
         imageSrcs={heroImageSrcs}
         progressPercent={liveProgress}
         photosHref={`/client/photos?projectId=${full.id}`}
@@ -296,7 +364,7 @@ export default async function ClientHomePage({
 
       <ClientPortalBanner
         projectName={full.name}
-        statusLabel={full.status.replace(/_/g, " ")}
+        statusLabel={lifecycleLabel}
         projects={projectPicker}
         activeProjectId={full.id}
       />
@@ -359,6 +427,47 @@ export default async function ClientHomePage({
         progressPercent={liveProgress}
         projectLabel={full.name}
       />
+
+      {conditions.length > 0 || deposits.length > 0 || latestContract?.reviewNotes ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ClientLifecycleCard
+            title="Schedule E conditions"
+            empty="No conditions on this agreement."
+            rows={
+              conditions.length
+                ? conditions.map((c) => ({
+                    id: c.id,
+                    title: c.title,
+                    detail: [c.party, c.description].filter(Boolean).join(" · "),
+                    status: c.status,
+                    dueDate: c.dueDate?.toISOString() ?? null,
+                  }))
+                : latestContract?.reviewNotes
+                  ? [
+                      {
+                        id: "review",
+                        title: "Activation blocked",
+                        detail: latestContract.reviewNotes,
+                        status: latestContract.status,
+                      },
+                    ]
+                  : []
+            }
+          />
+          <ClientLifecycleCard
+            title="Deposit ladder"
+            empty="No deposits recorded yet."
+            rows={deposits.map((d) => ({
+              id: d.id,
+              title: d.label,
+              detail: d.reference,
+              status: d.status,
+              amount: d.amount,
+              dueDate: d.dueDate?.toISOString() ?? null,
+            }))}
+          />
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <Card>
@@ -442,13 +551,11 @@ export default async function ClientHomePage({
           ) : (
             <p className="text-sm text-sb-muted">PM not assigned yet.</p>
           )}
-          {full.status === ProjectStatus.HANDED_OVER || full.warrantyStart ? (
-            <Link href="/client/warranty" className="mt-3 inline-block">
-              <Button variant="orange" size="sm">
-                Open Warranty
-              </Button>
-            </Link>
-          ) : null}
+          <Link href="/client/warranty" className="mt-3 inline-block">
+            <Button variant="orange" size="sm">
+              {warrantyOpen ? "Open Warranty" : "Deficiency list"}
+            </Button>
+          </Link>
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-medium">Build progress</p>

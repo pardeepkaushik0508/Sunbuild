@@ -6,6 +6,11 @@ import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { resolveClientProject } from "@/lib/client/project";
 import { invoicePaymentBadge } from "@/lib/client/display";
+import {
+  depositPaymentBadge,
+  parseChangeOrderClientTotal,
+} from "@/lib/client/flow";
+import { depositDisplayLabel } from "@/lib/labels";
 
 export default async function ClientPaymentsPage({
   searchParams,
@@ -35,7 +40,7 @@ export default async function ClientPaymentsPage({
         })
       : [{ id: project.id, name: project.name }];
 
-  const [invoices, changeOrders] = await Promise.all([
+  const [invoices, changeOrders, deposits] = await Promise.all([
     prisma.invoice.findMany({
       where: {
         projectId: project.id,
@@ -49,6 +54,10 @@ export default async function ClientPaymentsPage({
         status: { not: ChangeOrderStatus.DRAFT },
       },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.deposit.findMany({
+      where: { projectId: project.id },
+      orderBy: { createdAt: "asc" },
     }),
   ]);
 
@@ -77,6 +86,7 @@ export default async function ClientPaymentsPage({
     title: co.title,
     description: co.description,
     amount: co.amount,
+    displayAmount: parseChangeOrderClientTotal(co.description, co.amount).total,
     status: co.status,
     phase: co.reason,
     actionDate: (co.clientActionAt ?? co.createdAt).toISOString(),
@@ -84,6 +94,20 @@ export default async function ClientPaymentsPage({
     canDecide: co.status === ChangeOrderStatus.PENDING_CLIENT,
     clientComment: co.clientComment,
   }));
+
+  const depositCards = deposits.map((dep) => {
+    const badge = depositPaymentBadge(dep.status, dep.dueDate);
+    return {
+      id: dep.id,
+      label: depositDisplayLabel(dep.label),
+      amount: dep.amount,
+      status: dep.status,
+      paymentLabel: badge.label,
+      paymentTone: badge.tone,
+      dueDate: dep.dueDate?.toISOString() ?? null,
+      reference: dep.reference,
+    };
+  });
 
   return (
     <div className="space-y-5">
@@ -94,10 +118,14 @@ export default async function ClientPaymentsPage({
         activeProjectId={project.id}
       />
       <PageHeader
-        title="Invoices & Payments"
-        description="View invoices and respond to change orders. Online payment is not available in this MVP."
+        title="Deposits, invoices & payments"
+        description="Purchase-agreement deposits, change-order invoices, and pending change orders. Online payment is not available in this MVP."
       />
-      <ClientPaymentsBoard invoices={invoiceCards} changeOrders={coCards} />
+      <ClientPaymentsBoard
+        invoices={invoiceCards}
+        changeOrders={coCards}
+        deposits={depositCards}
+      />
     </div>
   );
 }

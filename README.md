@@ -20,18 +20,25 @@ npm run dev
 
 Open http://localhost:3000
 
-### Demo logins (password for all: `Password123!`)
+### Demo logins — Master Test Data v2.2 (password for all: `Password123!`)
 
 | Role | Email |
 |------|-------|
-| Owner | owner@sunview.homes |
-| CEO | ceo@sunview.homes |
-| Ops Admin | admin@sunview.homes |
-| Sales | sales@sunview.homes |
-| Project Manager | pm@sunview.homes |
-| Bookkeeper | books@sunview.homes |
-| Subcontractor | sub@sunview.homes |
-| Client | client@example.com |
+| All roles (switch in profile) | justin.amaldas@gmail.com |
+| Owner | sunny@sunviewhomes.ca |
+| CEO | anjali@sunviewhomes.ca |
+| Ops Admin | dale@sunviewhomes.ca |
+| Sales | gary@sunviewhomes.ca |
+| Project Manager (SV-1001) | michael@sunviewhomes.ca |
+| Project Manager (SV-1002/1003) | elena@sunviewhomes.ca |
+| Bookkeeper | sjenkins@sunviewhomes.ca |
+| Selections / Warranty | robyn@sunviewhomes.ca |
+| Client — Thompson (SV-1001) | thompson.household@example.ca |
+| Client — Chen (SV-1002) | d.chen@example.ca |
+| Client — Patel (SV-1003) | patel.household@example.ca |
+| Client — Jenkins (SV-1004) | e.jenkins@example.ca |
+| Sub — Framing (SV-1001 only) | dev@bowriverframing.ca |
+| Sub — Cabinetry (SV-1001+1002) | lucia@bowvalleycabinets.ca |
 
 ## Docs
 

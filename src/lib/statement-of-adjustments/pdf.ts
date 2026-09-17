@@ -387,6 +387,13 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     money(calc.depositsToDate, true),
     { bold: true }
   );
+  if ((calc.changeOrderPrepayments ?? 0) > 0) {
+    drawMoneyRow(
+      "Change order prepayments received",
+      money(calc.changeOrderPrepayments, true),
+      { muted: true }
+    );
+  }
 
   y -= 28;
   ensureSpace(44);
@@ -541,6 +548,9 @@ export function generateStatementOfAdjustmentsHtml(
     <tr class="bold"><td>TOTAL SALES PRICE</td><td class="amt">${money(calc.totalSalesPrice)}</td></tr>
     ${depRows}
     <tr class="bold"><td>Deposits to Date to Sunview</td><td class="amt">${money(calc.depositsToDate, true)}</td></tr>
+    ${(calc.changeOrderPrepayments ?? 0) > 0
+      ? `<tr class="muted"><td>Change order prepayments received</td><td class="amt">${money(calc.changeOrderPrepayments, true)}</td></tr>`
+      : ""}
   </table>
   <div class="cash-bar">
     <span>CASH TO CLOSE (Balance as of today)</span>

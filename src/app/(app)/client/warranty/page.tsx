@@ -11,6 +11,7 @@ import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
+import { isWarrantyCoverageActive } from "@/lib/client/flow";
 
 export default async function ClientWarrantyPage() {
   const session = await requireRole(Role.CLIENT);
@@ -28,23 +29,24 @@ export default async function ClientWarrantyPage() {
     prisma.project.findMany({
       where: {
         id: { in: projectIds },
-        warrantyStart: { not: null },
-        OR: [
-          { warrantyEnd: null },
-          { warrantyEnd: { gte: new Date() } },
-        ],
       },
-      select: { id: true, name: true, warrantyEnd: true },
+      select: { id: true, name: true, warrantyStart: true, warrantyEnd: true },
     }),
   ]);
 
-  const warrantyActive = projects.length > 0;
+  const coveredProjects = projects.filter((p) =>
+    isWarrantyCoverageActive({
+      warrantyStart: p.warrantyStart,
+      warrantyEnd: p.warrantyEnd,
+    })
+  );
+  const warrantyActive = coveredProjects.length > 0;
 
   return (
     <div>
       <PageHeader
         title="Warranty"
-        description="Submit and track warranty requests"
+        description="Pre-possession deficiencies and statutory warranty claims after possession"
         actions={
           <Link href="/client">
             <Button variant="outline" size="sm">
@@ -70,7 +72,7 @@ export default async function ClientWarrantyPage() {
                 <option value="" disabled>
                   Select project
                 </option>
-                {projects.map((p) => (
+                {coveredProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                     {p.warrantyEnd
@@ -102,7 +104,8 @@ export default async function ClientWarrantyPage() {
       ) : (
         <Card className="mb-6">
           <p className="text-sm text-sb-muted">
-            Warranty coverage begins after handover and CEO approval.
+            Warranty claim intake opens at possession. Pre-possession
+            deficiencies logged by your builder still appear below.
           </p>
         </Card>
       )}

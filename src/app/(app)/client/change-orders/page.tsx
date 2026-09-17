@@ -5,6 +5,7 @@ import { ClientChangeOrdersBoard } from "@/components/client/change-orders-board
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { resolveClientProject } from "@/lib/client/project";
+import { parseChangeOrderClientTotal } from "@/lib/client/flow";
 
 export default async function ClientChangeOrdersPage({
   searchParams,
@@ -47,6 +48,7 @@ export default async function ClientChangeOrdersPage({
     title: co.title,
     description: co.description,
     amount: co.amount,
+    displayAmount: parseChangeOrderClientTotal(co.description, co.amount).total,
     status: co.status,
     phase: co.reason,
     scheduleImpact: co.scheduleImpact,
@@ -67,7 +69,7 @@ export default async function ClientChangeOrdersPage({
       />
       <PageHeader
         title="Change Orders"
-        description="Approve or deny pending changes. Approved and denied orders stay available here."
+        description="Only the household authorized signatory may e-sign. Approved, completed, and denied orders stay available here."
       />
       <ClientChangeOrdersBoard changeOrders={coCards} />
     </div>

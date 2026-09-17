@@ -243,6 +243,7 @@ function navForRole(
         [
           { label: "Overview", href: "/client", icon: LayoutDashboard },
           { label: "Selections", href: "/client/selections", icon: Home },
+          { label: "Change Orders", href: "/client/change-orders", icon: FileText },
           { label: "Schedule", href: "/client/schedule", icon: CalendarDays },
           { label: "Calendar", href: "/client/calendar", icon: CalendarDays },
           { label: "Payments", href: "/client/payments", icon: Receipt },

@@ -28,6 +28,7 @@ import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from
 import { EMPTY_FIELD_LABEL, LOT_PLAN_LABEL } from "@/lib/labels";
 import { loadProjectSubcontractorPayments } from "@/lib/payments/subcontractor-summary";
 import { financeRolesCanSeeAllSubPayments } from "@/lib/payments/invoice-flow";
+import { sessionHasFinanceAccess } from "@/lib/authorization";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { loadCompanySubcontractors } from "@/lib/users/subcontractors";
@@ -49,7 +50,11 @@ const MODULE_LINKS = [
   { label: "Photos", href: "photos" },
   { label: "Selections", href: "selections" },
   { label: "Change Orders", href: "change-orders" },
-  { label: "Statement of Adjustments", href: "statement-of-adjustments" },
+  {
+    label: "Statement of Adjustments",
+    href: "statement-of-adjustments",
+    financeOnly: true as const,
+  },
   { label: "Warranty", href: "warranty" },
 ];
 
@@ -59,6 +64,10 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
     Role.OWNER,
     Role.CEO,
   ]);
+  const canViewFinance = sessionHasFinanceAccess(session);
+  const moduleLinks = MODULE_LINKS.filter(
+    (l) => !("financeOnly" in l && l.financeOnly) || canViewFinance
+  );
   const { id } = await params;
   const projectIds = await getAccessibleProjectIds(session);
   if (!projectIds.includes(id)) notFound();
@@ -314,13 +323,17 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
 
       <ClientInfoStrip
         items={[
-          {
-            id: "deposit",
-            label: "Client Deposit",
-            value: deposits[0]
-              ? formatCurrency(deposits[0].amount)
-              : "No deposit yet",
-          },
+          ...(canViewFinance
+            ? [
+                {
+                  id: "deposit",
+                  label: "Client Deposit",
+                  value: deposits[0]
+                    ? formatCurrency(deposits[0].amount)
+                    : "No deposit yet",
+                },
+              ]
+            : []),
           {
             id: "client",
             label: "Client Name",
@@ -410,7 +423,8 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Pricing Metrics */}
+        {/* Pricing Metrics — omitted for roles without finance access (CEO). */}
+        {canViewFinance ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-sb-border text-xs">
           <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
             <span className="text-sb-muted block uppercase tracking-wider text-[10px] font-semibold">
@@ -442,7 +456,10 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             <span className="text-[11px] text-emerald-700">Original + Approved COs</span>
           </div>
         </div>
+        ) : null}
 
+        {canViewFinance ? (
+        <>
         {/* Statement of Adjustments (closing) */}
         <div className="flex flex-col gap-3 rounded-[14px] border border-sb-border bg-sb-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2">
@@ -518,9 +535,11 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             ) : null}
           </div>
         ) : null}
+        </>
+        ) : null}
       </Card>
 
-      {projectBudget.changeOrders.length > 0 ? (
+      {canViewFinance && projectBudget.changeOrders.length > 0 ? (
         <Card className="mb-6">
           <h2 className="text-lg font-semibold text-sb-ink">
             Approved change orders
@@ -693,7 +712,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       <Card>
         <h2 className="text-lg font-semibold text-sb-ink">Project modules</h2>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {MODULE_LINKS.map((mod) => (
+          {moduleLinks.map((mod) => (
             <Link
               key={mod.href}
               href={

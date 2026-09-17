@@ -49,9 +49,9 @@ export function isClientInvoicePayee(payeeUserId: string | null | undefined) {
 }
 
 export function financeRolesCanSeeAllSubPayments(role: Role) {
+  // Master Test Data v2.2 §2 / §22.4 — CEO has no finance payload access.
   return (
     role === Role.OWNER ||
-    role === Role.CEO ||
     role === Role.PROJECT_MANAGER ||
     role === Role.BOOKKEEPER ||
     role === Role.OPERATIONS_ADMIN

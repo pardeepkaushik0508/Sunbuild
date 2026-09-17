@@ -99,10 +99,14 @@ export type ContractFinancialSummary = {
 };
 
 /**
- * Authoritative server-side contract total calculations.
- * Formula:
- * Subtotal = Base Contract Price + Original Allowances + Approved Upgrades - Discounts
- * Total = Subtotal + (Subtotal * TaxRate / 100)
+ * Authoritative Purchase Agreement totals (Sales Information Sheet / Master Test Data v2.2).
+ *
+ * Allowances are budgets carved out of the base price — they are NOT added to the
+ * purchase price (v1 defect #3). GST rebate is subtracted after tax.
+ *
+ * Subtotal (before GST) = Base + Extra selections/upgrades at signing
+ * GST = Subtotal × taxRate
+ * Total = Subtotal + GST − GST rebate (discountsTotal)
  */
 export function calculateContractTotals(
   input: ContractFinancialInputs
@@ -112,12 +116,10 @@ export function calculateContractTotals(
   const upgradesTotal = roundMoney(input.upgradesTotal ?? 0);
   const discountsTotal = roundMoney(input.discountsTotal ?? 0);
 
-  const subtotal = roundMoney(
-    basePrice + allowanceTotal + upgradesTotal - discountsTotal
-  );
+  const subtotal = roundMoney(basePrice + upgradesTotal);
   const taxRate = input.taxRate != null && input.taxRate >= 0 ? input.taxRate : 5.0; // 5% Alberta GST default
   const taxAmount = roundMoney((subtotal * taxRate) / 100);
-  const totalContractPrice = roundMoney(subtotal + taxAmount);
+  const totalContractPrice = roundMoney(subtotal + taxAmount - discountsTotal);
 
   return {
     basePrice,

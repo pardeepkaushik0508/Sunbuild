@@ -1,0 +1,844 @@
+SUNVIEW CUSTOM HOMES
+System Integration & Master Test Data Package
+Version 2.2 · Sunview-only MVP · Four community projects · 17 September 2026
+Supersedes Version 2.1. Four projects, one per community. Eight purchasers grouped into four households, each holding a single
+client portal account. All figures reconcile; Section 23 states the assertions a seed script must pass.
+Attribute 	Specification
+Document scope 	Master fixture data for build, QA and demo environments
+Operating scope 	Sunview Custom Homes only — single operating company for MVP
+Test projects 	Four — one per community. SV-1001 is the primary fixture.
+Purchasers 	Eight, grouped into four households. One portal account per household.
+Contract basis 	SV Purchase & Sale Agreement (Firm variant), Feb 2025 template
+Currency 	CAD. All amounts GST-exclusive unless the line says otherwise
+Simulation date 	17 September 2026 (Thursday) — all relative statuses computed from this
+Jurisdiction 	Alberta, Canada. New Home Buyer Protection Act applies
+Data classification 	Synthetic. No real personal information. ID numbers are DEMO-prefixed.
+0 · Scope change and review findings
+0.1 Scope change in Version 2.1
+Change 	Effect on this package
+Aspen Living removed 	All users, communities, clients and the AL-2001 project are deleted from the fixture set.
+Brilliance Homes removed 	All users, communities, clients and the BR-3001 project are deleted from the fixture set.
+Sunview becomes the sole operating
+company
+Company switcher has a single entry; cross-company isolation cannot be exercised by
+fixture data.
+Replacement fixtures added 	Three further Sunview projects restore the condition-gate, contract-validation and
+client-isolation coverage the removed companies had provided. See Section 22.
+0.2 Structural change in Version 2.2
+Change 	Effect on this package
+Community becomes the project 	The four communities are now the four test projects: SV-1001 Clearwater Park, SV-1002
+Waterford, SV-1003 Southshore, SV-1004 Edgefield Phase 3.
+Purchasers grouped into households 	Eight purchasers across four households: Thompson (2), Chen (1), Patel (4), Jenkins (1). The
+household, not the individual, is the contracting client.
+One client account per household 	Version 2.1 gave every named purchaser their own login. That produced ambiguous change
+order approvals — CO-1002 was signed by Liam Thompson and CO-1004 by Sarah
+Thompson, with nothing recording whether either signature bound the other. One account
+per household removes the ambiguity.
+Sunview Master Test Data v2.2 · 1
+
+-- 1 of 19 --
+
+Change 	Effect on this package
+Authorized signatory introduced 	Each household designates one signatory who can approve and e-sign on behalf of the
+group. Section 4.2 sets the rule and the open threshold question.
+The company-scoping layer stays in the codebase. Removing the second and third tenants removes the test data, not the
+architecture — every query remains company-scoped so a second company can be added later without a migration. Section 22.3
+sets out how to prove that boundary still holds with one tenant.
+0.3 Defects corrected from Version 1
+Version 1 contained eleven defects that would fail the validation gates defined in the lifecycle flow. Each is listed with the
+correction made.
+# Defect in Version 1 	Correction in Version 2
+1 Deposit schedule did not reconcile 	Five stages of $28,750 summed to $143,750 against a $603,750 contract, and
+the balance on closing was absent. Ladder rebuilt to the contract's six lines;
+deposits plus balance now equal the total exactly.
+2 Two conflicting payment models 	Both a deposit ladder and milestone progress draws billed against the same
+purchase price — roughly $230,000 of double counting. The purchase
+agreement uses deposits plus balance on closing; progress draws removed and
+raised as an open question (Section 24).
+3 Allowances contradicted the contract 	Contract showed $15,000 of selection allowances; the reconciliation table
+listed $69,500. Allowances are budgets carved out of the base price, not an
+addition to it. The additive line is removed and the $69,500 sits inside the base
+scope.
+4 Conditions absent entirely 	No Schedule E conditions, no condition dates, no waiver records — the single
+largest gap. Section 7 adds both parties' conditions with dates and outcomes,
+and ties deposit 2 to their removal.
+5 Construction began before the contract was
+firm
+Commencement 15 Jan 2026 preceded any condition clearance. Contract
+dates moved to Nov–Dec 2025 so the build starts after firm status.
+6 Possession date is a statutory holiday 	30 September is the National Day for Truth and Reconciliation. Internal
+drafting notes prohibit Canada-wide statutory holidays. Possession moved to
+Friday 2 October 2026.
+7 Schedule was physically impossible 	Electrical rough-in at 95% and plumbing at 90% while insulation and drywall
+stood at 90% — you cannot close a wall over incomplete rough-in, nor pass
+inspection. Rough-ins set to 100%, pre-drywall inspection added as the gating
+milestone.
+8 Change orders unreconciled 	CO-1004 was fully executed but never billed; CO-1001 was invoiced while still
+unsigned; none carried GST or the administrative fee. All corrected, and
+CO-1004 linked to the countertop allowance it duplicated.
+9 Possession sequence missing 	No 35-day notice, no walkthrough, no Deficiency List. Section 18 adds the
+sequence; the notice was due 28 Aug 2026 and is recorded as issued 26 Aug.
+10 Purchasers shared one account 	Liam and Sarah Thompson held a single login, yet CO-1002 and CO-1004 were
+e-signed by each of them separately. Split into two accounts with distinct
+emails.
+11 Isolation was untestable 	A single client account, a single project and no negative fixtures meant no
+access boundary could be proven. Version 2.1 addresses this within Sunview:
+three client accounts, two subcontractors at different scopes, a deactivated
+user and two further projects (Section 22).
+Sunview Master Test Data v2.2 · 2
+
+-- 2 of 19 --
+
+Also removed: a stray line of chat text carried into the Version 1 preamble, and the 'Zero-Email Protocol' framing — email is the
+contractual channel for notice under Clause VII and cannot be switched off.
+1 · Corporate identity
+Attribute 	Specification
+Operating company 	Sunview Custom Homes
+Internal reference 	SV-001
+Head office 	1000 Sunview Drive, Calgary, AB
+Main line 	(403) 555-0100
+Contracting entity 	Sunview Custom Homes Ltd. — the party named in the Feb 2025 agreement templates
+Operating status 	Active — sole company in the MVP
+Tenancy model 	Company-scoped throughout. A second company can be added later without schema change.
+Sunview is the contracting entity in every supplied agreement template, so the MVP runs entirely on documents that exist. No
+template had to be assumed.
+2 · User accounts and permission tiers
+Email is mandatory for every account: it is the legal notice channel under Clause VII and the e-signing identity. Version 1
+carried no email addresses.
+Name 	Email 	Role 	Company 	Finance 	MFA
+Sunny Sharma 	sunny@sunviewhomes.ca 	Owner 	Sunview 	Yes 	Required
+Anjali Sharma 	anjali@sunviewhomes.ca 	CEO 	Sunview 	No 	Required
+Dale Whitfield 	dale@sunviewhomes.ca 	Operations Admin 	Sunview 	No 	Required
+Gary Arora 	gary@sunviewhomes.ca 	Sales Manager 	Sunview 	No 	Optional
+Michael Mayhew 	michael@sunviewhomes.ca Project Manager 	Sunview 	No 	Optional
+Sarah Jenkins 	sjenkins@sunviewhomes.ca Bookkeeper 	Sunview 	Yes 	Required
+Robyn Fletcher 	robyn@sunviewhomes.ca 	Selections + Warranty Sunview 	No 	Optional
+Elena Vasquez 	elena@sunviewhomes.ca 	Project Manager 	Sunview 	No 	Optional
+Thompson Household thompson.household@examp
+le.ca
+Client — 2 purchasers External — SV-1001 	No 	Optional
+Chen Household 	d.chen@example.ca 	Client — 1 purchaser External — SV-1002 	No 	Optional
+Patel Household 	patel.household@example.ca Client — 4 purchasers External — SV-1003 	No 	Optional
+Jenkins Household 	e.jenkins@example.ca 	Client — 1 purchaser External — SV-1004 	No 	Optional
+Dev Patel 	dev@bowriverframing.ca 	Subcontractor 	SV-1001 only 	No 	Optional
+Lucia Romero 	lucia@bowvalleycabinets.ca Subcontractor 	SV-1001, SV-1002 	No 	Optional
+Tom Beaulieu 	tom@sunviewhomes.ca 	Sales Manager —
+DEACTIVATED
+Sunview 	No 	—
+Sunview Master Test Data v2.2 · 3
+
+-- 3 of 19 --
+
+Four client accounts, one per household, not one per person. Eight individuals are named on contracts but only four can log in —
+see Section 4. Dev Patel (the subcontractor) is deliberately surnamed to collide with the Patel household; he must have no access
+whatever to SV-1003, which catches any name-matching shortcut in the access layer.
+Three fixtures exist purely to break things: Tom Beaulieu is deactivated and must lose access immediately; Anjali Sharma as CEO
+must receive no financial field in any API payload, not merely one hidden in the UI; and Dev Patel is scoped to a single job while
+Lucia Romero spans two, so job-level scoping can be told apart from company-level.
+Robyn Fletcher holds two functions — Selections Coordinator and 1-Year Warranty Desk — and neither exists in the approved role
+matrix. This needs resolving before build: either two roles, or one Service Coordinator role scoped to selections support and
+warranty claims across projects, with no finance access.
+3 · Project registry
+For MVP testing each community is modelled as one project. Four communities, four projects.
+Project 	Community 	Municipality 	Household 	PM 	Stage
+SV-1001 	Clearwater Park 	Chestermere, AB 	Thompson 	M. Mayhew 	Finishing — 91.5%
+SV-1002 	Waterford 	Chestermere, AB 	Chen 	E. Vasquez 	Conditions period
+SV-1003 	Southshore 	Chestermere Lake, AB Patel 	E. Vasquez 	Build — selections
+open
+SV-1004 	Edgefield Phase 3 	Strathmore, AB 	Jenkins 	Unassigned 	Contract under
+review
+Modelling the community as the project is a testing simplification. In production a project is one home on one lot, and a
+community holds many projects. The schema already supports that — community is an attribute of the project, not a parent of it
+— so no migration is needed when the distinction is restored.
+4 · Purchaser groups and client portal access
+4.1 The eight purchasers
+Eight individuals are named across four contracts. They are grouped into households, and the household is what holds the
+portal account.
+Household 	Project 	# Named purchaser 	Role on contract 	Individual email
+Thompson 	SV-1001 	1 Liam Thompson 	Authorized signatory 	liam.thompson@example.ca
+2 Sarah Thompson 	Co-purchaser 	sarah.thompson@example.ca
+Chen 	SV-1002 	1 David Chen 	Authorized signatory 	david.chen@example.ca
+Patel 	SV-1003 	1 Rahul Patel 	Authorized signatory 	rahul.patel@example.ca
+2 Purvi Patel 	Co-purchaser 	purvi.patel@example.ca
+3 Aarav Patel 	Co-purchaser 	aarav.patel@example.ca
+4 Neha Patel 	Co-purchaser 	neha.patel@example.ca
+Jenkins 	SV-1004 	1 Emily Jenkins 	Authorized signatory 	emily.jenkins@example.ca
+Individual emails are still captured for every named purchaser. Clause VII makes the email of record the channel for contractual
+notice, and every person on the contract must receive notices — so notice goes to all named purchasers even though only the
+household logs in.
+Sunview Master Test Data v2.2 · 4
+
+-- 4 of 19 --
+
+4.2 Portal accounts
+Account 	Login email 	Project 	Purchasers Approval authority
+Thompson Household 	thompson.household@example.
+ca
+SV-1001 	2 	Liam Thompson
+Chen Household 	d.chen@example.ca 	SV-1002 	1 	David Chen
+Patel Household 	patel.household@example.ca 	SV-1003 	4 	Rahul Patel — see 4.3
+Jenkins Household 	e.jenkins@example.ca 	SV-1004 	1 	Emily Jenkins
+4.3 Why one account per household
+Version 2.1 gave each named purchaser their own login. On SV-1001 that produced two different signatures on two change
+orders — CO-1002 by Liam, CO-1004 by Sarah — with nothing in the record establishing whether either signature bound the
+other purchaser. On a four-purchaser contract like the Patel household, the same arrangement would make it unclear which
+of four people could authorise a change order, and whether the other three had agreed.
+The model is therefore: the household holds one portal account; the contract names every purchaser; one purchaser is
+designated authorized signatory and is the only party who can approve or e-sign; the signature record captures the named
+individual, the account, and the authority basis.
+Concern 	Rule
+Who can log in 	One shared household account per project.
+Who can approve a change order 	The designated authorized signatory only.
+What the signature record stores 	Named individual · household account · authority basis · timestamp · IP.
+What co-purchasers receive 	All contractual notices by email, and read access is available if a second login is later granted.
+Above a value threshold 	All named purchasers countersign, rather than the signatory alone — threshold to be set,
+see 24.13.
+Changing the signatory 	Requires PM action and writes an audit entry. Not self-service.
+A shared household login is a deliberate trade-off. It removes approval ambiguity but weakens attribution, because the account
+alone no longer identifies who acted. That is why the signature record must name the individual and the authority basis, not
+merely the account.
+5 · SV-1001 — Clearwater Park (primary fixture)
+Field 	Value
+Project identifier 	SV-1001
+Designation 	Clearwater Park — Thompson Residence
+Community 	Clearwater Park, Chestermere
+Household 	Thompson — 2 named purchasers, one portal account
+Authorized signatory 	Liam Thompson
+Civic address 	101 Clearwater Dr, Chestermere, AB T1X 0A1
+Legal description 	Block 4 · Lot 17 · Plan 2410883
+Sunview Master Test Data v2.2 · 5
+
+-- 5 of 19 --
+
+Field 	Value
+Floor plan (Schedule C) 	Moraine — 2,450 sq ft, 4 bed, 3 bath
+Floor areas 	Main 1,180 sq ft · Second 1,270 sq ft · Basement 1,050 sq ft (undeveloped)
+Project manager 	Michael Mayhew
+Construction start 	15 January 2026
+Possession 	Friday 2 October 2026 at 12:00 noon
+Schedule progress 	91.5% duration-weighted at simulation date
+Status 	Active execution — finishing stage
+Floor areas are new in this version. They are required to compute the lighting allowance ($1.50/sq ft main and second, $1.00/sq ft
+basement) and to drive conditional visibility in the selections form.
+6 · Purchase agreement PC-1001
+6.1 Contract identity
+Field 	Value
+Contract number 	PC-1001
+Variant 	FIRM possession date — Clause 3 and Schedule A Clause 4(a) struck out
+Price increase right 	Not retained — firm variant
+Contract date 	12 November 2025
+Builder signature date 	14 November 2025
+Purchaser receipt date 	17 November 2025
+Offer irrevocable until 	5:00 pm, 24 November 2025 — met
+Previous agreement superseded 	No — Clause 49 not initialled
+Purchaser's lawyer 	Dominic Hale, Hale & Reyes LLP · (403) 555-0301
+Realtor 	None registered on this contract
+Source document 	PC-1001.pdf — immutable, SHA-256 recorded
+6.2 Price build-up
+Line 	Basis 	CAD
+Base selling price 	Agreed architectural scope, incl. lot 	$535,000.00
+Extra selections and promotions at signing 	Structural and floor plan adjustments 	$25,000.00
+Subtotal before GST 	Base + extra selections 	$560,000.00
+Add GST @ 5% 	CompanyConfig.GST_RATE 	$28,000.00
+Less GST New Housing Rebate 	$0.00 — ineligible, price exceeds $450,000 	$0.00
+TOTAL PURCHASE PRICE 	Binding obligation at execution 	$588,000.00
+Sunview Master Test Data v2.2 · 6
+
+-- 6 of 19 --
+
+Version 1 added a third line of $15,000 for 'Selection Allowances'. Allowances are budgets carved out of the base price, not an
+addition to it — adding them inflated the contract and contradicted the $69,500 of allowances in the reconciliation table. The line
+is removed.
+The rebate thresholds written into the Feb 2025 template ($350,000–$450,000 declining) must be confirmed as current before
+production. They are configuration, not constants.
+7 · Schedule E conditions
+Absent from Version 1. Until these clear, the agreement can be declared null and void and every deposit returned — so
+nothing downstream may be created against a contract still in its conditions period.
+Party 	# Condition 	Date 	Outcome
+Purchaser 	1 Approval of mortgage financing on terms
+satisfactory to the purchaser
+12 Dec 2025 	Satisfied 8 Dec 2025
+Purchaser 	2 Sale of the purchaser's existing home at 88
+Copperfield Way SE
+12 Dec 2025 	Waived 11 Dec 2025
+Builder 	1 Confirmation of clear title to the Land 	19 Dec 2025 	Satisfied 15 Dec 2025
+Builder 	2 Issuance of the municipal development permit 19 Dec 2025 	Satisfied 16 Dec 2025
+Event 	Dat
+e
+Consequence
+All purchaser
+conditions
+resolved
+11
+Dec
+emb
+er
+202
+5
+—
+All builder
+conditions
+resolved
+16
+Dec
+emb
+er
+202
+5
+—
+CONTRACT
+FIRM
+16
+Dec
+em
+ber
+202
+5
+Deposit 2 becomes due; build may be
+scheduled
+Deposit 2
+received
+18
+Dec
+emb
+er
+202
+5
+Two days after the triggering event
+48-hour
+notice to
+waive served
+Not
+use
+d on
+this
+cont
+ract
+Fixture for the notice flow lives on SV-1002
+Sunview Master Test Data v2.2 · 7
+
+-- 7 of 19 --
+
+Deposit 2 has no calendar due date in the contract — it is payable on removal of the purchaser's conditions. This is the one
+event-driven line in the ladder and the most common modelling error.
+8 · Contract deposit schedule
+Line Contract basis 	Due 	Amount Method 	Status
+1 	On signing of the Agreement 	14 Nov 2025 	$25,000.00 E-transfer 	Received 14 Nov 2025
+2 	On removal of purchaser's
+conditions
+Event-driven 	$25,000.00 Branch deposit Received 18 Dec 2025
+3 	Further deposit, by date 	2 Mar 2026 	$20,000.00 E-transfer 	Received 2 Mar 2026
+4 	Further deposit, by date 	3 Aug 2026 	$20,000.00 — 	OVERDUE — 45 days
+5 	Further deposit, by date 	25 Sep 2026 	$20,000.00 — 	Scheduled
+6 	Balance of the Purchase Price on
+closing
+2 Oct 2026 	$478,000.00 — 	Pending — recomputed
+by the SOA
+Validati
+on
+Computation 	Result
+Deposit
+s 1–5
+plus
+balance
+on
+closing
+equal
+the total
+purchas
+e price
+$110,000 + $478,000 = $588,000 	PASS
+GST
+equals
+5% of
+base
+plus
+extra
+selectio
+ns
+5% × $560,000 = $28,000 	PASS
+Possessi
+on date
+is
+neither
+a
+weeken
+d nor a
+Canada-
+wide
+statutor
+y
+holiday
+Friday 2 Oct 2026 	PASS
+Accrued interest on the overdue deposit 4: $20,000 at RBC Prime (5.95%) plus 10% per annum for 45 days = $393.29. Computed
+and displayed, never posted automatically — posting interest is an explicit bookkeeper action.
+Version 1 named the stages Foundation, Lock-Up and Finishes. That is progress-draw language from a construction contract, not
+the purchase agreement's deposit ladder. Naming realigned to the contract.
+Sunview Master Test Data v2.2 · 8
+
+-- 8 of 19 --
+
+9 · Subcontractor and vendor directory
+Carried forward from Version 1 unchanged — 34 trades across 17 specialisations, two vendors each for redundancy testing.
+Dispatch numbers follow the +1 403/587/825 555-02xx block.
+Specialisation 	Vendor A 	Vendor B 	Dispatch block
+Excavation & earthmoving 	Prairie Earthworks 	Foothills Excavating 	0201–0202
+Concrete & foundations 	Solid Foundation Calgary 	Rocky View Concrete Prep 	0203–0204
+Framing carpentry 	Bow River Framing & Carpentry 	Foothills Custom Framers 	0205–0206
+Roofing & envelopes 	Peak Protection Roofing 	Western Sky Roofers 	0207–0208
+Exterior masonry 	Foothills Masonry & Stone 	Calgary Brick & Block 	0209–0210
+Plumbing systems 	Streamline Plumbers Calgary 	Instant Flow Plumbing 	0211–0212
+HVAC & ventilation 	Advanced Heating & Air 	Prairie Wind Heating & Cooling 	0213–0214
+Electrical installations 	Hardwire Electric Calgary 	Chinook Spark & Wire 	0215–0216
+Building insulation 	WarmHome Insulation Calgary 	Peak Energy Installers 	0217–0218
+Drywall & acoustic 	Stampede City Drywall 	Alberta Mud & Tape Pros 	0219–0220
+Finishing painting 	Heritage Paint & Decorators 	Summit Coating Solutions 	0221–0222
+Cabinetry & millwork 	Bow Valley Cabinets 	Custom Woodcraft Calgary 	0223–0224
+Stone countertops 	Rocky Mountain Stone 	Calgary Quartz & Granite 	0225–0226
+Hard surface flooring 	Bow Valley Hardwood & Tile 	Stampede Floor Coverings 	0227–0228
+Interior finish carpentry 	Foothills Finishers 	Calgary Trim & Door 	0229–0230
+Civil & landscaping 	Chinook Landscapes 	Prairie Hardscapes 	0231–0232
+Turnover cleaning 	Crystal Clean Construction 	Post-Build Maids Calgary 	0233–0234
+10 · Committed purchase orders
+Ref 	Scope 	Vendor 	Value Status
+PO-1001 Excavation & earthmoving 	Prairie Earthworks 	$18,500.00 Approved
+PO-1002 Structural concrete 	Solid Foundation Calgary 	$42,500.00 Approved
+PO-1003 Framing structure 	Bow River Framing & Carpentry 	$68,500.00 Approved
+PO-1004 Roofing systems 	Peak Protection Roofing 	$18,500.00 Pending sign-off
+PO-1005 Electrical rough-in 	Hardwire Electric Calgary 	$24,800.00 Approved
+PO-1006 Drywall & taping 	Stampede City Drywall 	$22,500.00 Draft
+PO-1007 Custom cabinetry 	Bow Valley Cabinets 	$31,200.00 Approved
+Total
+committed
+$226,500.00
+Sunview Master Test Data v2.2 · 9
+
+-- 9 of 19 --
+
+PO-1004 remains pending sign-off although roofing completed in May — an approval backlog fixture for the AP dashboard, and a
+genuine control failure worth surfacing in testing.
+11 · Change orders — Schedule B
+Every change order now carries the administrative fee and GST that Clause 12 requires, and the lifecycle states match the
+sequence: the builder decides before the client ever sees a price.
+Ref 	Description 	Lines Admin 	GST 	Total State
+CO-1001 Kitchen island dimension & finish
+upgrade
+$4,250.00 $250.00 $225.00 	$4,725.00 Sent to client — awaiting
+e-sign
+CO-1002 Fireplace mantle & stone tile
+cladding
+$6,800.00 $250.00 $352.50 	$7,402.50 Complete — signed by L.
+Thompson, signatory
+CO-1003 Extended multi-slide patio door
+assembly
+$5,200.00 	— 	— 	— Builder decision pending
+CO-1004 Premium Calacatta quartz
+fabrication
+$12,500.00 $250.00 $637.50 $13,387.50 Complete — signed by L.
+Thompson, signatory
+CO-1005 Allowance overage roll-up — 6
+categories
+$3,900.00 $250.00 $207.50 	$4,357.50 Draft — from selections
+CO-1006 Basement rough-in for future wet
+bar
+$3,400.00 	— 	— 	— Client declined
+CO-1007 Triple-pane windows, west
+elevation
+$9,800.00 	— 	— 	— Builder declined — lead
+time
+CO-1008 Gas line to rear deck for BBQ 	$1,250.00 $250.00 	$75.00 	$1,575.00 Deposit due 20 Sep — will
+lapse
+Version 1 had CO-1001 invoiced while still unsigned, and CO-1004 fully executed but never billed at all. Both corrected. CO-1006,
+CO-1007 and CO-1008 are new fixtures that exercise the client-decline, builder-decline and lapse branches — Version 1 had no
+terminal states at all.
+Both executed change orders on SV-1001 are now signed by Liam Thompson as the household's authorized signatory. In Version
+2.1 one was signed by Liam and the other by Sarah from separate logins, with no record of whose signature bound the contract.
+Sarah remains a named purchaser and receives every notice.
+CO-1008 carries a $500 change order deposit due 20 September. If unpaid, the change order lapses and the original specification
+is built. This is the fixture for the automatic-lapse path, which must require PM confirmation rather than firing silently.
+12 · Selections and allowance reconciliation
+Allowance budgets sit inside the base price. Overspend becomes a change order; the countertop overspend was already
+captured as CO-1004 and is shown linked rather than double counted.
+Category 	Selection 	Allowance 	Actual 	Variance Disposition
+Countertops 	Calacatta quartz 	$7,500.00 	$20,000.00 	+$12,500.00 CO-1004 executed
+Cabinets 	White shaker profile 	$18,000.00 	$19,500.00 	+$1,500.00 CO-1005 draft
+Flooring 	Engineered oak hardwood 	$12,000.00 	$11,800.00 	−$200.00 Credit — see 24.4
+Lighting 	Premium package B fixtures 	$4,500.00 	$5,200.00 	+$700.00 CO-1005 draft
+Plumbing 	Brushed nickel suite 	$5,000.00 	$5,450.00 	+$450.00 CO-1005 draft
+Sunview Master Test Data v2.2 · 10
+
+-- 10 of 19 --
+
+Appliances 	Stainless steel group 	$8,500.00 	$9,200.00 	+$700.00 CO-1005 draft
+Ceramic tile 	Large format matte porcelain 	$8,000.00 	$8,000.00 	$0.00 On budget
+Doors & trim 	Solid-core black interior 	$6,000.00 	$6,750.00 	+$750.00 CO-1005 draft
+Totals 	$69,500.00 	$85,900.00 	+$16,400.00 $12,500 + $3,900
+Lighting allowance
+check
+Basis 	CAD
+Main floor — 1,180
+sq ft
+$1.50 per sq ft 	$1,770.00
+Second floor —
+1,270 sq ft
+$1.50 per sq ft 	$1,905.00
+Basement — 1,050
+sq ft
+$1.00 per sq ft 	$1,050.00
+Computed
+entitlement
+Sum of floors 	$4,725.00
+Budget carried in
+the selections table
+Manually set 	$4,500.00
+Discrepancy 	Config rate vs stated budget 	$225.00 —
+reconcile
+before seeding
+Version 1 stated $15,000 of allowances in the contract and $69,500 in this table. The contract line is removed; $69,500 is the
+correct figure and it sits within the base price. Selection deadlines are still missing and must be added before the Clause 14 flow
+can be tested.
+13 · Change order prepayments
+Under a purchase agreement the base price is not invoiced — it is collected through the deposit ladder and the balance at
+closing. Only change order charges are billed, payable on or before possession under Clause 12.
+Ref 	Against 	Billed 	Received Status
+INV-1001 CO-1002 — fireplace cladding 	$7,402.50 	$7,402.50 Paid in full
+INV-1002 CO-1004 — Calacatta quartz 	$13,387.50 	$8,000.00 Partial — $5,387.50 outstanding
+Totals 	$20,790.00 	$15,402.50
+Version 1 carried four milestone draws of $57,500 each — $230,000 billed against the same purchase price already covered by
+the deposit ladder. That is double counting, and it is removed. If Sunview genuinely bills some contracts progressively, that is a
+second contract model requiring its own template and its own fixtures (Section 24.2).
+14 · Statement of Adjustments — draft
+Generated, never hand-keyed. Every line derives from the contract, the approved change orders and recorded receipts.
+Line 	Basis 	CAD
+Base home price (including lot cost) 	PC-1001 	$535,000.00
+Extra selection & promotion at signing 	PC-1001 	$25,000.00
+Sunview Master Test Data v2.2 · 11
+
+-- 11 of 19 --
+
+Line 	Basis 	CAD
+Subtotal 	$560,000.00
+Approved upgrade — CO-1002 fireplace cladding 	incl. admin fee 	$7,050.00
+Approved upgrade — CO-1004 Calacatta quartz 	incl. admin fee 	$12,750.00
+Approved upgrade — CO-1008 gas line to deck 	incl. admin fee, at risk 	$1,500.00
+Upgrades subtotal 	3 approved 	$21,300.00
+TOTAL CLOSING / SALE PRICE 	$581,300.00
+GST @ 5% on base price and upgrades 	CompanyConfig 	$29,065.00
+Less GST New Housing Rebate 	Ineligible 	$0.00
+TOTAL SALES PRICE 	$610,365.00
+Less deposits received to date 	Lines 1–3 	−$70,000.00
+Less change order prepayments received 	INV-1001, INV-1002 	−$15,402.50
+CASH TO CLOSE 	Includes deposits 4 and
+5 still owing
+$524,962.50
+The $478,000 balance on closing in the deposit ladder is the figure at execution. Three approved change orders have since raised
+the contract, so the SOA recomputes it to $484,962.50. Cash to close adds the $40,000 of deposits 4 and 5 that remain unpaid.
+CO-1008 is included above but is at risk of lapsing on 20 September. If it lapses, the SOA must regenerate and the total sales price
+falls by $1,575.00 — a useful regression fixture for SOA versioning.
+15 · Project action items
+Task 	Assignee 	Due 	Priority 	Status
+Finalise CO-1005 allowance roll-up pricing Michael Mayhew (PM) 	18 Sep 2026 	High 	In progress
+Approve lighting package overage 	Liam & Sarah Thompson 	18 Sep 2026 	High 	Action required
+Pay CO-1008 change order deposit 	Liam & Sarah Thompson 	20 Sep 2026 	High 	Overdue risk
+Complete hardwood installation — main
+floor
+Bow Valley Hardwood & Tile 18 Sep 2026 	High 	At risk — critical
+path
+Electrical trim-out and fixture set 	Hardwire Electric Calgary 	21 Sep 2026 	Medium 	Booked
+Cabinet hardware and final adjustment 	Bow Valley Cabinets 	22 Sep 2026 	Medium 	Booked
+Deposit 4 arrears follow-up 	Sarah Jenkins (Bookkeeper) Immediate 	High 	45 days overdue
+Final municipal inspection booking 	Michael Mayhew (PM) 	24 Sep 2026 	High 	Not started
+Pre-possession walkthrough 	Client + PM 	1 Oct 2026 	High 	Scheduled
+Version 1 listed 'Complete Branch Circuit Rough-In' as active on site in September, while insulation and drywall stood at 90%.
+Rough-in closed in June; the task is replaced with electrical trim-out, which is what actually happens at this stage.
+16 · Requests for information
+Sunview Master Test Data v2.2 · 12
+
+-- 12 of 19 --
+
+Ref 	Question 	Owner 	Due 	Status
+RFI-1001 Island pendant circuit — outlet and switch
+placement
+Hardwire Electric 	17 Sep 2026 	Open — due today
+RFI-1002 Stair nosing profile at hardwood-to-tile transition Foothills Finishers 	20 Sep 2026 	Under review
+RFI-1003 Ensuite quartz waterfall edge — mitre or eased
+detail
+Rocky Mountain
+Stone
+15 Sep 2026 	Escalated — 2 days
+overdue
+RFI-1004 Deck gas line penetration and sleeve detail 	Streamline Plumbers 18 Sep 2026 	Open — tied to CO-1008
+RFI-1005 Garage-to-house door fire separation
+confirmation
+Michael Mayhew 	12 Sep 2026 	Resolved 11 Sep 2026
+Version 1's overdue RFI asked about a great room window rough opening — framing closed in April, so the question could not
+arise in September. Replaced with finishing-stage questions appropriate to the current phase.
+17 · Construction master schedule
+Phase 	Start 	Finish 	% 	Status
+Excavation & subgrade prep 	15 Jan 2026 	5 Feb 2026 	100% Complete
+Foundation & concrete pour 	6 Feb 2026 	5 Mar 2026 	100% Complete
+Framing & structural sheathing 	6 Mar 2026 	20 Apr 2026 	100% Complete
+Roofing & exterior envelope 	21 Apr 2026 	10 May 2026 	100% Complete
+Electrical rough-in 	11 May 2026 	5 Jun 2026 	100% Complete
+Plumbing & mechanical rough-in 	20 May 2026 	15 Jun 2026 	100% Complete
+Pre-drywall municipal inspection 	16 Jun 2026 	18 Jun 2026 	100% Passed 18 Jun 2026
+Insulation & drywall systems 	19 Jun 2026 	20 Jul 2026 	100% Complete
+Cabinetry & custom millwork 	21 Jul 2026 	25 Aug 2026 	92% 	In progress
+Hardwood, carpet & tile flooring 	26 Aug 2026 	18 Sep 2026 	70% 	At risk — critical path
+Finishing carpentry & paint 	14 Sep 2026 	26 Sep 2026 	25% 	In progress
+Final municipal inspection &
+occupancy permit
+28 Sep 2026 	30 Sep 2026 	0% 	Not started
+Pre-possession inspection 	1 Oct 2026 	1 Oct 2026 	0% 	Scheduled
+Possession 	2 Oct 2026 	2 Oct 2026 	0% 	12:00 noon
+Two milestones were missing and are added: the pre-drywall inspection that gates closing the walls, and the final inspection and
+occupancy permit that gates possession. Rough-in percentages corrected to 100% — drywall cannot be at 90% over incomplete
+rough-in, and no inspector would pass it.
+18 · Possession sequence
+Absent from Version 1 entirely. Clause 4 requires at least 35 days' written notice, and the Deficiency List executed at the
+inspection is the builder's only undertaking on incomplete work.
+Sunview Master Test Data v2.2 · 13
+
+-- 13 of 19 --
+
+Event 	Required by 	Actual 	Status
+35-day possession notice issued 	28 Aug 2026 	26 Aug 2026 	Issued — 2 days early
+Inspection date specified in notice 	— 	1 Oct 2026 	Confirmed with purchasers
+Pre-possession inspection 	1 Oct 2026 	— 	Scheduled
+Deficiency List executed by both parties 	1 Oct 2026 	— 	Pending inspection
+Statement of Adjustments issued 	On or before closing 	Draft v1 	In preparation
+Balance and outstanding deposits received 2 Oct 2026 	— 	Pending
+Keys released 	On payment in full 	— 	Gated — balance must be zero
+Possession 	2 Oct 2026, 12:00 noon — 	Pending
+19 · Deficiency register and warranty
+Deficiency 	Location 	Trade 	Priority 	Status
+Paint touch-up — baseboards and corner
+bead
+Main living area 	Heritage Paint & Decorators 	Normal 	Logged
+Cabinet hinge realignment 	Kitchen upper island 	Bow Valley Cabinets 	Low 	Logged
+Grout line repair in shower pan 	Master ensuite 	Bow Valley Hardwood & Tile 	Normal 	Logged
+Exterior flatwork grading correction 	Front driveway apron 	Prairie Hardscapes 	Critical 	Open review
+Basement 3-way switch correction 	Lower level stairwell 	Hardwire Electric Calgary 	High 	Verified
+19.1 Warranty coverage tiers
+Version 1 modelled a single one-year warranty and then archived the project. Alberta's New Home Buyer Protection Act
+mandates staged coverage well beyond that, and these homes are registered on the public registry.
+Tier 	Coverage 	Expiry from 2 Oct 2026 	Portal access
+1 year 	Labour and materials 	2 October 2027 	Full claim intake
+2 years 	Delivery and distribution systems 	2 October 2028 	Full claim intake
+5 years 	Building envelope 	2 October 2031 	Full claim intake
+10 years 	Structural 	2 October 2036 	Full claim intake
+Archive 	Records retained throughout; archive only at the end of
+the statutory obligation
+After 2 October 2036 	Closed
+Confirm the exact tiers with the warranty provider before building. If the structure above holds, removing client portal access at
+twelve months would leave a homeowner with nine further years of structural coverage and no way to file a claim.
+20 · Notification dispatch matrix
+Trigger 	Recipient 	Timing 	Channels
+Lighting package approval outstanding Liam & Sarah Thompson 	Due today 	In-app · WhatsApp · SMS
+Sunview Master Test Data v2.2 · 14
+
+-- 14 of 19 --
+
+Trigger 	Recipient 	Timing 	Channels
+CO-1008 deposit due — will lapse if
+unpaid
+Liam & Sarah Thompson 	−3 days 	In-app · WhatsApp · SMS
+CO-1001 awaiting e-signature 	Liam & Sarah Thompson 	Immediate 	In-app · WhatsApp · Email
+Deposit 4 arrears — 45 days 	Sarah Jenkins (Bookkeeper) Escalation 	In-app · Email
+RFI-1003 overdue 	Michael Mayhew (PM) 	Overdue 	In-app · WhatsApp
+Flooring at risk on critical path 	Michael Mayhew (PM) 	Immediate 	In-app
+Final inspection booking required 	Michael Mayhew (PM) 	−7 days 	In-app · Email
+Pre-possession walkthrough
+confirmation
+Liam & Sarah Thompson 	−5 days 	Email — contractual notice
+35-day possession notice 	Liam & Sarah Thompson 	Statutory 	Email of record — cannot be
+silenced
+Version 1 described a 'Zero-Email Protocol'. Email cannot be switched off: Clause VII makes the email of record the channel for
+contractual notice, and the Purchaser Information page states notices by email are deemed received on the date of delivery.
+WhatsApp is an operational convenience and does not satisfy a notice obligation.
+21 · Document vault
+Document 	Type 	Version control
+PC-1001.pdf — executed purchase
+agreement
+PURCHASE_AGREEMENT_FIRM 	Immutable — no version may be uploaded over
+it
+Schedule A — terms and conditions 	SCHEDULE_A_TERMS 	Bound to contract version
+Schedule C — Moraine floor plan and
+elevations
+SCHEDULE_C_PLANS 	Versioned
+Schedule D — quality appointments 	SCHEDULE_D_QUALITY_APPOINT
+MENTS
+NOT SUPPLIED — required
+Schedule E — conditions 	SCHEDULE_E_CONDITIONS 	Bound to contract version
+Stamped structural and foundation
+drawings
+DRAWING 	Versioned
+Electrical layout and mechanical schematics DRAWING 	Versioned
+Plumbing supply and drainage isometrics 	DRAWING 	Versioned
+Approved Real Property Report and site
+plan
+DRAWING 	Versioned
+Development and building permits 	PERMIT 	Versioned
+Signed selection schedules 	SELECTIONS_FINAL_PDF 	Snapshot at lock
+CO-1002-Signed.pdf, CO-1004-Signed.pdf CHANGE_ORDER_UPGRADE 	Immutable once signed
+INV-1001.pdf, INV-1002.pdf 	INVOICE 	Versioned
+Statement of Adjustments — draft v1 	STATEMENT_OF_ADJUSTMENTS 	Versioned with input snapshot
+Sunview Master Test Data v2.2 · 15
+
+-- 15 of 19 --
+
+Document 	Type 	Version control
+Pre-drywall inspection sign-off 	PERMIT 	Passed 18 Jun 2026
+Alberta New Home Warranty certificate 	OTHER 	Issued at possession
+Schedule D defines the standard specification against which every upgrade is measured. It is referenced in Clauses I(d), 13 and 15
+but has never been supplied. Without it there is no baseline for the variance model.
+22 · The other three projects
+Each carries a stage SV-1001 cannot cover, so between them the four projects exercise every gate in the lifecycle.
+22.1 SV-1002 — Waterford · Chen household
+Field 	Value
+Household 	Chen — 1 named purchaser, David Chen
+Site address 	201 Waterford Blvd, Chestermere, AB T1X 0B2
+Contract 	PC-1002 · TENTATIVE variant · executed 28 Aug 2026
+Price 	$612,000.00 base · $642,600.00 with GST
+Stage 	Conditions period — financing condition expires 20 Sep 2026, unwaived
+Deposit 1 	$30,000 received 28 Aug 2026
+Deposit 2 	Scheduled, no due date — awaits condition removal
+48-hour notice to waive 	Served 16 Sep 2026 14:10 MDT by email · expires 18 Sep 2026 14:10 MDT
+Price increase right 	Retained — tentative variant, Clause 3 in force
+Exercises 	Condition gate · event-driven deposit · 48-hour notice clock · null-and-void branch ·
+single-purchaser household
+22.2 SV-1003 — Southshore · Patel household
+Field 	Value
+Household 	Patel — 4 named purchasers: Rahul, Purvi, Aarav, Neha
+Authorized signatory 	Rahul Patel
+Site address 	301 Southshore Dr, Chestermere Lake, AB T1X 0C3
+Contract 	PC-1003 · FIRM variant · firm since 4 May 2026
+Price 	$728,000.00 base · $764,400.00 with GST
+Stage 	Active build, 44% — selections package open
+Selections 	4 sections approved and locked · 2 submitted awaiting PM review · 1 returned with
+comments · remainder not started
+Open change order 	CO-2001 · $22,400 elevation and window upgrade · awaiting client approval
+Exercises 	The four-purchaser approval case — the reason the household model exists
+Sunview Master Test Data v2.2 · 16
+
+-- 16 of 19 --
+
+CO-2001 is the marquee fixture. At $22,400 it is the test case for whether the authorized signatory alone may approve, or
+whether all four named purchasers must countersign above a threshold. Until question 24.13 is answered, the seed marks it as
+awaiting the signatory only.
+22.3 SV-1004 — Edgefield Phase 3 · Jenkins household
+Field 	Value
+Household 	Jenkins — 1 named purchaser, Emily Jenkins
+Site address 	401 Edgefield Way, Strathmore, AB T1P 1A1
+Contract 	PC-1004 · FIRM variant · uploaded 12 Sep 2026
+Status 	UNDER REVIEW — extracted but not confirmed
+Deliberate error 1 	Deposit ladder sums to $540,000 against a $655,000 total — must fail validation
+Deliberate error 2 	Possession date 3 Oct 2026 is a Saturday — must be rejected
+Project manager 	Unassigned until activation
+Exercises 	The extraction review screen. If SV-1004 activates cleanly, the validation gates are not
+working.
+22.4 Access-control assertions
+Every assertion is called at the API layer, never through the UI.
+Assertion 	Expected
+Thompson Household requests SV-1003 by changing the URL id 	403 or 404 — never data
+Patel Household requests SV-1001 documents 	403 or 404
+Dev Patel (subcontractor) requests SV-1003 — surname collision with the
+household
+403 — access is by assignment, never by name
+Dev Patel (scoped to SV-1001) requests SV-1002 tasks 	403
+Lucia Romero requests SV-1001 and SV-1002 tasks 	Both succeed — job scoping, not company
+scoping
+Dev Patel requests any finance endpoint 	403
+Anjali Sharma (CEO) requests any endpoint returning money 	No financial field present in the payload
+Michael Mayhew requests the company AR aging report 	403 — no finance access
+Sarah Jenkins requests the company AR aging report 	200 — has finance access
+Tom Beaulieu (deactivated) requests any endpoint 	401 — session invalidated immediately
+Patel Household approves CO-2001 while signed in 	Recorded against Rahul Patel as signatory, not
+the account alone
+A co-purchaser attempts approval without signatory status 	403 — and the attempt is audited
+SV-1002 conditions lapse unwaived 	High-priority alert only — no automatic
+termination
+SV-1004 activation attempted with failing validations 	Blocked with both errors named
+Sunview Master Test Data v2.2 · 17
+
+-- 17 of 19 --
+
+Cross-company isolation remains an acceptance criterion even though one tenant exists. Two ways to keep proving it: assert in an
+integration test that every generated query carries a companyId predicate, or create a throwaway empty tenant in the test
+database only — never in the seed.
+23 · Seed validation assertions
+A seed script must print this table and fail loudly on any row that does not hold.
+# Assertion 	Expected
+1 Base + extra selections = subtotal before GST 	$560,000.00
+2 GST = 5% of subtotal 	$28,000.00
+3 Total purchase price at execution 	$588,000.00
+4 Deposits 1–5 sum 	$110,000.00
+5 Deposits + balance on closing = total purchase price 	PASS
+6 Possession date is not a weekend or Canada-wide statutory holiday 	Fri 2 Oct 2026 — PASS
+7 Contract firm date precedes construction start 	16 Dec 2025 < 15 Jan 2026
+8 Deposit 2 due date derives from condition removal, not a calendar date 	Event-driven — PASS
+9 Allowance total across 8 categories 	$69,500.00
+10 Allowance variance = CO-1004 + CO-1005 	$12,500 + $3,900 = $16,400
+11 Only executed change orders carry invoices 	CO-1002, CO-1004 only
+12 Approved upgrades in the SOA 	$21,300.00
+13 Total sales price after upgrades 	$610,365.00
+14 Cash to close 	$524,962.50
+15 Overdue deposit interest at Prime + 10% for 45 days 	$393.29 — computed, not posted
+16 35-day notice issued on or before the required date 	26 Aug ≤ 28 Aug — PASS
+17 No schedule phase exceeds the completion of a phase that depends on it 	PASS
+18 Every user account has a unique email 	PASS
+19 Change order states cover complete, declined, lapsed and pending 	All four present
+20 Projects seeded — one per community 	SV-1001 to SV-1004
+21 Named purchasers across all contracts 	8 — Thompson 2, Chen 1, Patel 4, Jenkins
+1
+22 Client portal accounts 	4 — one per household
+23 Every household has exactly one authorized signatory 	PASS
+24 Every named purchaser has a distinct notice email 	8 unique addresses
+25 SV-1004 fails both contract validations 	Deposit sum and Saturday possession —
+BLOCKED
+26 No company other than Sunview exists in the seed 	PASS
+Sunview Master Test Data v2.2 · 18
+
+-- 18 of 19 --
+
+24 · Open questions
+These cannot be resolved from the supplied documents and must not be guessed at.
+# Question 	Why it blocks
+24.1 Schedule D — quality appointments 	The standard specification every upgrade is measured against.
+Referenced three times in the agreement, never supplied.
+24.2 Does any contract bill by progress draw? 	Version 1 mixed deposits with milestone draws. The purchase
+agreement supports only deposits plus balance. If progressive
+billing is real, it is a second contract model with its own template
+and fixtures.
+24.3 Change order administrative fee 	Assumed $250 per order here. Clause 12 requires one but does
+not state the amount.
+24.4 Is unspent allowance credited or forfeited? 	Flooring came in $200 under. The treatment changes both the
+SOA and the CO-1005 roll-up.
+24.5 Lighting allowance rate 	Config rates give $4,725; the selections table carried $4,500. A
+$225 discrepancy on one project compounds across a portfolio.
+24.6 Warranty tiers 	Confirm 1/2/5/10 with the provider. Determines when client
+access can end.
+24.7 Selections Coordinator / Service Coordinator role 	Robyn Fletcher holds two functions, neither in the approved role
+matrix.
+24.8 Does the CEO see contract prices? 	'No financial information' read literally hides the purchase price
+from the CEO. Defaulted to deny here.
+24.9 Cross-company isolation coverage 	With a single tenant, isolation must be proven by query inspection
+or a throwaway test tenant. Confirm which approach before
+sign-off.
+24.10 GST rebate thresholds 	The template's $350,000–$450,000 band must be confirmed as
+current federal policy.
+24.11 Change order deposit policy 	Standard percentage, or case by case? CO-1008 assumes $500.
+24.12 Government ID retention period 	How long must purchaser ID numbers be retained after
+possession?
+24.13 Countersignature threshold 	Above what change order value must all named purchasers
+countersign rather than the authorized signatory alone? Affects
+the Patel household directly — CO-2001 at $22,400 is waiting on
+this answer.
+24.14 Co-purchaser read access 	Should co-purchasers be able to receive a read-only login, or is the
+shared household account the only access? Notices reach them
+either way.
+End of document · Sunview Custom Homes Master Test Data Package v2.2
+Sunview Master Test Data v2.2 · 19
+
+-- 19 of 19 --
+

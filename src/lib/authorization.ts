@@ -22,7 +22,6 @@ export const CAPABILITIES = {
   ] as Role[],
   manageSoa: [
     Role.OWNER,
-    Role.CEO,
     Role.OPERATIONS_ADMIN,
     Role.SALES_MANAGER,
   ] as Role[],
@@ -108,7 +107,6 @@ export const CAPABILITIES = {
   /** Statement of Adjustments (closing) — view/preview/download */
   viewStatementOfAdjustments: [
     Role.OWNER,
-    Role.CEO,
     Role.OPERATIONS_ADMIN,
     Role.PROJECT_MANAGER,
     Role.BOOKKEEPER,
@@ -117,7 +115,6 @@ export const CAPABILITIES = {
   /** Edit promo credit / finalize Statement of Adjustments */
   manageStatementOfAdjustments: [
     Role.OWNER,
-    Role.CEO,
     Role.OPERATIONS_ADMIN,
     Role.BOOKKEEPER,
   ] as Role[],

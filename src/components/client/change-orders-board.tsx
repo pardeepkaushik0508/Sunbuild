@@ -7,12 +7,17 @@ import { ChangeOrderStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/card";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
-import { FormField, Textarea } from "@/components/ui/form";
+import { FormField, Textarea, Input } from "@/components/ui/form";
 import { useOptionalToast } from "@/components/ui/toast";
 import { cn, formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
 import { clientChangeOrderDecisionAction } from "@/lib/client/actions";
 import type { ClientCoCardData } from "@/components/client/payments-board";
 import { toSafeErrorMessage } from "@/lib/errors";
+import {
+  clientChangeOrderLabel,
+  isApprovedChangeOrder,
+  isDeniedChangeOrder,
+} from "@/lib/client/flow";
 
 type FilterTab = "pending" | "approved" | "denied" | "all";
 
@@ -34,8 +39,8 @@ export function ClientChangeOrdersBoard({
     let deniedCount = 0;
     for (const co of changeOrders) {
       if (co.status === ChangeOrderStatus.PENDING_CLIENT) pendingCount += 1;
-      else if (co.status === ChangeOrderStatus.APPROVED) approvedCount += 1;
-      else if (co.status === ChangeOrderStatus.REJECTED) deniedCount += 1;
+      else if (isApprovedChangeOrder(co.status)) approvedCount += 1;
+      else if (isDeniedChangeOrder(co.status)) deniedCount += 1;
     }
     return {
       pending: pendingCount,
@@ -52,14 +57,10 @@ export function ClientChangeOrdersBoard({
       );
     }
     if (tab === "approved") {
-      return changeOrders.filter(
-        (co) => co.status === ChangeOrderStatus.APPROVED
-      );
+      return changeOrders.filter((co) => isApprovedChangeOrder(co.status));
     }
     if (tab === "denied") {
-      return changeOrders.filter(
-        (co) => co.status === ChangeOrderStatus.REJECTED
-      );
+      return changeOrders.filter((co) => isDeniedChangeOrder(co.status));
     }
     return changeOrders;
   }, [changeOrders, tab]);
@@ -154,9 +155,7 @@ export function ClientChangeOrdersBoard({
                   {co.title}
                 </h3>
                 <StatusBadge tone={statusTone(co.status)}>
-                  {co.status === ChangeOrderStatus.REJECTED
-                    ? "DENIED"
-                    : co.status.replace(/_/g, " ")}
+                  {clientChangeOrderLabel(co.status)}
                 </StatusBadge>
               </div>
               <p className="mt-2 line-clamp-3 text-sm text-sb-muted">
@@ -169,7 +168,7 @@ export function ClientChangeOrdersBoard({
               ) : null}
               <div className="mt-3 flex items-baseline justify-between">
                 <p className="text-lg font-semibold text-sb-ink">
-                  {formatCurrency(co.amount)}
+                  {formatCurrency(co.displayAmount ?? co.amount)}
                 </p>
                 {co.scheduleImpact ? (
                   <span className="text-xs font-medium text-sb-orange">
@@ -252,9 +251,7 @@ export function ClientChangeOrdersBoard({
                   tone={statusTone(coDetail.status)}
                   className="mt-2"
                 >
-                  {coDetail.status === ChangeOrderStatus.REJECTED
-                    ? "DENIED"
-                    : coDetail.status.replace(/_/g, " ")}
+                  {clientChangeOrderLabel(coDetail.status)}
                 </StatusBadge>
               </div>
               <button
@@ -272,7 +269,7 @@ export function ClientChangeOrdersBoard({
             </p>
             <div className="mt-3 flex items-baseline justify-between">
               <p className="text-lg font-semibold text-sb-ink">
-                {formatCurrency(coDetail.amount)}
+                {formatCurrency(coDetail.displayAmount ?? coDetail.amount)}
               </p>
               {coDetail.scheduleImpact ? (
                 <span className="text-xs font-medium text-sb-orange">
@@ -292,13 +289,22 @@ export function ClientChangeOrdersBoard({
             {coDetail.canDecide ? (
               <div className="mt-4 space-y-4">
                 <p className="text-xs text-sb-muted">
-                  Approving records your authenticated acceptance with a
-                  timestamp. Denying requires a short reason.
+                  Only the household&apos;s authorized signatory may approve or
+                  deny. The signature record stores the named individual, this
+                  household account, authority basis, timestamp, and IP.
                 </p>
                 <form
                   action={(fd) => decide(coDetail.id, "APPROVED", fd)}
                   className="space-y-3"
                 >
+                  <FormField label="Authorized signatory full name">
+                    <Input
+                      name="signatoryName"
+                      required
+                      placeholder="e.g. Liam Thompson"
+                      autoComplete="name"
+                    />
+                  </FormField>
                   <FormField label="Comment (optional)">
                     <Textarea name="comment" />
                   </FormField>
@@ -310,6 +316,14 @@ export function ClientChangeOrdersBoard({
                   action={(fd) => decide(coDetail.id, "REJECTED", fd)}
                   className="space-y-3 border-t border-sb-border pt-4"
                 >
+                  <FormField label="Authorized signatory full name">
+                    <Input
+                      name="signatoryName"
+                      required
+                      placeholder="e.g. Liam Thompson"
+                      autoComplete="name"
+                    />
+                  </FormField>
                   <FormField label="Denial reason">
                     <Textarea name="comment" required />
                   </FormField>

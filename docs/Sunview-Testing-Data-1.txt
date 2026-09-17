@@ -1,0 +1,315 @@
+Sunview Custom Homes - Software Test
+Data
+1. User Names Details
+Role 	Name
+Owner 	Sunny Sharma
+CEO 	Anjali Sharma
+Sales Director 	Gary Arora
+Project Manager / Foreman 	Michael Mayhew
+Admin / Bookkeeper 	Sarah Jenkins
+Service & Selection Inquiries 	Robyn
+2. Project Names
+● Clearwater Park, Chestermere
+● Waterford, Chestermere
+● Southshore, Chestermere Lake
+● Edgefield Phase 3, Strathmore
+3. Customer Names with Project
+Clearwater Park, Chestermere
+Customer Name 	Mock Address 	Phone Number 	WhatsApp Number
+Liam and Sarah
+Thompson
+101 Clearwater Dr,
+Chestermere, AB
+T1X 0A1
+(403) 555-0101 	+1 403 555 0101
+Waterford, Chestermere
+Customer Name 	Mock Address 	Phone Number 	WhatsApp Number
+David Chen 	201 Waterford Blvd,
+Chestermere, AB
+T1X 0B2
+(403) 555-0102 	+1 403 555 0102
+Michael Smith 	203 Waterford Blvd,
+Chestermere, AB
+T1X 0B2
+(403) 555-0103 	+1 403 555 0103
+Jessica Taylor 	205 Waterford Blvd,
+Chestermere, AB
+T1X 0B2
+(403) 555-0104 	+1 403 555 0104
+
+-- 1 of 5 --
+
+Southshore, Chestermere Lake
+Customer Name 	Mock Address 	Phone Number 	WhatsApp Number
+Rahul & Purvi
+Patel
+301 Southshore Dr,
+Chestermere, AB
+T1X 0C3
+(587) 555-0105 	+1 587 555 0105
+Aarav Patel 	303 Southshore Dr,
+Chestermere, AB
+T1X 0C3
+(587) 555-0106 	+1 587 555 0106
+Neha Patel 	305 Southshore Dr,
+Chestermere, AB
+T1X 0C3
+(587) 555-0107 	+1 587 555 0107
+Edgefield Phase 3, Strathmore
+Customer Name 	Mock Address 	Phone Number 	WhatsApp Number
+Emily Jenkins 	401 Edgefield Way,
+Strathmore, AB T1P
+1A1
+(825) 555-0108 	+1 825 555 0108
+4. Sub Contractor Details
+Excavation & Site Prep
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Prairie Earthworks 100 Blackfoot Tr SE,
+Calgary, AB T2G 2B9
+(403) 555-0201 	+1 403 555 0201
+Foothills
+Excavating
+200 Barlow Tr NE,
+Calgary, AB T2E 6S2
+(403) 555-0202 	+1 403 555 0202
+Foundation & Concrete
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Solid Foundation
+Calgary
+300 11 Ave SE,
+Calgary, AB T2G 0Y8
+(403) 555-0203 	+1 403 555 0203
+Rocky View
+Concrete Prep
+400 Macleod Tr SE,
+Calgary, AB T2G
+2M6
+(403) 555-0204 	+1 403 555 0204
+Framing
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+
+-- 2 of 5 --
+
+Bow River Framing
+& Carpentry
+500 9 Ave SW,
+Calgary, AB T2P 1K7
+(587) 555-0205 	+1 587 555 0205
+Foothills Custom
+Framers
+600 17 Ave SW,
+Calgary, AB T2S 0A5
+(587) 555-0206 	+1 587 555 0206
+Roofing
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Peak Protection
+Roofing Calgary
+700 Centre St N,
+Calgary, AB T2E 2P8
+(587) 555-0207 	+1 587 555 0207
+Western Sky
+Roofers
+800 Edmonton Tr
+NE, Calgary, AB T2E
+3J6
+(587) 555-0208 	+1 587 555 0208
+Exterior Finishes
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Foothills Masonry
+& Stone
+900 16 Ave NW,
+Calgary, AB T2M
+0K3
+(825) 555-0209 	+1 825 555 0209
+Calgary Brick &
+Block
+1010 Crowchild Tr
+NW, Calgary, AB T2N
+2R5
+(825) 555-0210 	+1 825 555 0210
+Plumbing
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Streamline
+Plumbers Calgary
+1111 14 St SW,
+Calgary, AB T2T
+3W8
+(403) 555-0211 	+1 403 555 0211
+Instant Flow
+Plumbing
+1212 33 Ave SW,
+Calgary, AB T2T 1Z6
+(403) 555-0212 	+1 403 555 0212
+HVAC
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Advanced Heating
+& Air Conditioning
+1313 58 Ave SE,
+Calgary, AB T2H 0P1
+(403) 555-0213 	+1 403 555 0213
+Prairie Wind
+Heating & Cooling
+1414 42 Ave SE,
+Calgary, AB T2G 1Y6
+(403) 555-0214 	+1 403 555 0214
+
+-- 3 of 5 --
+
+Electrical
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Hardwire Electric
+Calgary
+1515 32 Ave NE,
+Calgary, AB T2E 7Z5
+(587) 555-0215 	+1 587 555 0215
+Chinook Spark &
+Wire
+1616 64 Ave NE,
+Calgary, AB T2E 7V8
+(587) 555-0216 	+1 587 555 0216
+Insulation
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+WarmHome
+Insulation Calgary
+1717 11 St SE,
+Calgary, AB T2G 3G2
+(825) 555-0217 	+1 825 555 0217
+Peak Energy
+Installers
+1818 10 Ave SW,
+Calgary, AB T3C 0J2
+(825) 555-0218 	+1 825 555 0218
+Drywall & Taping
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Stampede City
+Drywall
+1919 17 Ave SE,
+Calgary, AB T2A 0A1
+(403) 555-0219 	+1 403 555 0219
+Alberta Mud &
+Tape Pros
+2020 9 Ave SE,
+Calgary, AB T2G 0T5
+(403) 555-0220 	+1 403 555 0220
+Painting
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Heritage Paint &
+Decorators
+2121 4 St SW,
+Calgary, AB T2S 1X5
+(587) 555-0221 	+1 587 555 0221
+Summit Coating
+Solutions
+2222 1 St SE,
+Calgary, AB T2G 2G9
+(587) 555-0222 	+1 587 555 0222
+Cabinetry & Millwork
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Bow Valley
+Cabinets
+2323 11 Ave SW,
+Calgary, AB T3C 0M5
+(403) 555-0223 	+1 403 555 0223
+Custom Woodcraft
+Calgary
+2424 10 Ave SW,
+Calgary, AB T3C 0J2
+(403) 555-0224 	+1 403 555 0224
+
+-- 4 of 5 --
+
+Countertops
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Rocky Mountain
+Stone
+2525 Macleod Tr
+SW, Calgary, AB T2G
+5E3
+(825) 555-0225 	+1 825 555 0225
+Calgary Quartz &
+Granite
+2626 Blackfoot Tr
+SE, Calgary, AB T2G
+4B7
+(825) 555-0226 	+1 825 555 0226
+Flooring Installation
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Bow Valley
+Hardwood & Tile
+2727 58 Ave SE,
+Calgary, AB T2H 2G9
+(403) 555-0227 	+1 403 555 0227
+Stampede Floor
+Coverings
+2828 11 St SE,
+Calgary, AB T2G 3G2
+(403) 555-0228 	+1 403 555 0228
+Finishing Carpentry
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Foothills Finishers 2929 17 Ave SW,
+Calgary, AB T3C 0B7
+(587) 555-0229 	+1 587 555 0229
+Calgary Trim &
+Door
+3030 14 St SW,
+Calgary, AB T2T 3T9
+(587) 555-0230 	+1 587 555 0230
+Landscaping & Exterior Flatwork
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Chinook
+Landscapes
+3131 Bow Tr SW,
+Calgary, AB T3C 2E5
+(403) 555-0231 	+1 403 555 0231
+Prairie Hardscapes 3232 16 Ave NW,
+Calgary, AB T2M 0L4
+(403) 555-0232 	+1 403 555 0232
+Final Cleaning
+Subcontractor
+Name
+Mock Address 	Phone Number 	WhatsApp Number
+Crystal Clean
+Construction
+3333 32 Ave NE,
+Calgary, AB T2E 6T3
+(825) 555-0233 	+1 825 555 0233
+Post-Build Maids
+Calgary
+3434 36 St NE,
+Calgary, AB T1Y 6H6
+(825) 555-0234 	+1 825 555 0234
+
+-- 5 of 5 --
+

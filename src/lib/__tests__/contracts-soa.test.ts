@@ -16,7 +16,7 @@ import { extractContractData } from "../contracts/contract-extractor";
 import { analyzeSoaItems, suggestAllowanceCategory } from "../contracts/soa-recommendations";
 
 describe("Contracts & SOA Capabilities and Permissions", () => {
-  it("allows Sales Manager, Owner, Operations Admin, and CEO to manage contracts and SOA", () => {
+  it("allows Sales Manager, Owner, and Operations Admin to manage contracts and SOA", () => {
     assert.equal(roleHasCapability(Role.SALES_MANAGER, "manageContracts"), true);
     assert.equal(roleHasCapability(Role.SALES_MANAGER, "manageSoa"), true);
 
@@ -25,9 +25,13 @@ describe("Contracts & SOA Capabilities and Permissions", () => {
 
     assert.equal(roleHasCapability(Role.OPERATIONS_ADMIN, "manageContracts"), true);
     assert.equal(roleHasCapability(Role.OPERATIONS_ADMIN, "manageSoa"), true);
+  });
 
+  it("denies CEO money-bearing SOA capabilities (Master Test Data v2.2)", () => {
     assert.equal(roleHasCapability(Role.CEO, "manageContracts"), true);
-    assert.equal(roleHasCapability(Role.CEO, "manageSoa"), true);
+    assert.equal(roleHasCapability(Role.CEO, "manageSoa"), false);
+    assert.equal(roleHasCapability(Role.CEO, "viewStatementOfAdjustments"), false);
+    assert.equal(roleHasCapability(Role.CEO, "manageStatementOfAdjustments"), false);
   });
 
   it("strictly bars Project Managers, Clients, and Subcontractors from managing contracts or SOA", () => {
@@ -49,7 +53,7 @@ describe("Authoritative Monetary & Contract Calculation", () => {
     assert.equal(roundMoney(0.004), 0);
   });
 
-  it("calculates contract totals correctly with GST math", () => {
+  it("calculates contract totals correctly with GST math (allowances not additive)", () => {
     const totals = calculateContractTotals({
       basePrice: 650000,
       allowanceTotal: 60000,
@@ -58,15 +62,16 @@ describe("Authoritative Monetary & Contract Calculation", () => {
       taxRate: 5.0,
     });
 
-    // Subtotal = 650,000 + 60,000 + 15,000 - 5,000 = 720,000
-    // Tax (5%) = 720,000 * 0.05 = 36,000
-    // Total = 756,000
+    // Subtotal = 650,000 + 15,000 = 665,000 (allowance tracked, not added)
+    // Tax (5%) = 33,250
+    // Total = 665,000 + 33,250 − 5,000 rebate = 693,250
     assert.equal(totals.basePrice, 650000);
     assert.equal(totals.allowanceTotal, 60000);
     assert.equal(totals.upgradesTotal, 15000);
     assert.equal(totals.discountsTotal, 5000);
-    assert.equal(totals.taxAmount, 36000);
-    assert.equal(totals.totalContractPrice, 756000);
+    assert.equal(totals.subtotal, 665000);
+    assert.equal(totals.taxAmount, 33250);
+    assert.equal(totals.totalContractPrice, 693250);
   });
 
   it("handles zero or null values safely in contract calculation", () => {

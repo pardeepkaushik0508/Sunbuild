@@ -16,6 +16,7 @@ import type { InsightCard } from "@/components/dashboard/ai-insights";
 import type { ClientInfoItem } from "@/components/dashboard/client-info-strip";
 import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
+import { sessionHasFinanceAccess } from "@/lib/authorization";
 import { computeBudgetUtilization } from "@/lib/jobs/budget";
 import { clientProjectStatusLabel } from "@/lib/jobs/status";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
@@ -301,6 +302,8 @@ export async function loadPmOverviewData(
     approvedChangeOrders,
   });
 
+  const canViewFinance = sessionHasFinanceAccess(session);
+
   const clientItems: ClientInfoItem[] = selectedProject
     ? [
         {
@@ -330,13 +333,17 @@ export async function loadPmOverviewData(
           label: "PM",
           value: selectedProject.pm?.name || "—",
         },
-        {
-          id: "price",
-          label: "Total project cost",
-          value: selectedBudget.hasBudget
-            ? formatCurrency(selectedBudget.total)
-            : formatCurrency(selectedProject.purchasePrice),
-        },
+        ...(canViewFinance
+          ? [
+              {
+                id: "price",
+                label: "Total project cost",
+                value: selectedBudget.hasBudget
+                  ? formatCurrency(selectedBudget.total)
+                  : formatCurrency(selectedProject.purchasePrice),
+              } satisfies ClientInfoItem,
+            ]
+          : []),
         {
           id: "closing",
           label: "Target Closing",

@@ -45,6 +45,7 @@ import {
   notifySubcontractorProjectAssigned,
   revalidateNotificationInbox,
 } from "@/lib/notifications";
+import { isWarrantyCoverageActive } from "@/lib/client/flow";
 import {
   assertPasswordMeetsPolicy,
   getPasswordPolicy,
@@ -582,6 +583,39 @@ export async function confirmContractAction(contractId: string, form: FormData) 
     contract.status !== ContractStatus.UPLOADED
   ) {
     throw new AppError("Contract is not ready to confirm");
+  }
+
+  // Master Test Data v2.2 §22.3 / §23 — block activation when deposit ladder or
+  // possession date fails validation (SV-1004 deliberate failures).
+  const { validateContractActivation, formatActivationBlockMessage } =
+    await import("@/lib/contracts/activation-validation");
+  const deposits = await prisma.deposit.findMany({
+    where: {
+      OR: [
+        { contractId },
+        ...(contract.projectId ? [{ projectId: contract.projectId }] : []),
+      ],
+    },
+    select: { label: true, amount: true },
+  });
+  const activationIssues = validateContractActivation({
+    totalPurchasePrice:
+      contract.totalContractPrice ?? contract.purchasePrice ?? null,
+    deposits,
+    possessionDate:
+      contract.firmPossessionDate ?? contract.targetClosing ?? null,
+  });
+  if (activationIssues.length) {
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      projectId: contract.projectId,
+      action: "CONTRACT_ACTIVATION_BLOCKED",
+      entityType: "PurchaseContract",
+      entityId: contractId,
+      metadata: { issues: activationIssues },
+    });
+    throw new AppError(formatActivationBlockMessage(activationIssues));
   }
 
   // PMs must own the job they create — empty assign defaults to the confirmer.
@@ -2747,8 +2781,15 @@ export async function createWarrantyTicketAction(form: FormData) {
   if (!project?.warrantyStart) {
     throw new AppError("Warranty not active for this project");
   }
-  if (project.warrantyEnd && project.warrantyEnd.getTime() < Date.now()) {
-    throw new AppError("Warranty period has expired for this project");
+  if (
+    !isWarrantyCoverageActive({
+      warrantyStart: project.warrantyStart,
+      warrantyEnd: project.warrantyEnd,
+    })
+  ) {
+    throw new AppError(
+      "Warranty claim intake opens at possession — contact your project manager about deficiencies"
+    );
   }
   const ticket = await prisma.warrantyTicket.create({
     data: {
