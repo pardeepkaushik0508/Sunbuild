@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
-import { isCloudinaryConfigured, pingCloudinary } from "@/lib/cloudinary";
+import { isCloudinaryConfigured, pingCloudinary, getCloudinaryPublicInfo } from "@/lib/cloudinary";
 import {
   COMPANY_SETTING_DEFAULTS,
   DEFAULT_EMAIL_NOTIFICATIONS,
@@ -182,6 +182,7 @@ export async function getCompanySettings(
 
   const cloudinaryReady = isCloudinaryConfigured();
   const cloudinaryLive = cloudinaryReady ? await pingCloudinary() : false;
+  const cloudinaryInfo = getCloudinaryPublicInfo();
   const fileStorage = fileStorageSchema.parse({
     ...fileStorageRaw,
     provider: cloudinaryReady ? "cloudinary" : (fileStorageRaw as FileStorageSettings).provider,
@@ -204,6 +205,9 @@ export async function getCompanySettings(
       // used to look healthy while uploads failed and images 404'd on Render.
       storageStatus: cloudinaryLive ? "active" : "error",
       storageUsageBytes: usage,
+      storageCloudName: cloudinaryInfo.cloudName,
+      storageApiKeyHint: cloudinaryInfo.apiKeyHint,
+      storageCredentialSource: cloudinaryInfo.source,
     },
   };
 }

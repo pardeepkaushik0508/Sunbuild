@@ -154,18 +154,19 @@ export function generateContractHtml(data: PrintableContractData): string {
     .section-box {
       border-top: 2px solid #f5c518; border-bottom: 2px solid #f5c518;
       text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
-      padding: 6px 8px; margin: 12px 0 10px; color: #111827;
+      padding: 6px 8px; margin: 14px 0 16px; color: #111827;
     }
-    .form-row { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 9px; }
+    .form-row { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 12px; }
     .form-field { display: flex; align-items: flex-end; gap: 6px; min-width: 0; }
     .form-field.grow { flex: 1; }
     .form-label { white-space: nowrap; color: #111827; padding-bottom: 3px; }
     .form-value {
       flex: 1; min-width: 40px; background: #e6e9f0; border-bottom: 1.5px solid #222;
-      padding: 3px 6px; min-height: 17px; font-weight: 600; color: #111827;
+      padding: 4px 6px; min-height: 18px; font-weight: 600; color: #111827;
     }
     .amp { padding: 0 4px 3px; font-weight: 700; }
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .two-col .form-row { margin-bottom: 12px; }
     .print-btn-bar {
       background: #111827; color: #fff; padding: 10px 20px; display: flex;
       justify-content: space-between; align-items: center; margin-bottom: 20px; border-radius: 6px;
@@ -448,7 +449,7 @@ export async function generateContractPdfBuffer(
   const marginL = 40;
   const marginR = 40;
   const contentW = pageWidth - marginL - marginR;
-  const rowGap = 16;
+  const rowGap = 24;
   const fieldH = 14;
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
@@ -462,8 +463,8 @@ export async function generateContractPdfBuffer(
   };
 
   const drawSectionHeader = (title: string) => {
-    ensureSpace(28);
-    y -= 8;
+    ensureSpace(36);
+    y -= 10;
     page.drawLine({
       start: { x: marginL, y },
       end: { x: marginL + contentW, y },
@@ -487,7 +488,8 @@ export async function generateContractPdfBuffer(
       thickness: 1.75,
       color: yellow,
     });
-    y -= 12;
+    // Space below yellow border before the first field row
+    y -= 18;
   };
 
   /** Label + value box (light bg + bottom border) — returns used height via y. */

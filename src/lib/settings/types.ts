@@ -116,6 +116,11 @@ export type CompanySettingsSnapshot = {
     mfaPluginEnabled: boolean;
     storageStatus: "active" | "error";
     storageUsageBytes: number | null;
+    /** Cloudinary cloud name currently loaded from env (if any). */
+    storageCloudName?: string | null;
+    /** Masked API key hint, e.g. …9359 — never the secret. */
+    storageApiKeyHint?: string | null;
+    storageCredentialSource?: "url" | "discrete" | null;
   };
 };
 

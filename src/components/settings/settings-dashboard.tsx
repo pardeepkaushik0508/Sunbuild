@@ -1052,7 +1052,13 @@ function StorageModal({
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-sb-muted">Status</p>
-            <p className="mt-1 font-medium text-sb-ink capitalize">
+            <p
+              className={`mt-1 font-medium capitalize ${
+                settings.meta.storageStatus === "error"
+                  ? "text-red-600"
+                  : "text-sb-ink"
+              }`}
+            >
               {settings.meta.storageStatus}
             </p>
           </div>
@@ -1068,13 +1074,27 @@ function StorageModal({
               Private · Cloudinary delivery
             </p>
           </div>
+          {settings.meta.storageCloudName ? (
+            <div className="sm:col-span-2">
+              <p className="text-xs uppercase tracking-wide text-sb-muted">
+                Env account (no secret)
+              </p>
+              <p className="mt-1 font-medium text-sb-ink">
+                {settings.meta.storageCloudName}
+                {settings.meta.storageApiKeyHint
+                  ? ` · key ${settings.meta.storageApiKeyHint}`
+                  : ""}
+                {settings.meta.storageCredentialSource
+                  ? ` · via ${settings.meta.storageCredentialSource === "url" ? "CLOUDINARY_URL" : "discrete env vars"}`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
         </div>
         <p className="text-xs text-sb-muted">
-          Uploads must use Cloudinary. Paste the same CLOUDINARY_URL on localhost
-          (.env.local) and Render (Environment). If status is error, open
-          Cloudinary Dashboard → Settings → API Keys, copy a fresh API Key +
-          Secret, update CLOUDINARY_URL, and restart both. Secrets are never
-          shown in the browser.
+          {settings.meta.storageStatus === "error"
+            ? "Cloudinary rejected the current API secret (api_secret mismatch). Open Cloudinary Dashboard → Settings → API Keys, copy a fresh API Key + Secret into CLOUDINARY_URL on both .env.local and Render, delete any leftover CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET vars, then restart both servers. Secrets are never shown here."
+            : "Uploads must use Cloudinary. Keep the same CLOUDINARY_URL on localhost (.env.local) and Render (Environment). Secrets are never shown in the browser."}
         </p>
         <FormField label="Maximum upload size (MB)" required>
           <Input

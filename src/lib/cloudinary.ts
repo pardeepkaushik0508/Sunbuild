@@ -36,6 +36,12 @@ export function normalizeCloudinaryUrl(raw: string): string {
   let url = stripWrappingQuotes(raw);
   if (!url) return url;
 
+  // Accidental paste: CLOUDINARY_URL=cloudinary://... or doubled CLOUDINARY_URL=CLOUDINARY_URL=...
+  while (/^CLOUDINARY_URL=/i.test(url)) {
+    url = url.replace(/^CLOUDINARY_URL=/i, "").trim();
+  }
+  url = stripWrappingQuotes(url);
+
   // cloudinary://<key>:<secret>@cloud → strip accidental angle brackets
   url = url.replace(
     /^cloudinary:\/\/<?([^:>\s]+)>?:<?([^@>\s]+)>?@(.+)$/i,
@@ -95,11 +101,9 @@ export function parseCloudinaryUrl(raw: string): {
   return { cloud_name, api_key, api_secret };
 }
 
-/**
- * Prefer discrete dashboard fields (easier to copy). Fall back to CLOUDINARY_URL.
- * Same credentials must be set on localhost (.env.local) and Render.
- */
-export function readCloudinaryCredentials(): {
+export type CloudinaryCredentialSource = "url" | "discrete";
+
+function readDiscreteCloudinaryCredentials(): {
   cloud_name: string;
   api_key: string;
   api_secret: string;
@@ -111,20 +115,93 @@ export function readCloudinaryCredentials(): {
   const api_secret = stripWrappingQuotes(
     process.env.CLOUDINARY_API_SECRET || ""
   );
-  if (cloud_name && api_key && api_secret) {
-    if (/[<>]/.test(api_key) || /[<>]/.test(api_secret)) {
-      throw new AppError(
-        "File storage configuration is invalid. Remove < > from Cloudinary credentials.",
-        503,
-        "STORAGE_MISCONFIGURED"
+  if (!cloud_name || !api_key || !api_secret) return null;
+  if (/[<>]/.test(api_key) || /[<>]/.test(api_secret)) {
+    throw new AppError(
+      "File storage configuration is invalid. Remove < > from Cloudinary credentials.",
+      503,
+      "STORAGE_MISCONFIGURED"
+    );
+  }
+  return { cloud_name, api_key, api_secret };
+}
+
+/**
+ * Prefer CLOUDINARY_URL (canonical on Render). Fall back to discrete dashboard
+ * fields. If both are set and disagree, URL wins and we log a warning — stale
+ * CLOUDINARY_API_* leftovers on Render used to silently override a correct URL.
+ */
+export function readCloudinaryCredentials(): {
+  cloud_name: string;
+  api_key: string;
+  api_secret: string;
+  source: CloudinaryCredentialSource;
+} | null {
+  const raw = process.env.CLOUDINARY_URL?.trim();
+  const fromUrl = raw ? parseCloudinaryUrl(raw) : null;
+  const fromDiscrete = readDiscreteCloudinaryCredentials();
+
+  if (fromUrl && fromDiscrete) {
+    const mismatch =
+      fromUrl.cloud_name !== fromDiscrete.cloud_name ||
+      fromUrl.api_key !== fromDiscrete.api_key ||
+      fromUrl.api_secret !== fromDiscrete.api_secret;
+    if (mismatch) {
+      console.warn(
+        "[cloudinary] CLOUDINARY_URL and CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET disagree; using CLOUDINARY_URL. Remove the discrete vars on Render if unused.",
+        {
+          urlCloud: fromUrl.cloud_name,
+          discreteCloud: fromDiscrete.cloud_name,
+          urlKeyHint: maskApiKey(fromUrl.api_key),
+          discreteKeyHint: maskApiKey(fromDiscrete.api_key),
+        }
       );
     }
-    return { cloud_name, api_key, api_secret };
+    return { ...fromUrl, source: "url" };
   }
 
-  const raw = process.env.CLOUDINARY_URL?.trim();
-  if (!raw) return null;
-  return parseCloudinaryUrl(raw);
+  if (fromUrl) return { ...fromUrl, source: "url" };
+  if (fromDiscrete) return { ...fromDiscrete, source: "discrete" };
+  return null;
+}
+
+/** Safe for Settings UI / logs — never includes the secret. */
+export function maskApiKey(apiKey: string): string {
+  const key = apiKey.trim();
+  if (key.length <= 4) return "••••";
+  return `…${key.slice(-4)}`;
+}
+
+export function getCloudinaryPublicInfo(): {
+  configured: boolean;
+  cloudName: string | null;
+  apiKeyHint: string | null;
+  source: CloudinaryCredentialSource | null;
+} {
+  try {
+    const creds = readCloudinaryCredentials();
+    if (!creds) {
+      return {
+        configured: false,
+        cloudName: null,
+        apiKeyHint: null,
+        source: null,
+      };
+    }
+    return {
+      configured: true,
+      cloudName: creds.cloud_name,
+      apiKeyHint: maskApiKey(creds.api_key),
+      source: creds.source,
+    };
+  } catch {
+    return {
+      configured: false,
+      cloudName: null,
+      apiKeyHint: null,
+      source: null,
+    };
+  }
 }
 
 function credentialsCacheKey(creds: {
@@ -137,7 +214,12 @@ function credentialsCacheKey(creds: {
 
 /** Configure from env once. Never log the secret. */
 export function getCloudinary() {
-  let creds: { cloud_name: string; api_key: string; api_secret: string };
+  let creds: {
+    cloud_name: string;
+    api_key: string;
+    api_secret: string;
+    source: CloudinaryCredentialSource;
+  };
   try {
     const parsed = readCloudinaryCredentials();
     if (!parsed) {
@@ -158,8 +240,11 @@ export function getCloudinary() {
 
   // Reconfigure when env changes (tests / hot reload).
   if (!configured || configuredFrom !== cacheKey) {
-    // Keep env + SDK in sync so the SDK does not parse a stale/quoted URL.
+    // Keep env + SDK in sync so a later config(true) reset does not re-parse a
+    // quoted/stale URL. Explicit fields below are the source of truth for calls.
     process.env.CLOUDINARY_URL = `cloudinary://${encodeURIComponent(creds.api_key)}:${encodeURIComponent(creds.api_secret)}@${creds.cloud_name}`;
+    // Reset then set so leftover SDK state cannot keep a bad secret.
+    cloudinary.config(true);
     cloudinary.config({
       cloud_name: creds.cloud_name,
       api_key: creds.api_key,
@@ -168,6 +253,11 @@ export function getCloudinary() {
     });
     configured = true;
     configuredFrom = cacheKey;
+    console.info("[cloudinary] configured", {
+      cloudName: creds.cloud_name,
+      apiKeyHint: maskApiKey(creds.api_key),
+      source: creds.source,
+    });
   }
 
   return cloudinary;
@@ -340,8 +430,13 @@ export async function uploadBufferToCloudinary(opts: {
         message
       )
     ) {
+      const info = getCloudinaryPublicInfo();
+      const where =
+        info.cloudName && info.apiKeyHint
+          ? ` (cloud "${info.cloudName}", API key ${info.apiKeyHint})`
+          : "";
       throw new AppError(
-        "Cloudinary credentials are invalid (api_secret mismatch). Copy a fresh API Key + API Secret from Cloudinary Dashboard → Settings → API Keys into .env.local AND the same values on Render. Then restart the server.",
+        `Cloudinary credentials are invalid (api_secret mismatch)${where}. The API key exists but the secret does not match — regenerate API Key + Secret in Cloudinary Dashboard → Settings → API Keys, put the same CLOUDINARY_URL in .env.local and Render Environment, remove any leftover CLOUDINARY_API_* vars, then restart both.`,
         502,
         "STORAGE_AUTH_FAILED"
       );
