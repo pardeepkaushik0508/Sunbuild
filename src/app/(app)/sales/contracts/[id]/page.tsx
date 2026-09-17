@@ -75,6 +75,8 @@ export default async function SalesContractWorkspacePage({
           },
         },
       },
+      deposits: { orderBy: { createdAt: "asc" } },
+      conditions: { orderBy: { createdAt: "asc" } },
       buyer: true,
       salesPerson: { select: { id: true, name: true, email: true } },
       uploadedBy: { select: { id: true, name: true } },
@@ -108,6 +110,13 @@ export default async function SalesContractWorkspacePage({
     : fullName(contract.buyerFirstName, contract.buyerLastName) || "—";
   const buyerContact = contract.buyer?.email || contract.buyerEmail || contract.buyerPhone || "";
   const soa = contract.scheduleOfAllowances;
+
+  const depositByLabel = (label: string) =>
+    contract.deposits.find((d) => d.label === label);
+  const purchaserConditions = contract.conditions.filter(
+    (c) => !c.party || c.party === "purchaser"
+  );
+  const builderConditions = contract.conditions.filter((c) => c.party === "builder");
 
   const updateContract = updatePurchaseContractAction.bind(null, contract.id);
   const createRevision = createContractRevisionAction.bind(null, contract.id);
@@ -333,130 +342,325 @@ export default async function SalesContractWorkspacePage({
               successMessage="Contract details saved"
               className="grid gap-4 md:grid-cols-2"
             >
+              <div className="md:col-span-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sb-muted mb-1">
+                  Property &amp; Contract
+                </h4>
+              </div>
               <FormField label="Project / Model Name">
-                <Input
-                  name="projectName"
-                  defaultValue={contract.projectName ?? ""}
-                  disabled={isExecuted}
-                />
+                <Input name="projectName" defaultValue={contract.projectName ?? ""} disabled={isExecuted} />
               </FormField>
               <FormField label="Builder Legal Name">
-                <Input
-                  name="builderName"
-                  defaultValue={contract.builderName ?? "Sunview Custom Homes"}
-                  disabled={isExecuted}
-                />
+                <Input name="builderName" defaultValue={contract.builderName ?? "Sunview Custom Homes"} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Contract Date">
+                <Input name="contractDate" type="date" defaultValue={dateInputValue(contract.contractDate)} disabled={isExecuted} />
+              </FormField>
+              <FormField label="City">
+                <Input name="city" defaultValue={contract.city ?? ""} disabled={isExecuted} />
               </FormField>
               <FormField label="Municipal Address" className="md:col-span-2">
-                <Input
-                  name="municipalAddress"
-                  defaultValue={contract.municipalAddress ?? ""}
-                  disabled={isExecuted}
-                />
+                <Input name="municipalAddress" defaultValue={contract.municipalAddress ?? ""} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Block">
+                <Input name="block" defaultValue={contract.block ?? ""} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Lot">
+                <Input name="lot" defaultValue={contract.lot ?? ""} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Plan">
+                <Input name="plan" defaultValue={contract.plan ?? ""} disabled={isExecuted} />
               </FormField>
               <FormField label="Legal Address">
+                <Input name="legalAddress" defaultValue={contract.legalAddress ?? ""} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Firm Possession Date">
                 <Input
-                  name="legalAddress"
-                  defaultValue={contract.legalAddress ?? ""}
+                  name="firmPossessionDate"
+                  type="date"
+                  defaultValue={dateInputValue(contract.firmPossessionDate || contract.targetClosing)}
                   disabled={isExecuted}
                 />
               </FormField>
-              <FormField label="Lot / Block / Plan">
+              <FormField label="Builder Signature Date">
                 <Input
-                  name="lotBlockPlan"
-                  defaultValue={contract.lotBlockPlan ?? ""}
+                  name="builderSignatureDate"
+                  type="date"
+                  defaultValue={dateInputValue(contract.builderSignatureDate)}
+                  disabled={isExecuted}
+                />
+              </FormField>
+              <FormField label="Purchaser Agreement Receipt Date">
+                <Input
+                  name="purchaserAgreementReceiptDate"
+                  type="date"
+                  defaultValue={dateInputValue(
+                    contract.purchaserAgreementReceiptDate || contract.effectiveDate
+                  )}
                   disabled={isExecuted}
                 />
               </FormField>
 
-              <FormField label="Contract Date">
-                <Input
-                  name="contractDate"
-                  type="date"
-                  defaultValue={dateInputValue(contract.contractDate)}
-                  disabled={isExecuted}
-                />
-              </FormField>
-              <FormField label="Target Closing">
-                <Input
-                  name="targetClosing"
-                  type="date"
-                  defaultValue={dateInputValue(contract.targetClosing)}
-                  disabled={isExecuted}
-                />
-              </FormField>
-
-              {/* Financial Inputs */}
               <div className="md:col-span-2 border-t border-sb-border pt-4 mt-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-sb-muted mb-3">
-                  Authoritative Pricing Breakdown
+                  Purchaser 1
+                </h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="First Name">
+                    <Input name="buyerFirstName" defaultValue={contract.buyerFirstName ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Last Name">
+                    <Input name="buyerLastName" defaultValue={contract.buyerLastName ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Address" className="md:col-span-2">
+                    <Input name="buyerMailing" defaultValue={contract.buyerMailing ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Phone Number">
+                    <Input name="buyerPhone" defaultValue={contract.buyerPhone ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Email Address">
+                    <Input name="buyerEmail" type="email" defaultValue={contract.buyerEmail ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Occupation">
+                    <Input name="buyerOccupation" defaultValue={contract.buyerOccupation ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="ID Number">
+                    <Input name="buyerIdNumber" defaultValue={contract.buyerIdNumber ?? ""} disabled={isExecuted} />
+                  </FormField>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 border-t border-sb-border pt-4 mt-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sb-muted mb-3">
+                  Purchaser 2
+                </h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="First Name">
+                    <Input name="buyer2FirstName" defaultValue={contract.buyer2FirstName ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Last Name">
+                    <Input name="buyer2LastName" defaultValue={contract.buyer2LastName ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Address" className="md:col-span-2">
+                    <Input name="buyer2Mailing" defaultValue={contract.buyer2Mailing ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Phone Number">
+                    <Input name="buyer2Phone" defaultValue={contract.buyer2Phone ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Email Address">
+                    <Input name="buyer2Email" type="email" defaultValue={contract.buyer2Email ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Occupation">
+                    <Input name="buyer2Occupation" defaultValue={contract.buyer2Occupation ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="ID Number">
+                    <Input name="buyer2IdNumber" defaultValue={contract.buyer2IdNumber ?? ""} disabled={isExecuted} />
+                  </FormField>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 border-t border-sb-border pt-4 mt-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sb-muted mb-3">
+                  Realtor &amp; Lawyer
                 </h4>
                 <div className="grid gap-4 md:grid-cols-3">
-                  <FormField label="Base Price ($ CAD)">
+                  <FormField label="Realtor's Name">
+                    <Input name="realtorName" defaultValue={contract.realtorName ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Realtor Phone">
+                    <Input name="realtorPhone" defaultValue={contract.realtorPhone ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Realtor Email">
+                    <Input name="realtorEmail" type="email" defaultValue={contract.realtorEmail ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Lawyer's Name">
+                    <Input name="lawyerName" defaultValue={contract.lawyerName ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Lawyer Phone">
+                    <Input name="lawyerPhone" defaultValue={contract.lawyerPhone ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Lawyer Email">
+                    <Input name="lawyerEmail" type="email" defaultValue={contract.lawyerEmail ?? ""} disabled={isExecuted} />
+                  </FormField>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 border-t border-sb-border pt-4 mt-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sb-muted mb-3">
+                  Sale Price &amp; Terms of Payment
+                </h4>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <FormField label="Base Selling Price ($ CAD)">
+                    <Input name="basePrice" type="number" step="0.01" defaultValue={contract.basePrice ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="Extra Selections ($ CAD)">
+                    <Input name="upgradesTotal" type="number" step="0.01" defaultValue={contract.upgradesTotal ?? ""} disabled={isExecuted} />
+                  </FormField>
+                  <FormField label="*Less GST Rebate ($ CAD)">
                     <Input
-                      name="basePrice"
+                      name="gstRebate"
                       type="number"
                       step="0.01"
-                      defaultValue={contract.basePrice ?? ""}
+                      defaultValue={contract.gstRebate ?? contract.discountsTotal ?? ""}
                       disabled={isExecuted}
                     />
                   </FormField>
-                  <FormField label="Agreed Upgrades ($ CAD)">
+                  <FormField label="On Signing ($)">
                     <Input
-                      name="upgradesTotal"
+                      name="depositOnSigning"
                       type="number"
                       step="0.01"
-                      defaultValue={contract.upgradesTotal ?? ""}
+                      defaultValue={depositByLabel("On Signing")?.amount ?? ""}
                       disabled={isExecuted}
                     />
                   </FormField>
-                  <FormField label="Discounts / Credits ($ CAD)">
+                  <FormField label="On removal of condition ($)">
                     <Input
-                      name="discountsTotal"
+                      name="depositOnConditionRemoval"
                       type="number"
                       step="0.01"
-                      defaultValue={contract.discountsTotal ?? ""}
+                      defaultValue={depositByLabel("On removal of condition")?.amount ?? ""}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <div />
+                  <FormField label="By Date 1">
+                    <Input
+                      name="depositByDate1"
+                      type="date"
+                      defaultValue={dateInputValue(depositByLabel("By Date 1")?.dueDate)}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="By Date 1 Amount">
+                    <Input
+                      name="depositByDate1Amount"
+                      type="number"
+                      step="0.01"
+                      defaultValue={depositByLabel("By Date 1")?.amount ?? ""}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <div />
+                  <FormField label="By Date 2">
+                    <Input
+                      name="depositByDate2"
+                      type="date"
+                      defaultValue={dateInputValue(depositByLabel("By Date 2")?.dueDate)}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="By Date 2 Amount">
+                    <Input
+                      name="depositByDate2Amount"
+                      type="number"
+                      step="0.01"
+                      defaultValue={depositByLabel("By Date 2")?.amount ?? ""}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <div />
+                  <FormField label="By Date 3">
+                    <Input
+                      name="depositByDate3"
+                      type="date"
+                      defaultValue={dateInputValue(depositByLabel("By Date 3")?.dueDate)}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="By Date 3 Amount">
+                    <Input
+                      name="depositByDate3Amount"
+                      type="number"
+                      step="0.01"
+                      defaultValue={depositByLabel("By Date 3")?.amount ?? ""}
                       disabled={isExecuted}
                     />
                   </FormField>
                 </div>
               </div>
 
-              {/* Scope & Terms */}
-              <FormField label="Scope Summary" className="md:col-span-2">
+              <div className="md:col-span-2 border-t border-sb-border pt-4 mt-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sb-muted mb-3">
+                  Schedule E – Conditions
+                </h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Purchaser Condition Date">
+                    <Input
+                      name="purchaserConditionDate"
+                      type="date"
+                      defaultValue={dateInputValue(purchaserConditions[0]?.dueDate)}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="Builder Condition Date">
+                    <Input
+                      name="builderConditionDate"
+                      type="date"
+                      defaultValue={dateInputValue(builderConditions[0]?.dueDate)}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="Purchaser Condition 1" className="md:col-span-2">
+                    <Input
+                      name="purchaserCondition1"
+                      defaultValue={
+                        purchaserConditions[0]?.title === "Purchaser condition"
+                          ? ""
+                          : purchaserConditions[0]?.title ?? ""
+                      }
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="Purchaser Condition 2" className="md:col-span-2">
+                    <Input
+                      name="purchaserCondition2"
+                      defaultValue={purchaserConditions[1]?.title ?? ""}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="Builder Condition 1" className="md:col-span-2">
+                    <Input
+                      name="builderCondition1"
+                      defaultValue={
+                        builderConditions[0]?.title === "Builder condition"
+                          ? ""
+                          : builderConditions[0]?.title ?? ""
+                      }
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                  <FormField label="Builder Condition 2" className="md:col-span-2">
+                    <Input
+                      name="builderCondition2"
+                      defaultValue={builderConditions[1]?.title ?? ""}
+                      disabled={isExecuted}
+                    />
+                  </FormField>
+                </div>
+              </div>
+
+              <FormField label="Change Order (Schedule B)" className="md:col-span-2">
                 <Textarea
-                  name="scopeSummary"
-                  defaultValue={contract.scopeSummary ?? ""}
+                  name="changeOrderNotes"
+                  defaultValue={contract.changeOrderNotes ?? ""}
                   rows={3}
-                  disabled={isExecuted}
-                />
-              </FormField>
-              <FormField label="Specific Inclusions">
-                <Textarea
-                  name="inclusions"
-                  defaultValue={contract.inclusions ?? ""}
-                  rows={3}
-                  disabled={isExecuted}
-                />
-              </FormField>
-              <FormField label="Specific Exclusions">
-                <Textarea
-                  name="exclusions"
-                  defaultValue={contract.exclusions ?? ""}
-                  rows={3}
-                  disabled={isExecuted}
-                />
-              </FormField>
-              <FormField label="Special Conditions / Financing Terms" className="md:col-span-2">
-                <Textarea
-                  name="specialConditions"
-                  defaultValue={contract.specialConditions ?? ""}
-                  rows={2}
                   disabled={isExecuted}
                 />
               </FormField>
 
-              {/* Confidential Internal Notes */}
+              <FormField label="Scope Summary" className="md:col-span-2">
+                <Textarea name="scopeSummary" defaultValue={contract.scopeSummary ?? ""} rows={3} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Specific Inclusions">
+                <Textarea name="inclusions" defaultValue={contract.inclusions ?? ""} rows={3} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Specific Exclusions">
+                <Textarea name="exclusions" defaultValue={contract.exclusions ?? ""} rows={3} disabled={isExecuted} />
+              </FormField>
+              <FormField label="Special Conditions / Financing Terms" className="md:col-span-2">
+                <Textarea name="specialConditions" defaultValue={contract.specialConditions ?? ""} rows={2} disabled={isExecuted} />
+              </FormField>
               <FormField
                 label="Confidential Internal Builder Notes (Hidden from Client)"
                 className="md:col-span-2"

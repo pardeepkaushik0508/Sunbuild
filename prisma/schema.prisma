@@ -486,19 +486,46 @@ model PurchaseContract {
   allowanceTotal    Float?
   upgradesTotal     Float?
   discountsTotal    Float?
+  /// GST rebate (*Less GST Rebate on Sales Information Sheet).
+  gstRebate         Float?
   taxRate           Float?
   taxAmount         Float?
   totalContractPrice Float?
   targetClosing     DateTime?
+  /// Firm Possession Date on the Sales Information Sheet.
+  firmPossessionDate DateTime?
+  builderSignatureDate DateTime?
+  purchaserAgreementReceiptDate DateTime?
   projectName       String?
   municipalAddress  String?
   legalAddress      String?
   lotBlockPlan      String?
+  city              String?
+  block             String?
+  lot               String?
+  plan              String?
   buyerFirstName    String?
   buyerLastName     String?
   buyerEmail        String?
   buyerPhone        String?
   buyerMailing      String?
+  buyerOccupation   String?
+  buyerIdNumber     String?
+  buyer2FirstName   String?
+  buyer2LastName    String?
+  buyer2Email       String?
+  buyer2Phone       String?
+  buyer2Mailing     String?
+  buyer2Occupation  String?
+  buyer2IdNumber    String?
+  realtorName       String?
+  realtorPhone      String?
+  realtorEmail      String?
+  lawyerName        String?
+  lawyerPhone       String?
+  lawyerEmail       String?
+  /// Free-text Schedule B change-order notes for the Sales Information Sheet.
+  changeOrderNotes  String?
   builderName       String?
   scopeSummary      String?
   inclusions        String?
@@ -661,6 +688,8 @@ model Condition {
   title      String
   description String?
   dueDate    DateTime?
+  /// "purchaser" | "builder" — matches Sales Information Sheet Schedule E.
+  party      String?
   status     ConditionStatus @default(OPEN)
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt

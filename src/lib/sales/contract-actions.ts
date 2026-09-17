@@ -16,20 +16,13 @@ import {
   generateSoaNumber,
   calculateContractTotals,
   executeContractTransaction,
-  roundMoney,
 } from "@/lib/contracts/contracts";
-
-function formString(form: FormData, key: string) {
-  const v = form.get(key);
-  return typeof v === "string" ? v.trim() : "";
-}
-
-function formFloat(form: FormData, key: string): number | null {
-  const v = formString(form, key);
-  if (!v) return null;
-  const num = parseFloat(v);
-  return Number.isNaN(num) ? null : roundMoney(num);
-}
+import {
+  formFloat,
+  formString,
+  parseSalesSheetContractFields,
+  syncContractDepositsAndConditions,
+} from "@/lib/sales/contract-form-fields";
 
 async function rateLimit(userId: string, kind: string, upload = false) {
   const h = await headers();
@@ -54,30 +47,12 @@ export async function createPurchaseContractAction(form: FormData) {
   const buyerId = formString(form, "buyerId") || null;
   const projectId = formString(form, "projectId") || null;
 
-  const buyerFirstName = formString(form, "buyerFirstName") || null;
-  const buyerLastName = formString(form, "buyerLastName") || null;
-  const buyerEmail = formString(form, "buyerEmail") || null;
-  const buyerPhone = formString(form, "buyerPhone") || null;
-  const buyerMailing = formString(form, "buyerMailing") || null;
-
-  const projectName = formString(form, "projectName") || null;
-  const municipalAddress = formString(form, "municipalAddress") || null;
-  const legalAddress = formString(form, "legalAddress") || null;
-  const lotBlockPlan = formString(form, "lotBlockPlan") || null;
-  const builderName = formString(form, "builderName") || "Sunview Custom Homes";
-
-  const contractDateRaw = formString(form, "contractDate");
-  const effectiveDateRaw = formString(form, "effectiveDate");
-  const targetClosingRaw = formString(form, "targetClosing");
-
-  const contractDate = contractDateRaw ? new Date(contractDateRaw) : new Date();
-  const effectiveDate = effectiveDateRaw ? new Date(effectiveDateRaw) : null;
-  const targetClosing = targetClosingRaw ? new Date(targetClosingRaw) : null;
+  const sheet = parseSalesSheetContractFields(form);
 
   const basePrice = formFloat(form, "basePrice") ?? 0;
   const allowanceTotal = formFloat(form, "allowanceTotal") ?? 0;
   const upgradesTotal = formFloat(form, "upgradesTotal") ?? 0;
-  const discountsTotal = formFloat(form, "discountsTotal") ?? 0;
+  const discountsTotal = sheet.discountsTotal ?? 0;
   const taxRate = formFloat(form, "taxRate") ?? 5.0;
 
   const totals = calculateContractTotals({
@@ -88,14 +63,6 @@ export async function createPurchaseContractAction(form: FormData) {
     taxRate,
   });
 
-  const scopeSummary = formString(form, "scopeSummary") || null;
-  const inclusions = formString(form, "inclusions") || null;
-  const exclusions = formString(form, "exclusions") || null;
-  const specialConditions = formString(form, "specialConditions") || null;
-  const clientTerms = formString(form, "clientTerms") || null;
-  const internalNotes = formString(form, "internalNotes") || null;
-
-  // Handle uploaded file if present
   let fileMeta: Partial<ReturnType<typeof storageMeta>> = {};
   const file = form.get("file");
   if (file instanceof File && file.size > 0) {
@@ -108,14 +75,14 @@ export async function createPurchaseContractAction(form: FormData) {
     const soaNumber = await generateSoaNumber(companyId, tx);
 
     let resolvedBuyerId = buyerId;
-    if (!resolvedBuyerId && buyerFirstName && buyerLastName) {
+    if (!resolvedBuyerId && sheet.buyerFirstName && sheet.buyerLastName) {
       const buyer = await tx.buyer.create({
         data: {
-          firstName: buyerFirstName,
-          lastName: buyerLastName,
-          email: buyerEmail,
-          phone: buyerPhone,
-          mailingAddress: buyerMailing,
+          firstName: sheet.buyerFirstName,
+          lastName: sheet.buyerLastName,
+          email: sheet.buyerEmail,
+          phone: sheet.buyerPhone,
+          mailingAddress: sheet.buyerMailing,
         },
       });
       resolvedBuyerId = buyer.id;
@@ -132,33 +99,57 @@ export async function createPurchaseContractAction(form: FormData) {
         version: 1,
         status: ContractStatus.DRAFT,
         uploadedById: session.user.id,
-        contractDate,
-        effectiveDate,
-        targetClosing,
-        projectName,
-        municipalAddress,
-        legalAddress,
-        lotBlockPlan,
-        buyerFirstName,
-        buyerLastName,
-        buyerEmail,
-        buyerPhone,
-        buyerMailing,
-        builderName,
+        contractDate: sheet.contractDate,
+        effectiveDate: sheet.effectiveDate,
+        targetClosing: sheet.targetClosing,
+        firmPossessionDate: sheet.firmPossessionDate,
+        builderSignatureDate: sheet.builderSignatureDate,
+        purchaserAgreementReceiptDate: sheet.purchaserAgreementReceiptDate,
+        projectName: sheet.projectName,
+        municipalAddress: sheet.municipalAddress,
+        legalAddress: sheet.legalAddress,
+        lotBlockPlan: sheet.lotBlockPlan,
+        city: sheet.city,
+        block: sheet.block,
+        lot: sheet.lot,
+        plan: sheet.plan,
+        buyerFirstName: sheet.buyerFirstName,
+        buyerLastName: sheet.buyerLastName,
+        buyerEmail: sheet.buyerEmail,
+        buyerPhone: sheet.buyerPhone,
+        buyerMailing: sheet.buyerMailing,
+        buyerOccupation: sheet.buyerOccupation,
+        buyerIdNumber: sheet.buyerIdNumber,
+        buyer2FirstName: sheet.buyer2FirstName,
+        buyer2LastName: sheet.buyer2LastName,
+        buyer2Email: sheet.buyer2Email,
+        buyer2Phone: sheet.buyer2Phone,
+        buyer2Mailing: sheet.buyer2Mailing,
+        buyer2Occupation: sheet.buyer2Occupation,
+        buyer2IdNumber: sheet.buyer2IdNumber,
+        realtorName: sheet.realtorName,
+        realtorPhone: sheet.realtorPhone,
+        realtorEmail: sheet.realtorEmail,
+        lawyerName: sheet.lawyerName,
+        lawyerPhone: sheet.lawyerPhone,
+        lawyerEmail: sheet.lawyerEmail,
+        changeOrderNotes: sheet.changeOrderNotes,
+        builderName: sheet.builderName,
         basePrice: totals.basePrice,
         allowanceTotal: totals.allowanceTotal,
         upgradesTotal: totals.upgradesTotal,
         discountsTotal: totals.discountsTotal,
+        gstRebate: sheet.gstRebate,
         taxRate: totals.taxRate,
         taxAmount: totals.taxAmount,
         totalContractPrice: totals.totalContractPrice,
         purchasePrice: totals.totalContractPrice,
-        scopeSummary,
-        inclusions,
-        exclusions,
-        specialConditions,
-        clientTerms,
-        internalNotes,
+        scopeSummary: sheet.scopeSummary,
+        inclusions: sheet.inclusions,
+        exclusions: sheet.exclusions,
+        specialConditions: sheet.specialConditions,
+        clientTerms: sheet.clientTerms,
+        internalNotes: sheet.internalNotes,
         ...fileMeta,
       },
     });
@@ -176,6 +167,13 @@ export async function createPurchaseContractAction(form: FormData) {
         remainingAmount: totals.allowanceTotal,
       },
     });
+
+    await syncContractDepositsAndConditions(
+      tx,
+      createdContract.id,
+      projectId,
+      form
+    );
 
     return createdContract;
   });
@@ -223,11 +221,17 @@ export async function updatePurchaseContractAction(
     );
   }
 
+  const sheet = parseSalesSheetContractFields(form);
+
   const basePrice = formFloat(form, "basePrice") ?? contract.basePrice ?? 0;
-  const upgradesTotal = formFloat(form, "upgradesTotal") ?? contract.upgradesTotal ?? 0;
-  const discountsTotal = formFloat(form, "discountsTotal") ?? contract.discountsTotal ?? 0;
+  const upgradesTotal =
+    formFloat(form, "upgradesTotal") ?? contract.upgradesTotal ?? 0;
+  const discountsTotal = sheet.discountsTotal ?? contract.discountsTotal ?? 0;
   const taxRate = formFloat(form, "taxRate") ?? contract.taxRate ?? 5.0;
-  const allowanceTotal = contract.scheduleOfAllowances?.totalAllowance ?? contract.allowanceTotal ?? 0;
+  const allowanceTotal =
+    contract.scheduleOfAllowances?.totalAllowance ??
+    contract.allowanceTotal ??
+    0;
 
   const totals = calculateContractTotals({
     basePrice,
@@ -237,46 +241,75 @@ export async function updatePurchaseContractAction(
     taxRate,
   });
 
-  const contractDateRaw = formString(form, "contractDate");
-  const effectiveDateRaw = formString(form, "effectiveDate");
-  const targetClosingRaw = formString(form, "targetClosing");
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseContract.update({
+      where: { id: contractId },
+      data: {
+        projectName: sheet.projectName,
+        municipalAddress: sheet.municipalAddress,
+        legalAddress: sheet.legalAddress,
+        lotBlockPlan: sheet.lotBlockPlan,
+        city: sheet.city,
+        block: sheet.block,
+        lot: sheet.lot,
+        plan: sheet.plan,
+        buyerFirstName: sheet.buyerFirstName,
+        buyerLastName: sheet.buyerLastName,
+        buyerEmail: sheet.buyerEmail,
+        buyerPhone: sheet.buyerPhone,
+        buyerMailing: sheet.buyerMailing,
+        buyerOccupation: sheet.buyerOccupation,
+        buyerIdNumber: sheet.buyerIdNumber,
+        buyer2FirstName: sheet.buyer2FirstName,
+        buyer2LastName: sheet.buyer2LastName,
+        buyer2Email: sheet.buyer2Email,
+        buyer2Phone: sheet.buyer2Phone,
+        buyer2Mailing: sheet.buyer2Mailing,
+        buyer2Occupation: sheet.buyer2Occupation,
+        buyer2IdNumber: sheet.buyer2IdNumber,
+        realtorName: sheet.realtorName,
+        realtorPhone: sheet.realtorPhone,
+        realtorEmail: sheet.realtorEmail,
+        lawyerName: sheet.lawyerName,
+        lawyerPhone: sheet.lawyerPhone,
+        lawyerEmail: sheet.lawyerEmail,
+        changeOrderNotes: sheet.changeOrderNotes,
+        builderName: sheet.builderName,
+        contractDate: sheet.contractDate,
+        effectiveDate: sheet.effectiveDate,
+        targetClosing: sheet.targetClosing,
+        firmPossessionDate: sheet.firmPossessionDate,
+        builderSignatureDate: sheet.builderSignatureDate,
+        purchaserAgreementReceiptDate: sheet.purchaserAgreementReceiptDate,
+        basePrice: totals.basePrice,
+        allowanceTotal: totals.allowanceTotal,
+        upgradesTotal: totals.upgradesTotal,
+        discountsTotal: totals.discountsTotal,
+        gstRebate: sheet.gstRebate,
+        taxRate: totals.taxRate,
+        taxAmount: totals.taxAmount,
+        totalContractPrice: totals.totalContractPrice,
+        purchasePrice: totals.totalContractPrice,
+        scopeSummary: sheet.scopeSummary,
+        inclusions: sheet.inclusions,
+        exclusions: sheet.exclusions,
+        specialConditions: sheet.specialConditions,
+        clientTerms: sheet.clientTerms,
+        internalNotes: sheet.internalNotes,
+        reviewNotes: sheet.reviewNotes,
+        status:
+          contract.status === ContractStatus.DRAFT
+            ? ContractStatus.READY_FOR_REVIEW
+            : contract.status,
+      },
+    });
 
-  await prisma.purchaseContract.update({
-    where: { id: contractId },
-    data: {
-      projectName: formString(form, "projectName") || null,
-      municipalAddress: formString(form, "municipalAddress") || null,
-      legalAddress: formString(form, "legalAddress") || null,
-      lotBlockPlan: formString(form, "lotBlockPlan") || null,
-      buyerFirstName: formString(form, "buyerFirstName") || null,
-      buyerLastName: formString(form, "buyerLastName") || null,
-      buyerEmail: formString(form, "buyerEmail") || null,
-      buyerPhone: formString(form, "buyerPhone") || null,
-      buyerMailing: formString(form, "buyerMailing") || null,
-      builderName: formString(form, "builderName") || "Sunview Custom Homes",
-      contractDate: contractDateRaw ? new Date(contractDateRaw) : undefined,
-      effectiveDate: effectiveDateRaw ? new Date(effectiveDateRaw) : null,
-      targetClosing: targetClosingRaw ? new Date(targetClosingRaw) : null,
-      basePrice: totals.basePrice,
-      allowanceTotal: totals.allowanceTotal,
-      upgradesTotal: totals.upgradesTotal,
-      discountsTotal: totals.discountsTotal,
-      taxRate: totals.taxRate,
-      taxAmount: totals.taxAmount,
-      totalContractPrice: totals.totalContractPrice,
-      purchasePrice: totals.totalContractPrice,
-      scopeSummary: formString(form, "scopeSummary") || null,
-      inclusions: formString(form, "inclusions") || null,
-      exclusions: formString(form, "exclusions") || null,
-      specialConditions: formString(form, "specialConditions") || null,
-      clientTerms: formString(form, "clientTerms") || null,
-      internalNotes: formString(form, "internalNotes") || null,
-      reviewNotes: formString(form, "reviewNotes") || null,
-      status:
-        contract.status === ContractStatus.DRAFT
-          ? ContractStatus.READY_FOR_REVIEW
-          : contract.status,
-    },
+    await syncContractDepositsAndConditions(
+      tx,
+      contractId,
+      contract.projectId,
+      form
+    );
   });
 
   await writeAudit({
@@ -320,7 +353,6 @@ export async function createContractRevisionAction(
   const reason = formString(form, "reason") || "Sales contract revision";
 
   await prisma.$transaction(async (tx) => {
-    // Archive current snapshot into PurchaseContractVersion
     await tx.purchaseContractVersion.create({
       data: {
         contractId,
@@ -340,7 +372,6 @@ export async function createContractRevisionAction(
       },
     });
 
-    // Increment version
     await tx.purchaseContract.update({
       where: { id: contractId },
       data: {

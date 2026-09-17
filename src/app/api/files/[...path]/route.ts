@@ -58,12 +58,17 @@ export async function GET(
       .basename(filePath)
       .replace(/[^\w.\-]+/g, "_")
       .slice(0, 120);
+    const isImage = contentType.startsWith("image/");
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
         "Content-Disposition": `inline; filename="${safeName}"`,
-        "Cache-Control": "private, no-store",
+        // Images re-check often but may be cached briefly — no-store made
+        // galleries feel blank for seconds on every navigation.
+        "Cache-Control": isImage
+          ? "private, max-age=300, stale-while-revalidate=86400"
+          : "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },
     });

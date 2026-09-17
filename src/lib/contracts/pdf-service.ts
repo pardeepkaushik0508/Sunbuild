@@ -13,10 +13,14 @@ export type PrintableContractData = {
   buyerEmail?: string | null;
   buyerPhone?: string | null;
   buyerAddress?: string | null;
+  buyerOccupation?: string | null;
+  buyerIdNumber?: string | null;
   buyer2Name?: string | null;
   buyer2Email?: string | null;
   buyer2Phone?: string | null;
   buyer2Address?: string | null;
+  buyer2Occupation?: string | null;
+  buyer2IdNumber?: string | null;
   projectName?: string | null;
   municipalAddress?: string | null;
   legalAddress?: string | null;
@@ -58,6 +62,7 @@ export type PrintableContractData = {
     title: string;
     amount: number;
   }>;
+  changeOrderNotes?: string | null;
   scopeSummary?: string | null;
   inclusions?: string | null;
   exclusions?: string | null;
@@ -130,8 +135,17 @@ export function generateContractHtml(data: PrintableContractData): string {
     (c) => !c.party || c.party === "purchaser"
   );
   const builderConditions = (data.conditions || []).filter((c) => c.party === "builder");
-  const deposits = data.deposits || [];
-  const depositPaid = deposits.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const depositsRaw = data.deposits || [];
+  const depositByLabel = (label: string) =>
+    depositsRaw.find((d) => d.label === label);
+  const deposits = [
+    depositByLabel("On Signing"),
+    depositByLabel("On removal of condition"),
+    depositByLabel("By Date 1"),
+    depositByLabel("By Date 2"),
+    depositByLabel("By Date 3"),
+  ];
+  const depositPaid = depositsRaw.reduce((sum, d) => sum + (d.amount || 0), 0);
   const balanceClosing = Math.max(0, (data.totalContractPrice || 0) - depositPaid);
 
   const field = (label: string, value: string, grow = true) =>
@@ -230,6 +244,14 @@ export function generateContractHtml(data: PrintableContractData): string {
     <div class="form-field grow"><span class="form-value">${escapeHtml(data.buyer2Email || "")}</span></div>
   </div>
   <div class="form-row">
+    ${field("Occupation", data.buyerOccupation || "")}
+    <div class="form-field grow"><span class="form-value">${escapeHtml(data.buyer2Occupation || "")}</span></div>
+  </div>
+  <div class="form-row">
+    ${field("ID Number", data.buyerIdNumber || "")}
+    <div class="form-field grow"><span class="form-value">${escapeHtml(data.buyer2IdNumber || "")}</span></div>
+  </div>
+  <div class="form-row">
     ${field("Realtor's Name:", data.realtorName || "")}
     ${field("Phone:", data.realtorPhone || "")}
     ${field("Email:", data.realtorEmail || "")}
@@ -268,10 +290,14 @@ export function generateContractHtml(data: PrintableContractData): string {
   <div class="form-row">${field("Condition 2:", builderConditions[1]?.title || "")}</div>
 
   <div class="section-box">SCHEDULE B – Change Orders</div>
-  ${(data.changeOrders || [])
-    .slice(0, 6)
-    .map((co) => `<div class="form-row">${field(`${co.title}:`, displayMoney(co.amount))}</div>`)
-    .join("") || `<div class="form-row">${field("Change Order:", "")}</div>`}
+  ${
+    data.changeOrderNotes
+      ? `<div class="form-row">${field("Change Order:", data.changeOrderNotes)}</div>`
+      : (data.changeOrders || [])
+          .slice(0, 6)
+          .map((co) => `<div class="form-row">${field(`${co.title}:`, displayMoney(co.amount))}</div>`)
+          .join("") || `<div class="form-row">${field("Change Order:", "")}</div>`
+  }
 </body>
 </html>`;
 }
@@ -598,13 +624,22 @@ export async function generateContractPdfBuffer(
   const lot = data.lot || parsed.lot;
   const plan = data.plan || parsed.plan;
   const city = data.city || "";
-  const deposits = data.deposits || [];
+  const depositsRaw = data.deposits || [];
+  const depositByLabel = (label: string) =>
+    depositsRaw.find((d) => d.label === label);
+  const deposits = [
+    depositByLabel("On Signing"),
+    depositByLabel("On removal of condition"),
+    depositByLabel("By Date 1"),
+    depositByLabel("By Date 2"),
+    depositByLabel("By Date 3"),
+  ];
   const gstRebate = data.gstRebate ?? data.discountsTotal ?? 0;
   const purchaserConditions = (data.conditions || []).filter(
     (c) => !c.party || c.party === "purchaser"
   );
   const builderConditions = (data.conditions || []).filter((c) => c.party === "builder");
-  const depositPaid = deposits.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const depositPaid = depositsRaw.reduce((sum, d) => sum + (d.amount || 0), 0);
   const balanceClosing = Math.max(0, (data.totalContractPrice || 0) - depositPaid);
 
   // ── PROPERTY & CONTRACT ──
@@ -669,6 +704,14 @@ export async function generateContractPdfBuffer(
 
   drawField("Email Address", data.buyerEmail || "", marginL, half);
   drawField("", data.buyer2Email || "", ampX + 14, half);
+  advanceRow();
+
+  drawField("Occupation", data.buyerOccupation || "", marginL, half);
+  drawField("", data.buyer2Occupation || "", ampX + 14, half);
+  advanceRow();
+
+  drawField("ID Number", data.buyerIdNumber || "", marginL, half);
+  drawField("", data.buyer2IdNumber || "", ampX + 14, half);
   advanceRow();
 
   const nameW = contentW * 0.38;
@@ -756,15 +799,20 @@ export async function generateContractPdfBuffer(
 
   // ── SCHEDULE B ──
   drawSectionHeader("SCHEDULE B – Change Orders");
-  const cos = data.changeOrders || [];
-  if (cos.length === 0) {
-    drawField("Change Order", "", marginL, contentW);
+  if (data.changeOrderNotes) {
+    drawField("Change Order", data.changeOrderNotes, marginL, contentW);
     advanceRow();
   } else {
-    for (const co of cos.slice(0, 8)) {
-      ensureSpace(rowGap + 4);
-      drawField(co.title || "Change Order", displayMoney(co.amount), marginL, contentW);
+    const cos = data.changeOrders || [];
+    if (cos.length === 0) {
+      drawField("Change Order", "", marginL, contentW);
       advanceRow();
+    } else {
+      for (const co of cos.slice(0, 8)) {
+        ensureSpace(rowGap + 4);
+        drawField(co.title || "Change Order", displayMoney(co.amount), marginL, contentW);
+        advanceRow();
+      }
     }
   }
 

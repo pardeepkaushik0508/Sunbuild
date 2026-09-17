@@ -128,7 +128,8 @@ export function ProjectHeroImageCard({
               <MediaImage
                 src={url}
                 alt={`Client home banner ${index + 1}`}
-                thumbnail={false}
+                thumbnail
+                priority={index < 4}
                 width={640}
                 height={640}
                 aspectClassName="aspect-square"

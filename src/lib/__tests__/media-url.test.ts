@@ -44,6 +44,16 @@ describe("mediaThumbnailUrl", () => {
       "https://res.cloudinary.com/demo/image/upload/c_fill,f_auto,q_auto,w_100,h_80/v1/sample.jpg"
     );
   });
+
+  it("uses c_fit when crop is fit (contain galleries)", () => {
+    assert.equal(
+      mediaThumbnailUrl(
+        "https://res.cloudinary.com/demo/image/upload/v1/sample.jpg",
+        { width: 800, height: 800, crop: "fit" }
+      ),
+      "https://res.cloudinary.com/demo/image/upload/c_fit,f_auto,q_auto,w_800,h_800/v1/sample.jpg"
+    );
+  });
 });
 
 describe("bundledLegacyMediaPath", () => {

@@ -74,7 +74,8 @@ export function ClientHomeHero({
               <MediaImage
                 src={src}
                 alt={`${projectName} banner ${index + 1}`}
-                thumbnail={false}
+                thumbnail
+                priority={index < 4}
                 width={800}
                 height={800}
                 aspectClassName="aspect-square"

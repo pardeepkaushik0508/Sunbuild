@@ -341,6 +341,9 @@ export function toCloudinaryFolder(appFolder: string) {
   const avatars = cleaned.match(/^avatars\/([^/]+)$/);
   if (avatars) return `${root}/users/${avatars[1]}/avatars`;
 
+  const heroes = cleaned.match(/^heroes\/([^/]+)$/);
+  if (heroes) return `${root}/projects/${heroes[1]}/heroes`;
+
   const contracts = cleaned.match(/^contracts(?:\/([^/]+))?$/);
   if (contracts) {
     return contracts[1]
@@ -404,6 +407,20 @@ export async function uploadBufferToCloudinary(opts: {
           unique_filename: true,
           overwrite: false,
           filename_override: opts.originalFilename.slice(0, 120),
+          // Keep originals viewable fast — WhatsApp / phone shots can be multi‑MB.
+          ...(isImage
+            ? {
+                transformation: [
+                  {
+                    width: 2400,
+                    height: 2400,
+                    crop: "limit",
+                    quality: "auto:good",
+                    fetch_format: "auto",
+                  },
+                ],
+              }
+            : {}),
         },
         (error, res) => {
           if (error || !res) reject(error ?? new Error("Empty Cloudinary response"));

@@ -88,18 +88,31 @@ export function mediaUrl(path?: string | null) {
 /** Thumbnail delivery URL — Cloudinary f_auto/q_auto when applicable. */
 export function mediaThumbnailUrl(
   path?: string | null,
-  opts?: { width?: number; height?: number }
+  opts?: {
+    width?: number;
+    height?: number;
+    /** fill crops; fit letterboxes; limit shrinks without upscaling. */
+    crop?: "fill" | "fit" | "limit";
+  }
 ) {
   const url = mediaUrl(path);
   if (!url) return null;
   const width = opts?.width ?? 480;
   const height = opts?.height ?? 320;
+  const crop =
+    opts?.crop === "fit"
+      ? "c_fit"
+      : opts?.crop === "limit"
+        ? "c_limit"
+        : "c_fill";
   try {
     const host = new URL(url).hostname;
     if (host.endsWith("cloudinary.com") && url.includes("/upload/")) {
+      // Avoid stacking transforms if a thumbnail URL is passed again.
+      if (/\/upload\/(?:c_|f_auto|q_auto|w_\d)/.test(url)) return url;
       return url.replace(
         "/upload/",
-        `/upload/c_fill,f_auto,q_auto,w_${width},h_${height}/`
+        `/upload/${crop},f_auto,q_auto,w_${width},h_${height}/`
       );
     }
   } catch {

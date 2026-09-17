@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
 import { cn, isImageFileName, mediaThumbnailUrl, mediaUrl } from "@/lib/utils";
 
@@ -16,10 +16,13 @@ type MediaImageProps = {
   aspectClassName?: string;
   /** How the image fills the box. Default cover. */
   objectFit?: "cover" | "contain";
+  /** Hint browser to prioritize first paints (hero tiles). */
+  priority?: boolean;
 };
 
 /**
  * Image with skeleton loading + fallback. Does not crash on broken assets.
+ * Cached images are marked ready via img.complete (onLoad alone can miss).
  */
 export function MediaImage({
   src,
@@ -30,9 +33,11 @@ export function MediaImage({
   height = 320,
   aspectClassName = "aspect-video",
   objectFit = "cover",
+  priority = false,
 }: MediaImageProps) {
+  const crop = objectFit === "contain" ? "fit" : "fill";
   const primary = thumbnail
-    ? mediaThumbnailUrl(src, { width, height })
+    ? mediaThumbnailUrl(src, { width, height, crop })
     : mediaUrl(src);
   const bundled =
     src &&
@@ -50,12 +55,22 @@ export function MediaImage({
     useBundled && bundled && bundled !== primary ? bundled : primary;
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setUseBundled(false);
     setFailedFor(null);
     setLoadedFor(null);
   }, [src]);
+
+  // Browser may finish from cache before onLoad is attached — mark ready then.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || !resolved) return;
+    if (img.complete && img.naturalWidth > 0) {
+      setLoadedFor(resolved);
+    }
+  }, [resolved]);
 
   const failed = !resolved || failedFor === resolved;
   const ready = Boolean(resolved) && loadedFor === resolved;
@@ -89,15 +104,17 @@ export function MediaImage({
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={imgRef}
         key={resolved}
-        src={resolved}
+        src={resolved!}
         alt={alt}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
         decoding="async"
+        fetchPriority={priority ? "high" : "auto"}
         width={width}
         height={height}
         className={cn(
-          "h-full w-full transition-opacity duration-200",
+          "h-full w-full transition-opacity duration-150",
           objectFit === "contain" ? "object-contain" : "object-cover",
           ready ? "opacity-100" : "opacity-0"
         )}

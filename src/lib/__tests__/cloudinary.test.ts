@@ -113,6 +113,13 @@ describe("cloudinary url helpers", () => {
     );
   });
 
+  it("maps hero folders under projects/", () => {
+    assert.equal(
+      toCloudinaryFolder("heroes/proj123"),
+      "sunbuild/projects/proj123/heroes"
+    );
+  });
+
   it("masks api keys without exposing the full value", () => {
     assert.equal(maskApiKey("232197833779359"), "…9359");
   });
