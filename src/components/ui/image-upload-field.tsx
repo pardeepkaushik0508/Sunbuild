@@ -19,6 +19,9 @@ type ImageUploadFieldProps = {
   label?: string;
   className?: string;
   required?: boolean;
+  /** Square previews (client banner); default is landscape. */
+  previewSquare?: boolean;
+  hint?: string;
 };
 
 /**
@@ -33,6 +36,8 @@ export function ImageUploadField({
   label,
   className,
   required = false,
+  previewSquare = false,
+  hint,
 }: ImageUploadFieldProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,16 +62,25 @@ export function ImageUploadField({
     if (!files?.length) return;
     const incoming = Array.from(files).filter((f) => f.size > 0);
     setPreviews((prev) => {
-      for (const p of prev) URL.revokeObjectURL(p.previewUrl);
-      const limited = (multiple ? incoming : incoming.slice(0, 1)).slice(
-        0,
-        maxFiles
-      );
-      const next = limited.map((file) => ({
+      const mapped = incoming.map((file) => ({
         id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
         file,
         previewUrl: URL.createObjectURL(file),
       }));
+
+      let next: PreviewFile[];
+      if (multiple) {
+        // Append so users can pick more than once up to maxFiles.
+        next = [...prev, ...mapped].slice(0, maxFiles);
+        const kept = new Set(next.map((p) => p.id));
+        for (const p of prev) {
+          if (!kept.has(p.id)) URL.revokeObjectURL(p.previewUrl);
+        }
+      } else {
+        for (const p of prev) URL.revokeObjectURL(p.previewUrl);
+        next = mapped.slice(0, 1);
+      }
+
       queueMicrotask(() => syncInputFiles(next));
       return next;
     });
@@ -91,6 +105,8 @@ export function ImageUploadField({
         </label>
       ) : null}
 
+      {hint ? <p className="text-xs text-sb-muted">{hint}</p> : null}
+
       <input
         ref={inputRef}
         id={inputId}
@@ -100,11 +116,22 @@ export function ImageUploadField({
         multiple={multiple}
         required={required && previews.length === 0}
         className="block w-full text-sm text-sb-muted file:mr-3 file:rounded-[8px] file:border-0 file:bg-sb-canvas file:px-3 file:py-2 file:text-sm file:font-medium file:text-sb-ink hover:file:bg-sb-border/40"
-        onChange={(e) => onSelect(e.target.files)}
+        onChange={(e) => {
+          onSelect(e.target.files);
+          // Allow re-selecting the same files later.
+          e.target.value = "";
+        }}
       />
 
       {previews.length > 0 ? (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <ul
+          className={cn(
+            "grid gap-3",
+            previewSquare
+              ? "grid-cols-2 sm:grid-cols-3"
+              : "grid-cols-2 sm:grid-cols-3"
+          )}
+        >
           {previews.map((p) => (
             <li
               key={p.id}
@@ -114,7 +141,12 @@ export function ImageUploadField({
               <img
                 src={p.previewUrl}
                 alt={p.file.name}
-                className="aspect-video w-full object-cover"
+                className={cn(
+                  "w-full bg-sb-canvas",
+                  previewSquare
+                    ? "aspect-square object-contain"
+                    : "aspect-video object-cover"
+                )}
               />
               <div className="flex items-center justify-between gap-1 px-2 py-1.5">
                 <span className="truncate text-[11px] text-sb-muted" title={p.file.name}>

@@ -277,14 +277,19 @@ export default async function ClientHomePage({
   }));
 
   const projectPicker = projects.map((p) => ({ id: p.id, name: p.name }));
-  const heroImageSrc = full.heroImageUrl || null;
+  const heroImageSrcs =
+    full.heroImageUrls?.length > 0
+      ? full.heroImageUrls
+      : full.heroImageUrl
+        ? [full.heroImageUrl]
+        : [];
 
   return (
     <div className="w-full space-y-5">
       <ClientHomeHero
         projectName={full.name}
         statusLabel={full.status.replace(/_/g, " ")}
-        imageSrc={heroImageSrc}
+        imageSrcs={heroImageSrcs}
         progressPercent={liveProgress}
         photosHref={`/client/photos?projectId=${full.id}`}
       />

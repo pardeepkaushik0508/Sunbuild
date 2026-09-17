@@ -14,6 +14,8 @@ type MediaImageProps = {
   height?: number;
   /** Stable aspect box — avoids layout jump while loading. */
   aspectClassName?: string;
+  /** How the image fills the box. Default cover. */
+  objectFit?: "cover" | "contain";
 };
 
 /**
@@ -27,6 +29,7 @@ export function MediaImage({
   width = 480,
   height = 320,
   aspectClassName = "aspect-video",
+  objectFit = "cover",
 }: MediaImageProps) {
   const primary = thumbnail
     ? mediaThumbnailUrl(src, { width, height })
@@ -94,7 +97,8 @@ export function MediaImage({
         width={width}
         height={height}
         className={cn(
-          "h-full w-full object-cover transition-opacity duration-200",
+          "h-full w-full transition-opacity duration-200",
+          objectFit === "contain" ? "object-contain" : "object-cover",
           ready ? "opacity-100" : "opacity-0"
         )}
         onLoad={() => setLoadedFor(resolved)}

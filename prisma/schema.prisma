@@ -403,7 +403,10 @@ model Project {
   targetClosing   DateTime?
   warrantyStart   DateTime?
   warrantyEnd     DateTime?
+  /// Legacy single banner URL — kept in sync with heroImageUrls[0].
   heroImageUrl    String?
+  /// Client home house-mockup images (square gallery on client portal).
+  heroImageUrls   String[]      @default([])
   /// Uploaded material / selection spreadsheet (Cloudinary URL or legacy path).
   materialListPath String?
   materialListPublicId String?

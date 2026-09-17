@@ -231,6 +231,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       <ProjectHeroImageCard
         projectId={project.id}
         heroImageUrl={project.heroImageUrl}
+        heroImageUrls={project.heroImageUrls}
       />
 
       {scheduleItems.length > 0 ? (

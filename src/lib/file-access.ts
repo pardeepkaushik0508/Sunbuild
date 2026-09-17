@@ -195,7 +195,9 @@ export async function assertFileDownloadAccess(
 
   // Client home banner / house mockup — anyone with project access (incl. client)
   const heroProject = await prisma.project.findFirst({
-    where: { heroImageUrl: filePath },
+    where: {
+      OR: [{ heroImageUrl: filePath }, { heroImageUrls: { has: filePath } }],
+    },
     select: { id: true },
   });
   if (heroProject) {

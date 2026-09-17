@@ -3,15 +3,39 @@ import { AppError } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { revalidateJobsSurfaces } from "@/lib/jobs/revalidate-jobs";
 import { revalidateProjectPhotos } from "@/lib/photos/revalidate";
+import { collectUploadFiles } from "@/lib/media/collect-upload-files";
 import { deleteUpload, saveCompanyUpload } from "@/lib/storage";
 import type { AppSession } from "@/lib/session";
+import {
+  MAX_HERO_IMAGES,
+  projectHeroImageUrls,
+} from "@/lib/projects/hero-image-shared";
+
+export {
+  MAX_HERO_IMAGES,
+  heroSquareGridClass,
+  projectHeroImageUrls,
+} from "@/lib/projects/hero-image-shared";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 
+export function getHeroImageFiles(form: FormData): File[] {
+  return collectUploadFiles(form, ["heroImage", "heroImages", "images"]).slice(
+    0,
+    MAX_HERO_IMAGES
+  );
+}
+
+/** @deprecated use getHeroImageFiles — kept for call sites that expect one file */
 export function getHeroImageFile(form: FormData): File | null {
-  const value = form.get("heroImage");
-  if (value instanceof File && value.size > 0) return value;
-  return null;
+  return getHeroImageFiles(form)[0] ?? null;
+}
+
+function syncLegacyHeroField(urls: string[]) {
+  return {
+    heroImageUrls: urls,
+    heroImageUrl: urls[0] ?? null,
+  };
 }
 
 function assertHeroImageFile(file: File) {
@@ -26,38 +50,60 @@ function assertHeroImageFile(file: File) {
   }
 }
 
-export async function saveProjectHeroImage(opts: {
+export async function saveProjectHeroImages(opts: {
   session: AppSession;
   projectId: string;
-  file: File;
+  files: File[];
+  /** When true, replace existing images instead of appending. */
+  replace?: boolean;
 }) {
-  const { session, projectId, file } = opts;
-  assertHeroImageFile(file);
+  const { session, projectId, files, replace = false } = opts;
+  if (files.length === 0) {
+    throw new AppError("Please select at least one house mockup image.");
+  }
+  for (const file of files) assertHeroImageFile(file);
 
   const previous = await prisma.project.findFirst({
     where: { id: projectId, companyId: session.membership.companyId },
-    select: { heroImageUrl: true },
+    select: { heroImageUrl: true, heroImageUrls: true },
   });
   if (!previous) throw new AppError("Project not found");
 
-  const saved = await saveCompanyUpload(
-    session.membership.companyId,
-    file,
-    `heroes/${projectId}`
-  );
+  const existing = replace ? [] : projectHeroImageUrls(previous);
+  const remainingSlots = Math.max(0, MAX_HERO_IMAGES - existing.length);
+  if (remainingSlots <= 0) {
+    throw new AppError(
+      `You can upload up to ${MAX_HERO_IMAGES} banner images. Remove some first.`
+    );
+  }
 
+  const toUpload = files.slice(0, remainingSlots);
+  const uploaded: string[] = [];
+  for (const file of toUpload) {
+    const saved = await saveCompanyUpload(
+      session.membership.companyId,
+      file,
+      `heroes/${projectId}`
+    );
+    uploaded.push(saved.filePath);
+  }
+
+  const next = [...existing, ...uploaded];
   await prisma.project.update({
     where: { id: projectId },
-    data: {
-      heroImageUrl: saved.filePath,
-    },
+    data: syncLegacyHeroField(next),
   });
 
-  if (previous.heroImageUrl && previous.heroImageUrl !== saved.filePath) {
-    try {
-      await deleteUpload(previous.heroImageUrl, { resourceType: "image" });
-    } catch {
-      // best-effort cleanup
+  if (replace) {
+    const removed = projectHeroImageUrls(previous).filter(
+      (url) => !next.includes(url)
+    );
+    for (const url of removed) {
+      try {
+        await deleteUpload(url, { resourceType: "image" });
+      } catch {
+        // best-effort cleanup
+      }
     }
   }
 
@@ -68,11 +114,70 @@ export async function saveProjectHeroImage(opts: {
     action: "PROJECT_HERO_UPDATED",
     entityType: "Project",
     entityId: projectId,
+    metadata: { added: uploaded.length, total: next.length },
   });
 
   revalidateProjectPhotos(projectId);
   revalidateJobsSurfaces(projectId);
-  return saved;
+  return { urls: next, added: uploaded };
+}
+
+/** Single-file helper used by older call sites — appends one image. */
+export async function saveProjectHeroImage(opts: {
+  session: AppSession;
+  projectId: string;
+  file: File;
+}) {
+  return saveProjectHeroImages({
+    session: opts.session,
+    projectId: opts.projectId,
+    files: [opts.file],
+  });
+}
+
+export async function removeProjectHeroImage(opts: {
+  session: AppSession;
+  projectId: string;
+  imageUrl: string;
+}) {
+  const { session, projectId, imageUrl } = opts;
+  if (!imageUrl) throw new AppError("Image is required.");
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, companyId: session.membership.companyId },
+    select: { heroImageUrl: true, heroImageUrls: true },
+  });
+  if (!project) throw new AppError("Project not found");
+
+  const current = projectHeroImageUrls(project);
+  if (!current.includes(imageUrl)) {
+    throw new AppError("Image not found on this project.");
+  }
+
+  const next = current.filter((url) => url !== imageUrl);
+  await prisma.project.update({
+    where: { id: projectId },
+    data: syncLegacyHeroField(next),
+  });
+
+  try {
+    await deleteUpload(imageUrl, { resourceType: "image" });
+  } catch {
+    // file may already be gone
+  }
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId,
+    action: "PROJECT_HERO_REMOVED",
+    entityType: "Project",
+    entityId: projectId,
+    metadata: { removed: imageUrl, remaining: next.length },
+  });
+
+  revalidateProjectPhotos(projectId);
+  revalidateJobsSurfaces(projectId);
 }
 
 export async function clearProjectHeroImage(opts: {
@@ -82,13 +187,14 @@ export async function clearProjectHeroImage(opts: {
   const { session, projectId } = opts;
   const project = await prisma.project.findFirst({
     where: { id: projectId, companyId: session.membership.companyId },
-    select: { heroImageUrl: true },
+    select: { heroImageUrl: true, heroImageUrls: true },
   });
   if (!project) throw new AppError("Project not found");
 
-  if (project.heroImageUrl) {
+  const urls = projectHeroImageUrls(project);
+  for (const url of urls) {
     try {
-      await deleteUpload(project.heroImageUrl, { resourceType: "image" });
+      await deleteUpload(url, { resourceType: "image" });
     } catch {
       // file may already be gone
     }
@@ -96,7 +202,7 @@ export async function clearProjectHeroImage(opts: {
 
   await prisma.project.update({
     where: { id: projectId },
-    data: { heroImageUrl: null },
+    data: syncLegacyHeroField([]),
   });
 
   await writeAudit({
@@ -106,6 +212,7 @@ export async function clearProjectHeroImage(opts: {
     action: "PROJECT_HERO_REMOVED",
     entityType: "Project",
     entityId: projectId,
+    metadata: { cleared: urls.length },
   });
 
   revalidateProjectPhotos(projectId);

@@ -1,5 +1,7 @@
 "use client";
 
+import { clearSessionLastActive } from "@/lib/session-activity";
+
 /**
  * Clears the Better Auth session and hard-navigates to login with replace
  * so the logout action itself does not leave a new history entry on top
@@ -7,6 +9,7 @@
  * the browser back button cannot reopen a logged-out dashboard.
  */
 export async function signOutAndRedirect(redirectTo = "/login") {
+  clearSessionLastActive();
   const { authClient } = await import("@/lib/auth-client");
   try {
     await authClient.signOut();

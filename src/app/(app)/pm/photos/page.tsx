@@ -49,7 +49,7 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
     filterProjectId && projectIds.includes(filterProjectId)
       ? prisma.project.findFirst({
           where: { id: filterProjectId },
-          select: { id: true, heroImageUrl: true },
+          select: { id: true, heroImageUrl: true, heroImageUrls: true },
         })
       : Promise.resolve(null),
   ]);
@@ -75,6 +75,7 @@ export default async function PMPhotosPage({ searchParams }: PageProps) {
           <ProjectHeroImageCard
             projectId={bannerProject.id}
             heroImageUrl={bannerProject.heroImageUrl}
+            heroImageUrls={bannerProject.heroImageUrls}
           />
         </div>
       ) : null}

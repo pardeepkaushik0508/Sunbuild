@@ -5,7 +5,8 @@ import { requireRole, assertProjectAccess } from "@/lib/session";
 import { requireCapability } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName } from "@/lib/utils";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { PrintPageButton } from "@/components/ui/print-page-button";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -58,13 +59,7 @@ export default async function PrintSoaPage({ params }: PageProps) {
           <ArrowLeft className="h-4 w-4" />
           Back to SOA Workspace
         </Link>
-        <button
-          onClick={() => {}}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-neutral-800"
-        >
-          <Printer className="h-4 w-4" />
-          <span>Print / Save to PDF</span>
-        </button>
+        <PrintPageButton />
       </div>
 
       {/* Printable Sheet */}

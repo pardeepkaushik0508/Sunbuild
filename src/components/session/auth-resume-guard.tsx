@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
+import { clearSessionLastActive } from "@/lib/session-activity";
 
 /**
  * If Chrome/Safari restores a protected page from the back/forward cache
@@ -19,10 +20,12 @@ export function AuthResumeGuard() {
         const { data } = await authClient.getSession();
         if (cancelled) return;
         if (!data?.session) {
+          clearSessionLastActive();
           window.location.replace("/login");
         }
       } catch {
         if (!cancelled) {
+          clearSessionLastActive();
           window.location.replace("/login");
         }
       }

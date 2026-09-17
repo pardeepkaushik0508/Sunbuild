@@ -85,9 +85,10 @@ import {
 } from "@/lib/dashboard/sync-project-progress";
 import { collectUploadFiles } from "@/lib/media/collect-upload-files";
 import {
-  getHeroImageFile,
-  saveProjectHeroImage,
+  getHeroImageFiles,
+  saveProjectHeroImages,
   clearProjectHeroImage,
+  removeProjectHeroImage,
 } from "@/lib/projects/hero-image";
 import { revalidateProjectPhotos, revalidateProjectSelections } from "@/lib/photos/revalidate";
 import { isSectionClientVisible } from "@/lib/selections/query";
@@ -931,13 +932,13 @@ export async function confirmContractAction(contractId: string, form: FormData) 
     });
   }
 
-  const heroFile = getHeroImageFile(form);
-  if (heroFile) {
+  const heroFiles = getHeroImageFiles(form);
+  if (heroFiles.length > 0) {
     try {
-      await saveProjectHeroImage({
+      await saveProjectHeroImages({
         session,
         projectId: result.projectId,
-        file: heroFile,
+        files: heroFiles,
       });
     } catch (err) {
       console.error("[contract-confirm] hero image failed", err);
@@ -1759,11 +1760,29 @@ export async function updateProjectHeroImageAction(form: FormData) {
     const projectId = formString(form, "projectId");
     if (!projectId) return { error: "Project is required." };
     await assertProjectAccess(session, projectId);
-    const file = getHeroImageFile(form);
-    if (!file) {
-      return { error: "Please select a house mockup image to upload." };
+    const files = getHeroImageFiles(form);
+    if (files.length === 0) {
+      return { error: "Please select at least one house mockup image to upload." };
     }
-    await saveProjectHeroImage({ session, projectId, file });
+    await saveProjectHeroImages({ session, projectId, files });
+    return { success: true };
+  } catch (err) {
+    if (err instanceof AppError) return { error: err.message };
+    throw err;
+  }
+}
+
+export async function removeProjectHeroImageAction(form: FormData) {
+  try {
+    const session = await requireSession();
+    requireClientHeroAccess(session);
+    await rateLimitAction(session.user.id, "hero-remove");
+    const projectId = formString(form, "projectId");
+    const imageUrl = formString(form, "imageUrl");
+    if (!projectId) return { error: "Project is required." };
+    if (!imageUrl) return { error: "Image is required." };
+    await assertProjectAccess(session, projectId);
+    await removeProjectHeroImage({ session, projectId, imageUrl });
     return { success: true };
   } catch (err) {
     if (err instanceof AppError) return { error: err.message };
@@ -3187,11 +3206,15 @@ export async function inviteUserAction(form: FormData): Promise<
       metadata: { email, role, projectIds },
     });
 
-    const heroFile = getHeroImageFile(form);
-    if (role === Role.CLIENT && heroFile && projectIds.length > 0) {
+    const heroFiles = getHeroImageFiles(form);
+    if (role === Role.CLIENT && heroFiles.length > 0 && projectIds.length > 0) {
       try {
         for (const projectId of projectIds) {
-          await saveProjectHeroImage({ session, projectId, file: heroFile });
+          await saveProjectHeroImages({
+            session,
+            projectId,
+            files: heroFiles,
+          });
         }
       } catch (err) {
         console.error("[invite] hero image failed", err);

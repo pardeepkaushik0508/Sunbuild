@@ -10,6 +10,7 @@ import { type PermissionMatrixState } from "@/lib/permission-matrix";
 import { getCompanyPermissionMatrix } from "@/lib/permission-matrix-store";
 import { getActiveMembershipCookie } from "@/lib/membership-cookie";
 import { isCompanyVisibleInMvp } from "@/lib/companies/mvp-visibility";
+import { getSessionTimeoutMinutes } from "@/lib/settings/store";
 
 export type AppSession = {
   user: {
@@ -39,13 +40,30 @@ export type AppSession = {
   }>;
 };
 
+function sessionUpdatedAtMs(value: Date | string | number | undefined): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const t = Date.parse(value);
+    return Number.isFinite(t) ? t : 0;
+  }
+  return 0;
+}
+
 /**
  * Request-scoped session load (deduped via React.cache).
  * Prevents RoleShell + page + loaders from re-querying auth/membership.
+ * Also enforces company idle session timeout against session.updatedAt.
  */
 const loadAppSession = cache(async (): Promise<AppSession | null> => {
+  const headerList = await headers();
+  // Avoid Better Auth sliding-refresh before we evaluate idle timeout.
   const session = await auth.api.getSession({
-    headers: await headers(),
+    headers: headerList,
+    query: {
+      disableRefresh: true,
+      disableCookieCache: true,
+    },
   });
   if (!session?.user) return null;
 
@@ -90,6 +108,24 @@ const loadAppSession = cache(async (): Promise<AppSession | null> => {
   const membership =
     activeMemberships.find((m) => m.id === preferredId) ??
     activeMemberships[0];
+
+  const timeoutMinutes = await getSessionTimeoutMinutes(membership.company.id);
+  const lastActiveMs = sessionUpdatedAtMs(session.session.updatedAt);
+  const idleMs = Math.max(1, timeoutMinutes) * 60 * 1000;
+  if (!lastActiveMs || Date.now() - lastActiveMs >= idleMs) {
+    await prisma.session
+      .deleteMany({ where: { token: session.session.token } })
+      .catch(() => undefined);
+    return null;
+  }
+
+  // Record activity so the idle window slides while the user keeps using the app.
+  await prisma.session
+    .updateMany({
+      where: { token: session.session.token },
+      data: { updatedAt: new Date() },
+    })
+    .catch(() => undefined);
 
   const permissionMatrix = await getCompanyPermissionMatrix(
     membership.company.id
@@ -277,7 +313,7 @@ export async function assertLeadAccess(session: AppSession, leadId: string) {
   return lead;
 }
 
-/** Contract access: linked project in company, or uploader within company staff roles. */
+/** Contract access: same-company staff, linked project ACL, or original uploader. */
 export async function assertContractAccess(
   session: AppSession,
   contractId: string
@@ -290,35 +326,56 @@ export async function assertContractAccess(
   });
   if (!contract) throw new ForbiddenError();
 
-  if (contract.project) {
-    if (contract.project.companyId !== session.membership.companyId) {
-      throw new ForbiddenError();
-    }
-    await assertProjectAccess(session, contract.project.id);
+  const companyId = session.membership.companyId;
+  const role = session.membership.role;
+  const tenantId = contract.companyId ?? contract.project?.companyId ?? null;
+
+  if (tenantId && tenantId !== companyId) {
+    throw new ForbiddenError();
+  }
+
+  // Project-linked contracts use project ACL (staff + assigned client).
+  if (contract.projectId) {
+    await assertProjectAccess(session, contract.projectId);
     return contract;
   }
 
   if (contract.uploadedById === session.user.id) return contract;
 
-  const role = session.membership.role;
-  const allowed =
+  const staff =
     role === Role.OWNER ||
+    role === Role.CEO ||
     role === Role.OPERATIONS_ADMIN ||
     role === Role.PROJECT_MANAGER ||
     role === Role.SALES_MANAGER;
-  if (!allowed) throw new ForbiddenError();
 
-  const uploaderMembership = await prisma.membership.findFirst({
-    where: {
-      userId: contract.uploadedById,
-      companyId: session.membership.companyId,
-      isActive: true,
-    },
-  });
-  if (!uploaderMembership && contract.uploadedById !== session.user.id) {
-    throw new ForbiddenError();
+  if (!staff) throw new ForbiddenError();
+
+  // Explicit company match — company staff can open the workspace/print/PDF.
+  if (contract.companyId === companyId) return contract;
+
+  // Legacy rows with null companyId: allow company staff when uploader is in-tenant
+  // (or owner/ops/ceo even if uploader membership was removed).
+  if (contract.companyId == null) {
+    if (
+      role === Role.OWNER ||
+      role === Role.CEO ||
+      role === Role.OPERATIONS_ADMIN
+    ) {
+      return contract;
+    }
+    const uploaderMembership = await prisma.membership.findFirst({
+      where: {
+        userId: contract.uploadedById,
+        companyId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (uploaderMembership) return contract;
   }
-  return contract;
+
+  throw new ForbiddenError();
 }
 
 /** Target user must be an active Subcontractor in the actor's company. */

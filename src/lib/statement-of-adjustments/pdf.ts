@@ -49,16 +49,18 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const amountColW = 132;
   const labelValueGap = 42;
   const labelRightX = amountX - amountColW - labelValueGap;
-  const sectionX = 184;
   const lineItemX = 202;
+  /** Vertical rhythm for financial rows (label baseline → next baseline). */
+  const moneyRowStep = 20;
+  const sectionGap = 10;
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - 36;
+  let y = pageHeight - 40;
 
   const ensureSpace = (needed: number) => {
-    if (y - needed < 48) {
+    if (y - needed < 52) {
       page = pdfDoc.addPage([pageWidth, pageHeight]);
-      y = pageHeight - 42;
+      y = pageHeight - 48;
       drawContinuationHeader();
     }
   };
@@ -78,14 +80,14 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       font: fontRegular,
       color: muted,
     });
-    y -= 26;
+    y -= 28;
     page.drawLine({
       start: { x: marginL, y },
       end: { x: amountX, y },
       thickness: 0.75,
       color: rule,
     });
-    y -= 16;
+    y -= 18;
   };
 
   const drawTextRight = (
@@ -143,6 +145,23 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     });
   };
 
+  const drawLabelRight = (
+    label: string,
+    opts?: { bold?: boolean; muted?: boolean; size?: number }
+  ) => {
+    const size = opts?.size ?? 9;
+    const font = opts?.bold ? fontBold : fontRegular;
+    const labelColor = opts?.bold && !opts?.muted ? ink : muted;
+    const w = font.widthOfTextAtSize(label, size);
+    page.drawText(label, {
+      x: labelRightX - w,
+      y,
+      size,
+      font,
+      color: labelColor,
+    });
+  };
+
   const drawMoneyRow = (
     label: string,
     amount: string,
@@ -151,9 +170,11 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       indent?: boolean;
       muted?: boolean;
       size?: number;
+      /** Skip the amount underline (section headers / empty values). */
+      noRule?: boolean;
     }
   ) => {
-    ensureSpace(22);
+    ensureSpace(moneyRowStep + 6);
     const size = opts?.size ?? 9;
     const font = opts?.bold ? fontBold : fontRegular;
     const labelColor = opts?.bold && !opts?.muted ? ink : muted;
@@ -167,24 +188,21 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
         color: labelColor,
       });
     } else {
-      const w = font.widthOfTextAtSize(label, size);
-      page.drawText(label, {
-        x: labelRightX - w,
-        y,
-        size,
-        font,
-        color: labelColor,
-      });
+      drawLabelRight(label, opts);
     }
 
-    drawTextRight(amount, amountX, y, size, !!opts?.bold, ink);
-    page.drawLine({
-      start: { x: amountX - amountColW, y: y - 3.5 },
-      end: { x: amountX, y: y - 3.5 },
-      thickness: 0.55,
-      color: amountRule,
-    });
-    y -= 14;
+    if (amount) {
+      drawTextRight(amount, amountX, y, size, !!opts?.bold, ink);
+      if (!opts?.noRule) {
+        page.drawLine({
+          start: { x: amountX - amountColW, y: y - 4.5 },
+          end: { x: amountX, y: y - 4.5 },
+          thickness: 0.55,
+          color: amountRule,
+        });
+      }
+    }
+    y -= moneyRowStep;
   };
 
   // ── Letterhead: logo top-left, address + GST under logo (client reference) ──
@@ -200,7 +218,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       width: logoW,
       height: logoH,
     });
-    headerBottom = y - logoH - 16;
+    headerBottom = y - logoH - 18;
   } else {
     page.drawText(data.companyLegal.legalName, {
       x: marginL,
@@ -209,7 +227,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       font: fontBold,
       color: ink,
     });
-    headerBottom = y - 18;
+    headerBottom = y - 20;
   }
 
   y = headerBottom;
@@ -220,7 +238,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     font: fontRegular,
     color: ink,
   });
-  y -= 12;
+  y -= 13;
   page.drawText(data.companyLegal.cityLine, {
     x: marginL,
     y,
@@ -228,7 +246,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     font: fontRegular,
     color: ink,
   });
-  y -= 12;
+  y -= 13;
   if (data.companyLegal.gstNumber) {
     page.drawText(data.companyLegal.gstNumber, {
       x: marginL,
@@ -237,13 +255,13 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
       font: fontRegular,
       color: ink,
     });
-    y -= 18;
+    y -= 20;
   } else {
-    y -= 8;
+    y -= 10;
   }
 
   // Centered title
-  y -= 4;
+  y -= 6;
   const title = "Statement of Adjustments";
   const titleSize = 13;
   const titleW = fontBold.widthOfTextAtSize(title, titleSize);
@@ -254,7 +272,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     font: fontBold,
     color: ink,
   });
-  y -= 28;
+  y -= 32;
 
   // ── Party fields: Municipal Address full width, then two columns ──
   drawInlineField(
@@ -263,14 +281,14 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     marginL,
     contentW
   );
-  y -= 20;
+  y -= 24;
 
   const leftStartY = y;
   let leftY = y;
   const drawLeft = (label: string, value: string) => {
     y = leftY;
     drawInlineField(label, value, marginL, colW);
-    leftY = y - 22;
+    leftY = y - 26;
   };
   drawLeft("Buyer Name", data.party.buyerName || "");
   drawLeft("Phone", data.party.phone || "");
@@ -281,7 +299,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   const drawRight = (label: string, value: string) => {
     y = rightY;
     drawInlineField(label, value, rightColX, colW);
-    rightY = y - 22;
+    rightY = y - 26;
   };
   drawRight("Date", formatDate(data.party.statementDate) || "");
   drawRight("Contract #", data.party.contractNumber || "");
@@ -291,7 +309,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     formatDate(data.party.possessionDate) || ""
   );
 
-  y = Math.min(leftY, rightY) - 6;
+  y = Math.min(leftY, rightY) - 10;
 
   // Thick separator before financial body
   page.drawLine({
@@ -300,7 +318,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     thickness: 1.4,
     color: rule,
   });
-  y -= 22;
+  y -= 26;
 
   // ── Financial body (client reference order, with optional GST) ──
   const calc = data.calculations;
@@ -310,29 +328,20 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     money(calc.baseHomePrice)
   );
   drawMoneyRow("Subtotal", money(calc.subtotal), { bold: true });
-  y -= 4;
+  y -= sectionGap;
 
-  page.drawText("Approved Change Orders", {
-    x: sectionX,
-    y,
-    size: 9,
-    font: fontBold,
-    color: ink,
+  // Section title + empty state share the same right-aligned label column
+  // as Base Home Price / Subtotal (not flush-left).
+  drawMoneyRow("Approved Change Orders", "", {
+    bold: true,
+    noRule: true,
   });
-  y -= 15;
 
   if (calc.changeOrders.length === 0) {
-    page.drawText("None", {
-      x: lineItemX,
-      y,
-      size: 9,
-      font: fontRegular,
-      color: muted,
-    });
-    y -= 15;
+    drawMoneyRow("None", "", { muted: true, noRule: true });
   } else {
     for (const co of calc.changeOrders) {
-      drawMoneyRow(co.label, money(co.amount), { indent: true, muted: true });
+      drawMoneyRow(co.label, money(co.amount), { muted: true });
     }
   }
 
@@ -365,7 +374,7 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
   drawMoneyRow("TOTAL SALES PRICE", money(calc.totalSalesPrice), {
     bold: true,
   });
-  y -= 4;
+  y -= sectionGap;
 
   if (calc.deposits.length > 0) {
     for (const dep of calc.deposits) {
@@ -379,8 +388,8 @@ export async function generateStatementOfAdjustmentsPdfBuffer(
     { bold: true }
   );
 
-  y -= 24;
-  ensureSpace(40);
+  y -= 28;
+  ensureSpace(44);
 
   const barHeight = 24;
   const barY = y - barHeight + 6;
@@ -427,7 +436,7 @@ export function generateStatementOfAdjustmentsHtml(
     : "";
   const coRows =
     calc.changeOrders.length === 0
-      ? `<tr><td colspan="2" class="muted indent">None</td></tr>`
+      ? `<tr class="muted"><td>None</td><td class="amt empty"></td></tr>`
       : calc.changeOrders
           .map(
             (co) =>
@@ -451,21 +460,21 @@ export function generateStatementOfAdjustmentsHtml(
 <title>Statement of Adjustments – ${escapeHtml(data.statementNumber)}</title>
 <style>
   @page { size: letter; margin: 14mm 14mm; }
-  body { font-family: Helvetica, Arial, sans-serif; color: #000; font-size: 11px; margin: 0; padding: 20px 24px; }
-  .letterhead { margin-bottom: 14px; }
+  body { font-family: Helvetica, Arial, sans-serif; color: #000; font-size: 11px; margin: 0; padding: 22px 26px; }
+  .letterhead { margin-bottom: 16px; }
   .logo-wrap { display: inline-block; padding: 0; }
   .logo-wrap img { height: 42px; width: auto; display: block; }
-  .addr { margin-top: 14px; font-size: 11px; line-height: 1.45; }
-  h1 { text-align: center; font-size: 15px; margin: 16px 0 22px; font-weight: 700; }
-  .field { margin-bottom: 20px; }
+  .addr { margin-top: 16px; font-size: 11px; line-height: 1.55; }
+  h1 { text-align: center; font-size: 15px; margin: 18px 0 26px; font-weight: 700; }
+  .field { margin-bottom: 22px; }
   .field .line {
-    border-bottom: 1px solid #111; padding: 2px 0 4px; min-height: 16px; font-size: 12px;
+    border-bottom: 1px solid #111; padding: 3px 0 5px; min-height: 17px; font-size: 12px;
   }
   .field .line .lbl { margin-right: 6px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 48px; margin-bottom: 8px; }
-  .thick { border: none; border-top: 1.5px solid #111; margin: 14px 0 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 48px; margin-bottom: 10px; }
+  .thick { border: none; border-top: 1.5px solid #111; margin: 16px 0 24px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  td { padding: 7px 0; vertical-align: top; border: none; }
+  td { padding: 10px 0; vertical-align: top; border: none; }
   td:first-child {
     text-align: right; padding-right: 36px; color: #616161; width: auto;
   }
@@ -473,18 +482,21 @@ export function generateStatementOfAdjustmentsHtml(
     text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
     width: 140px; border-bottom: 1px solid #333; color: #000;
   }
+  td.amt.empty { border-bottom: none; }
   .bold td, td.bold, tr.bold td { font-weight: 700; color: #000; }
   tr.bold td:first-child { color: #000; }
   tr.muted td:first-child, .muted { color: #6b6b6b; }
   tr.lineitem td:first-child {
-    text-align: left; padding-left: 72px; color: #6b6b6b;
+    text-align: right; padding-left: 0; color: #6b6b6b;
   }
-  .indent { padding-left: 72px; text-align: left !important; }
-  .section { font-weight: 700; padding-top: 8px; text-align: left !important; color: #000 !important; }
+  tr.section td:first-child {
+    font-weight: 700; padding-top: 14px; text-align: right; color: #000;
+  }
+  tr.section td.amt { border-bottom: none; }
   .cash-bar {
-    margin-top: 28px; background: #000; color: #fff; display: flex;
+    margin-top: 32px; background: #000; color: #fff; display: flex;
     justify-content: space-between; align-items: center;
-    padding: 8px 12px; font-weight: 700; font-size: 11px;
+    padding: 10px 14px; font-weight: 700; font-size: 11px;
   }
 </style>
 </head>
@@ -519,7 +531,7 @@ export function generateStatementOfAdjustmentsHtml(
   <table>
     <tr class="muted"><td>Base Home Price (Including Lot Cost)</td><td class="amt">${money(calc.baseHomePrice)}</td></tr>
     <tr class="bold"><td>Subtotal</td><td class="amt">${money(calc.subtotal)}</td></tr>
-    <tr><td class="section" colspan="2">Approved Change Orders</td></tr>
+    <tr class="section"><td>Approved Change Orders</td><td class="amt empty"></td></tr>
     ${coRows}
     <tr class="bold"><td>Change Orders Subtotal</td><td class="amt">${money(calc.changeOrdersSubtotal)}</td></tr>
     <tr class="muted"><td>Allowance (Promo credit towards Change Orders)</td><td class="amt">${money(calc.promoCreditAdjustment, true)}</td></tr>

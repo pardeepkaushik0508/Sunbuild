@@ -66,7 +66,10 @@ export async function RoleShell({
       showClientComms={sessionHasClientCommunication(session)}
     >
       <AuthResumeGuard />
-      <SessionTimeoutGuard timeoutMinutes={sessionTimeoutMinutes} />
+      <SessionTimeoutGuard
+        timeoutMinutes={sessionTimeoutMinutes}
+        userId={session.user.id}
+      />
       {children}
     </AppShell>
   );

@@ -12,6 +12,7 @@ import { BrandLogo } from "@/components/layout/brand-logo";
 import { useOptionalToast } from "@/components/ui/toast";
 import { safeInternalPath } from "@/lib/safe-redirect";
 import { pushWithProgress } from "@/lib/navigate";
+import { clearSessionLastActive } from "@/lib/session-activity";
 
 type Step = "credentials" | "totp";
 
@@ -30,6 +31,8 @@ export function LoginForm() {
   const nextPath = safeInternalPath(params.get("next"), "/");
 
   async function finishLogin() {
+    // Fresh login starts a new idle window (clears any prior timeout stamp).
+    clearSessionLastActive();
     pushWithProgress(router, nextPath);
     router.refresh();
   }

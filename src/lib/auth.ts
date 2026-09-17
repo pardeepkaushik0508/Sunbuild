@@ -71,8 +71,8 @@ async function sendResetPasswordEmail({
 }
 
 /**
- * Absolute session lifetime (cookie). Idle timeout is company-configurable
- * and enforced by SessionTimeoutGuard (max option 8 hours).
+ * Absolute cookie lifetime (7d). Company idle timeout is enforced in
+ * loadAppSession + SessionTimeoutGuard (max option 8 hours).
  */
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -108,7 +108,8 @@ export const auth = betterAuth({
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
+    // Keep DB updatedAt fresh enough for idle checks while cookie cache is off in loadAppSession.
+    updateAge: 60,
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60,
