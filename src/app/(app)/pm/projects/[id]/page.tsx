@@ -25,6 +25,7 @@ import {
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
+import { EMPTY_FIELD_LABEL, LOT_PLAN_LABEL } from "@/lib/labels";
 import { pickNextDeposit, formatClientDueDate } from "@/lib/deposits/next-deposit";
 import { loadProjectSubcontractorPayments } from "@/lib/payments/subcontractor-summary";
 import { financeRolesCanSeeAllSubPayments } from "@/lib/payments/invoice-flow";
