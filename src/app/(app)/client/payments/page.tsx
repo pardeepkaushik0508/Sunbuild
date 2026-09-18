@@ -11,6 +11,7 @@ import {
   parseChangeOrderClientTotal,
 } from "@/lib/client/flow";
 import { depositDisplayLabel } from "@/lib/labels";
+import { computeDepositDue } from "@/lib/deposits/due";
 
 export default async function ClientPaymentsPage({
   searchParams,
@@ -58,6 +59,17 @@ export default async function ClientPaymentsPage({
     prisma.deposit.findMany({
       where: { projectId: project.id },
       orderBy: { createdAt: "asc" },
+      include: {
+        linkedScheduleItem: {
+          select: {
+            title: true,
+            status: true,
+            endDate: true,
+            baselineEndDate: true,
+            actualEndDate: true,
+          },
+        },
+      },
     }),
   ]);
 
@@ -96,7 +108,24 @@ export default async function ClientPaymentsPage({
   }));
 
   const depositCards = deposits.map((dep) => {
-    const badge = depositPaymentBadge(dep.status, dep.dueDate);
+    const computed = computeDepositDue({
+      triggerType: dep.triggerType,
+      plannedDueDate: dep.plannedDueDate ?? dep.dueDate,
+      currentDueDate: dep.dueDate,
+      offsetDays: dep.offsetDays,
+      linkedPhase: dep.linkedScheduleItem
+        ? {
+            title: dep.linkedScheduleItem.title,
+            status: dep.linkedScheduleItem.status,
+            baselineEnd: dep.linkedScheduleItem.baselineEndDate,
+            currentEnd: dep.linkedScheduleItem.endDate,
+            actualEnd: dep.linkedScheduleItem.actualEndDate,
+          }
+        : null,
+    });
+    const badge = depositPaymentBadge(dep.status, computed.currentDueDate, {
+      isOverdue: computed.isOverdue,
+    });
     return {
       id: dep.id,
       label: depositDisplayLabel(dep.label),
@@ -104,7 +133,7 @@ export default async function ClientPaymentsPage({
       status: dep.status,
       paymentLabel: badge.label,
       paymentTone: badge.tone,
-      dueDate: dep.dueDate?.toISOString() ?? null,
+      dueDate: computed.currentDueDate?.toISOString() ?? null,
       reference: dep.reference,
     };
   });

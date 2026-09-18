@@ -8,6 +8,7 @@ const STAFF_SETTINGS_ROLES: Role[] = [
   Role.SALES_MANAGER,
   Role.PROJECT_MANAGER,
   Role.BOOKKEEPER,
+  Role.SERVICE_COORDINATOR,
 ];
 
 export default async function SettingsLayout({

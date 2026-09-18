@@ -10,11 +10,13 @@ import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
 
 type PageProps = {
-  searchParams: Promise<{
+    searchParams: Promise<{
     projectId?: string;
     q?: string;
     status?: string;
     category?: string;
+    client?: string;
+    assignment?: string;
     from?: string;
     to?: string;
   }>;
@@ -42,6 +44,18 @@ export default async function PMWarrantyPage({ searchParams }: PageProps) {
     ...(sp.category
       ? { category: { contains: sp.category, mode: "insensitive" } }
       : {}),
+    ...(sp.client
+      ? {
+          clientUser: {
+            name: { contains: sp.client, mode: "insensitive" as const },
+          },
+        }
+      : {}),
+    ...(sp.assignment === "me"
+      ? { pmId: session.user.id }
+      : sp.assignment === "unassigned"
+        ? { pmId: null, subcontractorId: null }
+        : {}),
     ...(q
       ? {
           OR: [
@@ -115,6 +129,16 @@ export default async function PMWarrantyPage({ searchParams }: PageProps) {
           </FormField>
           <FormField label="Category">
             <Input name="category" defaultValue={sp.category ?? ""} />
+          </FormField>
+          <FormField label="Client">
+            <Input name="client" defaultValue={sp.client ?? ""} />
+          </FormField>
+          <FormField label="Assignment">
+            <Select name="assignment" defaultValue={sp.assignment ?? ""}>
+              <option value="">All</option>
+              <option value="me">Assigned to me</option>
+              <option value="unassigned">Unassigned</option>
+            </Select>
           </FormField>
           <FormField label="From">
             <Input name="from" type="date" defaultValue={sp.from ?? ""} />

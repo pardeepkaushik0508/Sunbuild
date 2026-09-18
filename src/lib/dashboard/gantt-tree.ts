@@ -6,6 +6,7 @@ import {
   type GanttTask,
   type GanttTaskStatus,
 } from "@/lib/schedule/gantt-status";
+import { calculateScheduleVariance } from "@/lib/schedule/variance";
 
 export type ScheduleRow = {
   id: string;
@@ -18,6 +19,10 @@ export type ScheduleRow = {
   assigneeName: string | null;
   projectName?: string | null;
   href?: string | null;
+  baselineStartDate?: Date | null;
+  baselineEndDate?: Date | null;
+  actualStartDate?: Date | null;
+  actualEndDate?: Date | null;
 };
 
 export type TaskGanttSource = {
@@ -30,6 +35,10 @@ export type TaskGanttSource = {
   assigneeName?: string | null;
   projectName?: string | null;
   projectId?: string | null;
+  baselineStartDate?: Date | null;
+  baselineEndDate?: Date | null;
+  actualStartDate?: Date | null;
+  completedAt?: Date | null;
 };
 
 /** Convert app Tasks into ScheduleRow entries under a "Tasks" phase. */
@@ -62,6 +71,10 @@ export function tasksToScheduleRows(tasks: TaskGanttSource[]): ScheduleRow[] {
       href: task.projectId
         ? `/pm/tasks?projectId=${task.projectId}`
         : "/pm/tasks",
+      baselineStartDate: task.baselineStartDate ?? dates.start,
+      baselineEndDate: task.baselineEndDate ?? dates.end,
+      actualStartDate: task.actualStartDate ?? null,
+      actualEndDate: task.completedAt ?? null,
     });
   }
   return rows;
@@ -119,6 +132,12 @@ export function buildGanttTree(items: ScheduleRow[]): GanttTask[] {
 
     for (const row of sorted) {
       const status = mapScheduleStatus(row.status, row.endDate);
+      const variance = calculateScheduleVariance({
+        baselineEnd: row.baselineEndDate ?? row.endDate,
+        currentEnd: row.endDate,
+        actualEnd: row.actualEndDate,
+        status: row.status,
+      });
       result.push({
         id: row.id,
         title: row.title,
@@ -134,6 +153,14 @@ export function buildGanttTree(items: ScheduleRow[]): GanttTask[] {
         isCritical: criticalIds.has(row.id),
         isMilestone: false,
         href: row.href ?? null,
+        baselineStartDate: row.baselineStartDate ?? row.startDate,
+        baselineEndDate: row.baselineEndDate ?? row.endDate,
+        currentStartDate: row.startDate,
+        currentEndDate: row.endDate,
+        actualStartDate: row.actualStartDate ?? null,
+        actualEndDate: row.actualEndDate ?? null,
+        varianceDays: variance.days,
+        varianceLabel: variance.signedLabel,
       });
     }
   }

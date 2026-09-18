@@ -25,6 +25,7 @@ import {
   AllowanceItemStatus,
   WarrantyStatus,
   StatementOfAdjustmentsStatus,
+  DepositTriggerType,
 } from "@prisma/client";
 
 const prisma = new PrismaClient({
@@ -435,6 +436,7 @@ async function seedSv1001(opts: {
     pct: number;
     status: ScheduleStatus;
     assignee?: string;
+    baselineEnd?: string;
   }> = [
     { title: "Excavation & subgrade prep", trade: "Excavation", start: "2026-01-15", end: "2026-02-05", pct: 100, status: ScheduleStatus.COMPLETED, assignee: "Prairie Earthworks" },
     { title: "Foundation & concrete pour", trade: "Concrete", start: "2026-02-06", end: "2026-03-05", pct: 100, status: ScheduleStatus.COMPLETED, assignee: "Solid Foundation Calgary" },
@@ -445,7 +447,7 @@ async function seedSv1001(opts: {
     { title: "Pre-drywall municipal inspection", trade: "Inspection", start: "2026-06-16", end: "2026-06-18", pct: 100, status: ScheduleStatus.COMPLETED, assignee: "City of Chestermere" },
     { title: "Insulation & drywall systems", trade: "Drywall", start: "2026-06-19", end: "2026-07-20", pct: 100, status: ScheduleStatus.COMPLETED, assignee: "Stampede City Drywall" },
     { title: "Cabinetry & custom millwork", trade: "Cabinetry", start: "2026-07-21", end: "2026-08-25", pct: 92, status: ScheduleStatus.IN_PROGRESS, assignee: "Bow Valley Cabinets" },
-    { title: "Hardwood, carpet & tile flooring", trade: "Flooring", start: "2026-08-26", end: "2026-09-18", pct: 70, status: ScheduleStatus.DELAYED, assignee: "Bow Valley Hardwood & Tile" },
+    { title: "Hardwood, carpet & tile flooring", trade: "Flooring", start: "2026-08-26", end: "2026-09-18", baselineEnd: "2026-09-13", pct: 70, status: ScheduleStatus.DELAYED, assignee: "Bow Valley Hardwood & Tile" },
     { title: "Finishing carpentry & paint", trade: "Finishing", start: "2026-09-14", end: "2026-09-26", pct: 25, status: ScheduleStatus.IN_PROGRESS, assignee: "Heritage Paint & Decorators" },
     { title: "Final municipal inspection & occupancy permit", trade: "Inspection", start: "2026-09-28", end: "2026-09-30", pct: 0, status: ScheduleStatus.PLANNED, assignee: "Michael Mayhew" },
     { title: "Pre-possession inspection", trade: "Inspection", start: "2026-10-01", end: "2026-10-01", pct: 0, status: ScheduleStatus.PLANNED, assignee: "Client + PM" },
@@ -462,6 +464,14 @@ async function seedSv1001(opts: {
         trade: p.trade,
         startDate: new Date(p.start),
         endDate: new Date(p.end),
+        baselineStartDate: new Date(p.start),
+        baselineEndDate: new Date(p.baselineEnd ?? p.end),
+        actualStartDate:
+          p.status === ScheduleStatus.COMPLETED || p.status === ScheduleStatus.IN_PROGRESS
+            ? new Date(p.start)
+            : null,
+        actualEndDate:
+          p.status === ScheduleStatus.COMPLETED ? new Date(p.end) : null,
         status: p.status,
         assigneeName: p.assignee,
         dependsOnId: prevId,
@@ -477,6 +487,33 @@ async function seedSv1001(opts: {
         dueDate: new Date(p.end),
         status: p.status,
         sortOrder: i + 1,
+      },
+    });
+  }
+
+  const flooringPhase = await prisma.scheduleItem.findFirst({
+    where: { projectId, trade: "Flooring" },
+    select: { id: true, title: true, endDate: true, baselineEndDate: true },
+  });
+  if (flooringPhase) {
+    const offsetDays = 1;
+    const planned = flooringPhase.baselineEndDate
+      ? new Date(flooringPhase.baselineEndDate.getTime() + offsetDays * 86400000)
+      : new Date("2026-09-14");
+    const current = new Date(flooringPhase.endDate.getTime() + offsetDays * 86400000);
+    await prisma.deposit.updateMany({
+      where: {
+        projectId,
+        status: DepositStatus.PENDING,
+        label: "Further deposit, by date",
+      },
+      data: {
+        triggerType: DepositTriggerType.PHASE_COMPLETION_PLUS_OFFSET,
+        linkedScheduleItemId: flooringPhase.id,
+        offsetDays,
+        plannedDueDate: planned,
+        dueDate: current,
+        dueDateChangeReason: `Your deposit date was updated because the ${flooringPhase.title} phase completion has moved.`,
       },
     });
   }
@@ -1115,6 +1152,12 @@ async function main() {
     phone: "14035550115",
     password: DEMO_PASSWORD,
   });
+  const priya = await upsertUser({
+    email: "priya.service@sunviewhomes.ca",
+    name: "Priya Shah",
+    phone: "14035550117",
+    password: DEMO_PASSWORD,
+  });
   const elena = await upsertUser({
     email: "elena@sunviewhomes.ca",
     name: "Elena Vasquez",
@@ -1190,6 +1233,7 @@ async function main() {
   await upsertMembership(sarahBooks.id, company.id, Role.BOOKKEEPER, {
     financeAccess: true,
   });
+  await upsertMembership(priya.id, company.id, Role.SERVICE_COORDINATOR);
   // Q24.7 — map Selections+Warranty to Ops Admin without finance until role matrix resolves
   await upsertMembership(robyn.id, company.id, Role.OPERATIONS_ADMIN);
   await upsertMembership(tom.id, company.id, Role.SALES_MANAGER, { isActive: false });
@@ -1207,6 +1251,7 @@ async function main() {
     { role: Role.SALES_MANAGER },
     { role: Role.PROJECT_MANAGER },
     { role: Role.BOOKKEEPER, flags: { financeAccess: true } },
+    { role: Role.SERVICE_COORDINATOR },
     { role: Role.SUBCONTRACTOR },
     { role: Role.CLIENT },
   ] as const) {

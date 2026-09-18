@@ -236,6 +236,21 @@ export const getAccessibleProjectIds = cache(async (session: AppSession) => {
     return projects.map((p) => p.id);
   }
 
+  if (role === Role.SERVICE_COORDINATOR) {
+    const [ticketProjects, access] = await Promise.all([
+      prisma.warrantyTicket.findMany({
+        where: { project: { companyId, deletedAt: null } },
+        select: { projectId: true },
+        distinct: ["projectId"],
+      }),
+      prisma.projectAccess.findMany({
+        where: { userId, project: { companyId, deletedAt: null } },
+        select: { projectId: true },
+      }),
+    ]);
+    return [...new Set([...ticketProjects.map((t) => t.projectId), ...access.map((a) => a.projectId)])];
+  }
+
   const access = await prisma.projectAccess.findMany({
     where: {
       userId,

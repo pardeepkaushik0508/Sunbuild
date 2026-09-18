@@ -103,6 +103,7 @@ export const CAPABILITIES = {
     Role.OWNER,
     Role.OPERATIONS_ADMIN,
     Role.PROJECT_MANAGER,
+    Role.SERVICE_COORDINATOR,
   ] as Role[],
   /** Statement of Adjustments (closing) — view/preview/download */
   viewStatementOfAdjustments: [

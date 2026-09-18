@@ -13,6 +13,7 @@ import { getAccessibleProjectIds } from "@/lib/session";
 import { resolveOwnerCompanies } from "@/lib/dashboard/company-stats";
 import { depositOpenStatuses } from "@/lib/insights";
 import {
+  countUnreadNotifications,
   listPersistedNotifications,
   mapPersistedToFeedItem,
   type NotificationFeedItem,
@@ -23,7 +24,11 @@ import {
  */
 export async function getNotificationFeed(
   session: AppSession,
-  opts?: { limit?: number }
+  opts?: {
+    limit?: number;
+    unreadOnly?: boolean;
+    category?: string | null;
+  }
 ): Promise<{ items: NotificationFeedItem[]; unreadCount: number }> {
   const limit = opts?.limit ?? 50;
   const role = session.membership.role;
@@ -46,9 +51,13 @@ export async function getNotificationFeed(
   startOfToday.setHours(0, 0, 0, 0);
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const persisted = await listPersistedNotifications(session, { take: limit });
+  const persisted = await listPersistedNotifications(session, {
+    take: limit,
+    unreadOnly: opts?.unreadOnly,
+    category: opts?.category,
+  });
   const persistedItems = persisted.map(mapPersistedToFeedItem);
-  const unreadCount = persisted.filter((n) => !n.readAt).length;
+  const unreadCount = await countUnreadNotifications(session);
 
   let derived: NotificationFeedItem[] = [];
 
@@ -340,10 +349,11 @@ export async function getNotificationFeed(
   const seenHrefs = new Set(
     persistedItems.map((i) => i.href).filter(Boolean)
   );
-  const merged = [
-    ...persistedItems,
-    ...derived.filter((d) => !d.href || !seenHrefs.has(d.href)),
-  ].slice(0, limit);
+  const derivedFiltered =
+    opts?.unreadOnly || opts?.category
+      ? []
+      : derived.filter((d) => !d.href || !seenHrefs.has(d.href));
+  const merged = [...persistedItems, ...derivedFiltered].slice(0, limit);
 
   return { items: merged, unreadCount };
 }

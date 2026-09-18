@@ -412,3 +412,134 @@ export async function handleWhatsAppWebhookPayload(payload: unknown): Promise<vo
     }
   }
 }
+
+export type WhatsAppDispatchResult = {
+  ok: boolean;
+  skipped?: string;
+  status?: "SENT" | "FAILED";
+  errorMessage?: string | null;
+};
+
+/**
+ * Best-effort WhatsApp for notification side effects.
+ * Recipients come from authorized SUNBUILD user records — never from untrusted input.
+ * Failures are recorded and never thrown.
+ */
+export async function notifyUserByWhatsAppBestEffort(input: {
+  userId: string;
+  companyId: string;
+  body: string;
+  projectId?: string | null;
+}): Promise<WhatsAppDispatchResult> {
+  try {
+    const text = input.body.trim();
+    if (!text) return { ok: false, skipped: "empty-body" };
+
+    const user = await prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { phone: true, name: true },
+    });
+    if (!user?.phone?.trim()) {
+      return { ok: false, skipped: "missing-phone" };
+    }
+
+    const cleanPhone = normalizePhone(user.phone);
+    if (!cleanPhone || cleanPhone.length < 7) {
+      return { ok: false, skipped: "invalid-phone" };
+    }
+
+    const config = getWhatsAppConfig();
+    let status: "SENT" | "FAILED" = "SENT";
+    let whatsappMessageId: string | null = null;
+    let errorMessage: string | null = null;
+
+    if (!config) {
+      status = "FAILED";
+      errorMessage = "WhatsApp Cloud API is not configured.";
+    } else {
+      try {
+        const url = `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12_000);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: cleanPhone,
+            type: "text",
+            text: { preview_url: false, body: text.slice(0, 4096) },
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const data = (await res.json().catch(() => ({}))) as {
+          messages?: Array<{ id: string }>;
+          error?: { message?: string; code?: number };
+        };
+        if (!res.ok || !data.messages?.[0]?.id) {
+          status = "FAILED";
+          errorMessage =
+            data.error?.message || `Meta WhatsApp API error (${res.status})`;
+        } else {
+          whatsappMessageId = data.messages[0].id;
+        }
+      } catch (err) {
+        status = "FAILED";
+        errorMessage =
+          err instanceof Error ? err.message : "Network error contacting Meta API";
+      }
+    }
+
+    if (input.projectId) {
+      const conversation = await prisma.whatsAppConversation.upsert({
+        where: {
+          projectId_clientPhone: {
+            projectId: input.projectId,
+            clientPhone: cleanPhone,
+          },
+        },
+        create: {
+          projectId: input.projectId,
+          clientPhone: cleanPhone,
+          clientName: user.name,
+          lastMessageAt: new Date(),
+        },
+        update: { lastMessageAt: new Date() },
+      });
+      await prisma.whatsAppMessage.create({
+        data: {
+          conversationId: conversation.id,
+          direction: "OUTBOUND",
+          senderName: "SUNBUILD",
+          senderUserId: null,
+          body: text.slice(0, 4096),
+          status,
+          whatsappMessageId,
+          errorMessage,
+          sentAt: new Date(),
+        },
+      });
+    }
+
+    return {
+      ok: status === "SENT",
+      status,
+      errorMessage,
+      skipped: status === "FAILED" ? errorMessage ?? "failed" : undefined,
+    };
+  } catch (err) {
+    console.error("[whatsapp] best-effort send skipped", {
+      userId: input.userId,
+      message: err instanceof Error ? err.message : "unknown",
+    });
+    return {
+      ok: false,
+      skipped: err instanceof Error ? err.message : "unknown",
+    };
+  }
+}

@@ -8,6 +8,7 @@ const ALL_ROLES: Role[] = [
   Role.SALES_MANAGER,
   Role.PROJECT_MANAGER,
   Role.BOOKKEEPER,
+  Role.SERVICE_COORDINATOR,
   Role.SUBCONTRACTOR,
   Role.CLIENT,
 ];

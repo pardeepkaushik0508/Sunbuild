@@ -165,6 +165,7 @@ export async function clientApproveSelectionSectionAction(sectionId: string) {
             reason: "Selection overage",
             status: ChangeOrderStatus.PENDING_CLIENT,
             relatedSelectionItemId: section.items[0]?.id ?? null,
+            relatedSelectionSectionId: section.id,
             createdById: session.user.id,
           },
         });

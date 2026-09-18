@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && NODE_OPTIONS=--max-old-space-size=2048 next build",
+    "build": "prisma generate && node --max-old-space-size=2048 ./node_modules/next/dist/bin/next build",
     "start": "next start",
     "lint": "eslint",
-    "test:security": "tsx --test src/lib/__tests__/security.test.ts src/lib/__tests__/idor-matrix.test.ts src/lib/__tests__/qa-integrity.test.ts src/lib/__tests__/app-url.test.ts src/lib/__tests__/twilio.test.ts",
+    "test:security": "tsx --test src/lib/__tests__/security.test.ts src/lib/__tests__/idor-matrix.test.ts src/lib/__tests__/qa-integrity.test.ts src/lib/__tests__/app-url.test.ts src/lib/__tests__/twilio.test.ts src/lib/__tests__/client-change-request.test.ts src/lib/__tests__/deposit-phase.test.ts",
     "test": "tsx --test src/lib/__tests__/*.test.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

@@ -8,11 +8,33 @@ import { markAllNotificationsReadAction } from "@/lib/notifications-actions";
 import { cn, formatDate } from "@/lib/utils";
 import { MarkNotificationLink } from "@/components/notifications/mark-notification-link";
 
-export default async function NotificationsPage() {
+export default async function NotificationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string; category?: string }>;
+}) {
   const session = await requireSession();
+  const sp = await searchParams;
+  const filter = sp.filter === "unread" ? "unread" : "all";
+  const category = ["PROJECT", "FINANCE", "WARRANTY", "TASKS"].includes(
+    sp.category ?? ""
+  )
+    ? sp.category
+    : null;
   const { items, unreadCount } = await getNotificationFeed(session, {
     limit: 100,
+    unreadOnly: filter === "unread",
+    category,
   });
+
+  const filters = [
+    { id: "all", label: "All", href: "/notifications" },
+    { id: "unread", label: "Unread", href: "/notifications?filter=unread" },
+    { id: "PROJECT", label: "Project", href: "/notifications?category=PROJECT" },
+    { id: "FINANCE", label: "Finance", href: "/notifications?category=FINANCE" },
+    { id: "WARRANTY", label: "Warranty", href: "/notifications?category=WARRANTY" },
+    { id: "TASKS", label: "Tasks / Schedule", href: "/notifications?category=TASKS" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -30,6 +52,30 @@ export default async function NotificationsPage() {
           ) : null
         }
       />
+
+      <div className="flex flex-wrap gap-2">
+        {filters.map((f) => {
+          const active =
+            (f.id === "all" && filter === "all" && !category) ||
+            (f.id === "unread" && filter === "unread") ||
+            (category && f.id === category);
+          return (
+            <Link
+              key={f.id}
+              href={f.href}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium",
+                active
+                  ? "border-sb-blue bg-sb-blue-soft text-sb-blue"
+                  : "border-sb-border text-sb-muted hover:text-sb-ink"
+              )}
+            >
+              {f.label}
+              {f.id === "unread" && unreadCount > 0 ? ` (${unreadCount})` : ""}
+            </Link>
+          );
+        })}
+      </div>
 
       {items.length === 0 ? (
         <EmptyState

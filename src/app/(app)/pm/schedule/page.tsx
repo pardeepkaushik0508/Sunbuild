@@ -28,6 +28,8 @@ import { roleHasCapability } from "@/lib/authorization";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
 import { PmProjectPicker } from "@/components/pm/project-picker";
+import { pickNextDeposit, formatClientDueDate } from "@/lib/deposits/next-deposit";
+import { formatCurrency } from "@/lib/utils";
 
 type PageProps = {
   searchParams: Promise<{ projectId?: string }>;
@@ -64,6 +66,10 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
         title: true,
         startDate: true,
         endDate: true,
+        baselineStartDate: true,
+        baselineEndDate: true,
+        actualStartDate: true,
+        actualEndDate: true,
         status: true,
         projectId: true,
         assigneeName: true,
@@ -119,7 +125,20 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
             amount: true,
             status: true,
             dueDate: true,
+            plannedDueDate: true,
+            triggerType: true,
+            offsetDays: true,
             label: true,
+            linkedScheduleItem: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                endDate: true,
+                baselineEndDate: true,
+                actualEndDate: true,
+              },
+            },
           },
         },
         milestones: { select: { status: true } },
@@ -178,19 +197,37 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
     projectName: item.project.name,
     trade: item.trade,
     dependsOnId: item.dependsOnId,
+    href: `/pm/schedule?projectId=${item.projectId}`,
+    baselineStartDate: item.baselineStartDate,
+    baselineEndDate: item.baselineEndDate,
+    currentStartDate: item.startDate,
+    currentEndDate: item.endDate,
+    actualStartDate: item.actualStartDate,
+    actualEndDate: item.actualEndDate,
   }));
 
   const primary = projectMeta[0];
+  const nextDeposit = pickNextDeposit(primary?.deposits ?? []);
   const clientItems = [
     {
-      id: "deposit",
-      label: "Client Deposit",
-      value: primary?.deposits[0]
-        ? `$${primary.deposits[0].amount.toLocaleString()}`
-        : "—",
+      id: "next-amount",
+      label: "Next Due Amount",
+      value: nextDeposit
+        ? formatCurrency(nextDeposit.amount)
+        : "No open deposits",
       href: filterProjectId
         ? `/pm/projects/${filterProjectId}`
-        : "/bookkeeper/invoices",
+        : "/pm/projects",
+    },
+    {
+      id: "due-date",
+      label: "Due Date",
+      value: nextDeposit?.currentDueDate
+        ? formatClientDueDate(nextDeposit.currentDueDate)
+        : "Not set",
+      href: filterProjectId
+        ? `/pm/projects/${filterProjectId}`
+        : "/pm/projects",
     },
     {
       id: "client",

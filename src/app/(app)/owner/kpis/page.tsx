@@ -88,6 +88,7 @@ export default async function OwnerKpisPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <StatusDonutChart
             title="Active vs Completed"
+            centerLabel="Total Projects"
             data={[
               { name: "Active", value: totals.activeProjects },
               { name: "Completed", value: totals.completed },

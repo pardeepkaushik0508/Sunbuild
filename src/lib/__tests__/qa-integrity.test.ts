@@ -177,6 +177,7 @@ describe("default matrix matches role docs", () => {
     assert.equal(m.userManagement.CEO, false);
     assert.equal(m.userManagement.SALES_MANAGER, false);
     assert.equal(m.financialReport.BOOKKEEPER, true);
+    assert.equal(m.financialReport.SERVICE_COORDINATOR, false);
     assert.equal(m.userManagement.OPERATIONS_ADMIN, true);
   });
 });

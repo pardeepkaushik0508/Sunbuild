@@ -20,10 +20,12 @@ export function StatusDonutChart({
   data,
   className,
   title = "Status mix",
+  centerLabel = "Total",
 }: {
   data: { name: string; value: number }[];
   className?: string;
   title?: string;
+  centerLabel?: string;
 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   return (
@@ -37,26 +39,32 @@ export function StatusDonutChart({
       <div className="mt-2 h-[180px]">
         {total === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-sb-muted">
-            No data
+            No projects yet
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={48}
-                outerRadius={70}
-                paddingAngle={2}
-              >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="relative h-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={52}
+                  outerRadius={72}
+                  paddingAngle={2}
+                >
+                  {data.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-lg font-semibold text-sb-ink">{total}</p>
+              <p className="text-[11px] text-sb-muted">{centerLabel}</p>
+            </div>
+          </div>
         )}
       </div>
       <ul className="mt-1 space-y-1">
@@ -72,7 +80,12 @@ export function StatusDonutChart({
               />
               {d.name}
             </span>
-            <span className="font-medium text-sb-ink">{d.value}</span>
+            <span className="font-medium text-sb-ink">
+              {d.value}
+              {total > 0
+                ? ` · ${Math.round((d.value / total) * 100)}%`
+                : ""}
+            </span>
           </li>
         ))}
       </ul>

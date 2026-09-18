@@ -177,7 +177,9 @@ export function generateContractHtml(data: PrintableContractData): string {
     .form-value {
       flex: 1; min-width: 40px; background: #e6e9f0; border-bottom: 1.5px solid #222;
       padding: 4px 6px; min-height: 18px; font-weight: 600; color: #111827;
+      overflow-wrap: anywhere; word-break: break-word;
     }
+    .section-box, .form-row { page-break-inside: avoid; }
     .amp { padding: 0 4px 3px; font-weight: 700; }
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
     .two-col .form-row { margin-bottom: 12px; }

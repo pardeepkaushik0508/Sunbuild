@@ -23,6 +23,17 @@ export type GanttTask = {
   isMilestone?: boolean;
   childrenCount?: number;
   href?: string | null;
+  /** Originally approved schedule (never moved by delays). */
+  baselineStartDate?: Date | string | null;
+  baselineEndDate?: Date | string | null;
+  /** Current forecast / working schedule. */
+  currentStartDate?: Date | string | null;
+  currentEndDate?: Date | string | null;
+  /** Real dates after work starts / completes. */
+  actualStartDate?: Date | string | null;
+  actualEndDate?: Date | string | null;
+  varianceDays?: number | null;
+  varianceLabel?: string | null;
 };
 
 function toDate(value: Date | string) {

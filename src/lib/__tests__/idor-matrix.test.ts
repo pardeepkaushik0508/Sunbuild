@@ -74,10 +74,19 @@ describe("IDOR / privilege matrix (capability layer)", () => {
     assert.equal(hasFinanceAccess(Role.PROJECT_MANAGER, false), false);
     assert.equal(hasFinanceAccess(Role.PROJECT_MANAGER, true), true);
     assert.equal(hasFinanceAccess(Role.CLIENT, true), false);
+    assert.equal(hasFinanceAccess(Role.SERVICE_COORDINATOR, true), false);
+    assert.equal(hasFinanceAccess(Role.OPERATIONS_ADMIN, true), true);
   });
 
   it("PM cannot self-approve as CEO", () => {
     expectCap(Role.PROJECT_MANAGER, "ceoApproveCompletion", "deny");
     expectCap(Role.PROJECT_MANAGER, "uploadCompletion", "allow");
+  });
+
+  it("Service Coordinator can manage warranty but not finance/admin", () => {
+    expectCap(Role.SERVICE_COORDINATOR, "manageWarranty", "allow");
+    expectCap(Role.SERVICE_COORDINATOR, "manageUsers", "deny");
+    expectCap(Role.SERVICE_COORDINATOR, "manageStatementOfAdjustments", "deny");
+    expectCap(Role.SERVICE_COORDINATOR, "manageChangeOrdersStaff", "deny");
   });
 });

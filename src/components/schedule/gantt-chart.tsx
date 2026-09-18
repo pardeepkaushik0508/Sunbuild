@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import {
   addDays,
   differenceInCalendarDays,
@@ -22,6 +22,12 @@ import {
   type GanttTask,
   type GanttTaskStatus,
 } from "@/lib/schedule/gantt-status";
+import { calculateScheduleVariance } from "@/lib/schedule/variance";
+import {
+  GANTT_BODY_MAX_VISIBLE_ROWS,
+  GANTT_ROW_HEIGHT_DUAL,
+  resolveGanttScale,
+} from "@/lib/schedule/gantt-scale";
 
 export type { GanttTask, GanttTaskStatus };
 
@@ -51,7 +57,8 @@ const STATUS_LABEL: Record<GanttTaskStatus, string> = {
   PHASE: "Phase",
 };
 
-function toDate(value: Date | string) {
+function toDate(value: Date | string | null | undefined) {
+  if (value == null) return null;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d;
@@ -109,6 +116,8 @@ export function GanttChart({
     assignee: string | null;
     project: string | null;
     dates: string;
+    baseline: string;
+    variance: string;
     progress: number;
     x: number;
     y: number;
@@ -118,12 +127,40 @@ export function GanttChart({
     () =>
       tasks
         .map((t) => {
-          const startRaw = toDate(t.startDate);
-          const endRaw = toDate(t.endDate);
-          if (!startRaw || !endRaw) return null;
-          const start = startOfDay(startRaw);
-          const end = endOfDay(endRaw.getTime() < startRaw.getTime() ? startRaw : endRaw);
-          return { ...t, start, end };
+          const startRaw = toDate(t.startDate) ?? toDate(t.currentStartDate);
+          const endRaw = toDate(t.endDate) ?? toDate(t.currentEndDate);
+          const baselineStart = toDate(t.baselineStartDate) ?? startRaw;
+          const baselineEnd = toDate(t.baselineEndDate) ?? endRaw;
+          const actualEnd = toDate(t.actualEndDate);
+          const actualStart = toDate(t.actualStartDate);
+          if (!startRaw && !baselineStart) return null;
+          const start = startOfDay(startRaw ?? baselineStart!);
+          const rawEnd = endRaw ?? baselineEnd ?? startRaw ?? baselineStart!;
+          const end = endOfDay(
+            rawEnd.getTime() < start.getTime() ? start : rawEnd
+          );
+          const variance = calculateScheduleVariance({
+            baselineEnd: baselineEnd ?? end,
+            currentEnd: end,
+            actualEnd,
+            status: t.status,
+          });
+          return {
+            ...t,
+            start,
+            end,
+            baselineStart: baselineStart ? startOfDay(baselineStart) : start,
+            baselineEnd: baselineEnd
+              ? endOfDay(
+                  baselineEnd.getTime() < (baselineStart ?? start).getTime()
+                    ? baselineStart ?? start
+                    : baselineEnd
+                )
+              : end,
+            actualStart: actualStart ? startOfDay(actualStart) : null,
+            actualEnd: actualEnd ? endOfDay(actualEnd) : null,
+            variance,
+          };
         })
         .filter((t): t is NonNullable<typeof t> => t != null),
     [tasks]
@@ -141,10 +178,16 @@ export function GanttChart({
       const start = startOfDay(new Date());
       return { start, end: addDays(start, 30) };
     }
-    const start = minDate(normalized.map((t) => t.start));
-    const end = maxDate(normalized.map((t) => t.end));
-    return { start, end: addDays(end, view === "month" ? 14 : 3) };
-  }, [normalized, view]);
+    const start = minDate(
+      normalized.flatMap((t) => [t.start, t.baselineStart].filter(Boolean))
+    );
+    const end = maxDate(
+      normalized.flatMap((t) =>
+        [t.end, t.baselineEnd, t.actualEnd].filter((d): d is Date => d != null)
+      )
+    );
+    return { start, end: addDays(end, 3) };
+  }, [normalized]);
 
   const range = useMemo(() => {
     const customStart = rangeFrom ? startOfDay(parseISO(rangeFrom)) : null;
@@ -169,8 +212,13 @@ export function GanttChart({
     return dataRange;
   }, [dataRange, rangeFrom, rangeTo, view]);
 
+  const scale = useMemo(
+    () => resolveGanttScale(range.start, range.end, view),
+    [range, view]
+  );
+
   const columns = useMemo(() => {
-    if (view === "month") {
+    if (scale.primary === "month") {
       return eachMonthOfInterval({ start: range.start, end: range.end }).map(
         (d) => ({
           key: format(d, "yyyy-MM"),
@@ -179,7 +227,7 @@ export function GanttChart({
         })
       );
     }
-    if (view === "week") {
+    if (scale.primary === "week") {
       return eachWeekOfInterval(
         { start: range.start, end: range.end },
         { weekStartsOn: 1 }
@@ -196,24 +244,39 @@ export function GanttChart({
         sub: format(d, "EEE"),
       })
     );
-  }, [range, view]);
+  }, [range, scale]);
 
-  const colMinWidth = view === "day" ? 36 : view === "week" ? 72 : 110;
+  const colMinWidth = scale.colMinWidth;
 
   const monthBands = useMemo(() => {
-    if (view !== "day") return [];
-    return eachMonthOfInterval({ start: range.start, end: range.end }).map(
-      (m) => {
-        const monthStart = maxDate([m, range.start]);
-        const next = new Date(m.getFullYear(), m.getMonth() + 1, 0);
-        const monthEnd = minDate([endOfDay(next), range.end]);
+    if (scale.primary === "month" && scale.secondary === "week") {
+      return eachWeekOfInterval(
+        { start: range.start, end: range.end },
+        { weekStartsOn: 1 }
+      ).map((w) => {
+        const weekStart = maxDate([w, range.start]);
+        const weekEnd = minDate([addDays(w, 6), range.end]);
         return {
-          label: format(m, "MMMM yyyy"),
-          ...barLayout(monthStart, monthEnd, range.start, range.end),
+          label: format(w, "MMM d"),
+          ...barLayout(weekStart, endOfDay(weekEnd), range.start, range.end),
         };
-      }
-    );
-  }, [range, view]);
+      });
+    }
+    if (scale.primary === "day" || scale.primary === "week") {
+      return eachMonthOfInterval({ start: range.start, end: range.end }).map(
+        (m) => {
+          const monthStart = maxDate([m, range.start]);
+          const next = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+          const monthEnd = minDate([endOfDay(next), range.end]);
+          return {
+            label: format(m, "MMMM yyyy"),
+            ...barLayout(monthStart, monthEnd, range.start, range.end),
+          };
+        }
+      );
+    }
+    return [];
+  }, [range, scale]);
 
   const todayLeft = useMemo(() => {
     const today = new Date();
@@ -235,8 +298,9 @@ export function GanttChart({
     return base;
   }, [normalized]);
 
-  const rowH = 52;
-  const headerH = view === "day" ? 56 : 44;
+  const rowH = GANTT_ROW_HEIGHT_DUAL;
+  const headerH = scale.primary === "day" || scale.secondary !== "none" ? 56 : 44;
+  const bodyMaxHeight = GANTT_BODY_MAX_VISIBLE_ROWS * rowH;
   const idToIndex = useMemo(() => {
     const map = new Map<string, number>();
     visible.forEach((t, i) => map.set(t.id, i));
@@ -260,7 +324,7 @@ export function GanttChart({
           y2: headerH + toIdx * rowH + rowH / 2,
         };
       });
-  }, [visible, idToIndex, range, headerH]);
+  }, [visible, idToIndex, range, headerH, rowH]);
 
   const timelineLabel = `${format(range.start, "MMM d")} – ${format(range.end, "MMM d, yyyy")}`;
   // Min width from column count; grid track grows with `1fr` so week/day/month fill the card.
@@ -356,7 +420,7 @@ export function GanttChart({
         </p>
       </div>
 
-      <div className="w-full overflow-x-auto">
+      <div className="w-full overflow-auto" style={{ maxHeight: headerH + bodyMaxHeight + 8 }}>
         <div className="w-full" style={{ minWidth: 280 + timelineMinWidth }}>
           <div
             className="grid w-full"
@@ -366,7 +430,7 @@ export function GanttChart({
           >
             <div className="sticky left-0 z-30 border-r border-sb-border bg-sb-surface">
               <div
-                className="flex items-center justify-between border-b border-sb-border px-4 text-sm font-semibold text-sb-ink"
+                className="sticky top-0 z-40 flex items-center justify-between border-b border-sb-border bg-sb-surface px-4 text-sm font-semibold text-sb-ink"
                 style={{ height: headerH }}
               >
                 <span>Tasks</span>
@@ -423,6 +487,7 @@ export function GanttChart({
                           ? task.meta
                           : [
                               !isPhase ? STATUS_LABEL[task.status] : null,
+                              !isPhase ? task.variance.signedLabel : null,
                               task.assigneeName,
                             ]
                               .filter(Boolean)
@@ -471,10 +536,10 @@ export function GanttChart({
 
             <div className="relative bg-[#fafafa]">
               <div
-                className="relative border-b border-sb-border"
+                className="sticky top-0 z-20 border-b border-sb-border bg-[#fafafa]"
                 style={{ height: headerH }}
               >
-                {view === "day" ? (
+                {scale.primary === "day" || scale.secondary !== "none" ? (
                   <div className="absolute inset-x-0 top-0 flex h-6 text-[10px] font-medium text-sb-muted">
                     {monthBands.map((m) => (
                       <div
@@ -494,7 +559,9 @@ export function GanttChart({
                 <div
                   className={cn(
                     "absolute inset-x-0 bottom-0 grid",
-                    view === "day" ? "top-6" : "top-0"
+                    scale.primary === "day" || scale.secondary !== "none"
+                      ? "top-6"
+                      : "top-0"
                   )}
                   style={{
                     gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(${colMinWidth}px, 1fr))`,
@@ -576,80 +643,157 @@ export function GanttChart({
                 </svg>
 
                 {visible.map((task, idx) => {
-                  const { left, width } = barLayout(
-                    task.start,
-                    task.end,
+                  const workingStart = task.actualStart ?? task.start;
+                  const workingEnd = task.actualEnd ?? task.end;
+                  const baselineBar = barLayout(
+                    task.baselineStart,
+                    task.baselineEnd,
+                    range.start,
+                    range.end
+                  );
+                  const workingBar = barLayout(
+                    workingStart,
+                    workingEnd,
                     range.start,
                     range.end
                   );
                   const days =
-                    differenceInCalendarDays(task.end, task.start) + 1;
+                    differenceInCalendarDays(workingEnd, workingStart) + 1;
                   const progress = clampPct(task.progress ?? 0);
                   const isPhase = Boolean(task.isPhase || task.status === "PHASE");
                   const barColor = task.isCritical
                     ? "bg-sb-gantt-critical"
                     : STATUS_COLOR[task.status];
 
-                  const bar = (
-                    <div
-                      className={cn(
-                        "relative h-full overflow-hidden rounded-md shadow-sm",
-                        barColor,
-                        isPhase && "opacity-90"
-                      )}
-                    >
-                      {progress > 0 && progress < 100 && !isPhase ? (
-                        <div
-                          className="absolute inset-y-0 left-0 bg-black/15"
-                          style={{ width: `${progress}%` }}
-                        />
-                      ) : null}
-                      {task.isMilestone ? (
-                        <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 bg-[#facc15] shadow-sm" />
-                      ) : null}
-                    </div>
-                  );
+                  const showHover = (
+                    e: MouseEvent<HTMLDivElement | HTMLAnchorElement>
+                  ) => {
+                    const rect = (
+                      e.currentTarget as HTMLDivElement
+                    ).getBoundingClientRect();
+                    const parent = (
+                      e.currentTarget.closest(
+                        ".relative.overflow-hidden"
+                      ) as HTMLElement | null
+                    )?.getBoundingClientRect();
+                    setHover({
+                      id: task.id,
+                      title: task.title,
+                      status: STATUS_LABEL[task.status],
+                      assignee: task.assigneeName ?? null,
+                      project: task.projectName ?? null,
+                      dates: `${format(workingStart, "MMM d, yyyy")} – ${format(workingEnd, "MMM d, yyyy")} (${days} day${days === 1 ? "" : "s"})`,
+                      baseline: `${format(task.baselineStart, "MMM d, yyyy")} – ${format(task.baselineEnd, "MMM d, yyyy")}`,
+                      variance: task.variance.proseLabel,
+                      progress: Math.round(progress),
+                      x: rect.left - (parent?.left ?? 0) + rect.width / 2,
+                      y: rect.top - (parent?.top ?? 0) - 8,
+                    });
+                  };
+
+                  if (isPhase) {
+                    return (
+                      <div
+                        key={task.id}
+                        className="absolute z-[15]"
+                        style={{
+                          top: idx * rowH + 22,
+                          left: `${workingBar.left}%`,
+                          width: `${workingBar.width}%`,
+                          height: 18,
+                        }}
+                      >
+                        <div className="h-full overflow-hidden rounded-md bg-sb-gantt-phase opacity-90 shadow-sm" />
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
                       key={task.id}
-                      className="absolute z-[15] cursor-pointer"
-                      style={{
-                        top: idx * rowH + 14,
-                        left: `${left}%`,
-                        width: `${width}%`,
-                        height: 24,
-                      }}
-                      onMouseEnter={(e) => {
-                        const rect = (
-                          e.currentTarget as HTMLDivElement
-                        ).getBoundingClientRect();
-                        const parent = (
-                          e.currentTarget.closest(
-                            ".relative.overflow-hidden"
-                          ) as HTMLElement | null
-                        )?.getBoundingClientRect();
-                        setHover({
-                          id: task.id,
-                          title: task.title,
-                          status: STATUS_LABEL[task.status],
-                          assignee: task.assigneeName ?? null,
-                          project: task.projectName ?? null,
-                          dates: `${format(task.start, "MMM d, yyyy")} – ${format(task.end, "MMM d, yyyy")} (${days} day${days === 1 ? "" : "s"})`,
-                          progress: Math.round(progress),
-                          x: rect.left - (parent?.left ?? 0) + rect.width / 2,
-                          y: rect.top - (parent?.top ?? 0) - 8,
-                        });
-                      }}
-                      onMouseLeave={() => setHover(null)}
+                      className="absolute inset-x-0 z-[15]"
+                      style={{ top: idx * rowH, height: rowH }}
+                      data-gantt-row={task.title}
                     >
-                      {task.href && !isPhase ? (
-                        <Link href={task.href} className="block h-full">
-                          {bar}
+                      <div
+                        className="absolute cursor-pointer"
+                        data-gantt-bar="baseline"
+                        style={{
+                          top: 12,
+                          left: `${baselineBar.left}%`,
+                          width: `${baselineBar.width}%`,
+                          height: 12,
+                        }}
+                        onMouseEnter={showHover}
+                        onMouseLeave={() => setHover(null)}
+                      >
+                        <div className="h-full overflow-hidden rounded-sm bg-slate-400/70 ring-1 ring-slate-500/30" />
+                      </div>
+                      {task.href ? (
+                        <Link
+                          href={task.href}
+                          className="absolute cursor-pointer"
+                          data-gantt-bar="actual"
+                          style={{
+                            top: 28,
+                            left: `${workingBar.left}%`,
+                            width: `${workingBar.width}%`,
+                            height: 14,
+                          }}
+                          onMouseEnter={showHover}
+                          onMouseLeave={() => setHover(null)}
+                        >
+                          <div
+                            className={cn(
+                              "relative h-full overflow-hidden rounded-md shadow-sm",
+                              barColor
+                            )}
+                          >
+                            {progress > 0 && progress < 100 ? (
+                              <div
+                                className="absolute inset-y-0 left-0 bg-black/15"
+                                style={{ width: `${progress}%` }}
+                              />
+                            ) : null}
+                          </div>
                         </Link>
                       ) : (
-                        bar
+                        <div
+                          className="absolute cursor-pointer"
+                          data-gantt-bar="actual"
+                          style={{
+                            top: 28,
+                            left: `${workingBar.left}%`,
+                            width: `${workingBar.width}%`,
+                            height: 14,
+                          }}
+                          onMouseEnter={showHover}
+                          onMouseLeave={() => setHover(null)}
+                        >
+                          <div
+                            className={cn(
+                              "relative h-full overflow-hidden rounded-md shadow-sm",
+                              barColor
+                            )}
+                          />
+                        </div>
                       )}
+                      {task.variance.days != null && task.variance.days !== 0 ? (
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute text-[10px] font-semibold",
+                            task.variance.kind === "late"
+                              ? "text-sb-gantt-risk"
+                              : "text-sb-gantt-done"
+                          )}
+                          style={{
+                            top: 44,
+                            left: `calc(${workingBar.left}% + ${workingBar.width}% + 6px)`,
+                          }}
+                        >
+                          {task.variance.signedLabel}
+                        </span>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -674,6 +818,14 @@ export function GanttChart({
         </div>
         <p>
           Timeline: <span className="text-sb-ink">{timelineLabel}</span>
+        </p>
+        <p className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-5 rounded-sm bg-slate-400/70" />
+          Baseline
+        </p>
+        <p className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-5 rounded-sm bg-sb-gantt-progress" />
+          Current / Actual
         </p>
         <p className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-sb-gantt-critical" />
@@ -704,6 +856,14 @@ export function GanttChart({
         >
           <p className="text-sm font-semibold text-sb-ink">{hover.title}</p>
           <p className="mt-1 text-[12px] text-sb-muted">{hover.dates}</p>
+          <p className="mt-0.5 text-[12px] text-sb-muted">
+            Baseline:{" "}
+            <span className="font-medium text-sb-ink">{hover.baseline}</span>
+          </p>
+          <p className="mt-0.5 text-[12px] text-sb-muted">
+            Variance:{" "}
+            <span className="font-medium text-sb-ink">{hover.variance}</span>
+          </p>
           <p className="mt-1 text-[12px] text-sb-muted">
             Status: <span className="font-medium text-sb-ink">{hover.status}</span>
           </p>

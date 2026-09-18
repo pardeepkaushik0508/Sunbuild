@@ -23,6 +23,7 @@ export type EditableTask = {
   assigneeId: string | null;
   startDate: string;
   dueDate: string;
+  completedAt?: string;
 };
 
 function toDateInputValue(isoOrEmpty: string) {
@@ -197,6 +198,13 @@ export function EditTaskButton({
                     name="dueDate"
                     type="date"
                     defaultValue={toDateInputValue(task.dueDate)}
+                  />
+                </FormField>
+                <FormField label="Actual finish date">
+                  <Input
+                    name="actualEndDate"
+                    type="date"
+                    defaultValue={toDateInputValue(task.completedAt ?? "")}
                   />
                 </FormField>
               </div>

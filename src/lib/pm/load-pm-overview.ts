@@ -22,6 +22,7 @@ import { clientProjectStatusLabel } from "@/lib/jobs/status";
 import { mergeExternalGoogleEvents } from "@/lib/google/merge-events";
 import { getPublicConnection } from "@/lib/google/auth-client";
 import { loadProjectSubcontractors } from "@/lib/users/subcontractors";
+import { pickNextDeposit, formatClientDueDate } from "@/lib/deposits/next-deposit";
 
 export type PmOverviewStat = {
   id: string;
@@ -188,6 +189,26 @@ export async function loadPmOverviewData(
       : Promise.resolve([]),
   ]);
 
+  const selectedDeposits = selectedId
+    ? await prisma.deposit.findMany({
+        where: { projectId: selectedId },
+        orderBy: { dueDate: "asc" },
+        include: {
+          linkedScheduleItem: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              endDate: true,
+              baselineEndDate: true,
+              actualEndDate: true,
+            },
+          },
+        },
+      })
+    : [];
+  const nextDeposit = pickNextDeposit(selectedDeposits);
+
   const stats: PmOverviewStat[] = [
     { id: "todos", label: "Active To-Dos", value: activeTodos, accent: "orange" },
     { id: "rfis", label: "Pending RFIs", value: pendingRfis, accent: "red" },
@@ -272,6 +293,10 @@ export async function loadPmOverviewData(
       href: selectedId
         ? `/pm/schedule?projectId=${selectedId}`
         : "/pm/schedule",
+      baselineStartDate: s.baselineStartDate,
+      baselineEndDate: s.baselineEndDate,
+      actualStartDate: s.actualStartDate,
+      actualEndDate: s.actualEndDate,
     })),
     ...tasksToScheduleRows(
       tasksForGantt.map((t) => ({
@@ -284,6 +309,10 @@ export async function loadPmOverviewData(
         assigneeName: t.assignee?.name ?? null,
         projectName: t.project.name,
         projectId: t.project.id,
+        baselineStartDate: t.baselineStartDate,
+        baselineEndDate: t.baselineEndDate,
+        actualStartDate: t.actualStartDate,
+        completedAt: t.completedAt,
       }))
     ),
   ]);
@@ -307,8 +336,24 @@ export async function loadPmOverviewData(
   const clientItems: ClientInfoItem[] = selectedProject
     ? [
         {
+          id: "next-amount",
+          label: "Next Due Amount",
+          value: nextDeposit
+            ? formatCurrency(nextDeposit.amount)
+            : "No open deposits",
+          href: `/pm/projects/${selectedProject.id}`,
+        },
+        {
+          id: "due-date",
+          label: "Due Date",
+          value: nextDeposit?.currentDueDate
+            ? formatClientDueDate(nextDeposit.currentDueDate)
+            : "Not set",
+          href: `/pm/projects/${selectedProject.id}`,
+        },
+        {
           id: "client",
-          label: "Client",
+          label: "Client Name",
           value: selectedProject.buyer
             ? fullName(
                 selectedProject.buyer.firstName,

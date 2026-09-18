@@ -194,7 +194,7 @@ export default async function SubAssignedTasksPage({ searchParams }: PageProps) 
                 </div>
                 <div>
                   <dt>Assigned by</dt>
-                  <dd className="text-sb-ink">{task.createdBy.name}</dd>
+                  <dd className="text-sb-ink">{task.createdBy?.name ?? "—"}</dd>
                 </div>
                 <div>
                   <dt>Updated</dt>

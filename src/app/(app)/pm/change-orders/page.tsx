@@ -6,13 +6,14 @@ import { InteractiveDataTable } from "@/components/ui/interactive-data-table";
 import { Td } from "@/components/ui/table";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FormField, Input, Select, Textarea } from "@/components/ui/form";
+import { FormField, Input, Textarea } from "@/components/ui/form";
 import { ActionForm } from "@/components/ui/action-form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireRole, getAccessibleProjectIds } from "@/lib/session";
 import { getSelectedProjectId } from "@/lib/pm/project-context";
 import { prisma } from "@/lib/db";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, mediaUrl } from "@/lib/utils";
+import { ChangeOrderSelectionPicker } from "@/components/pm/change-order-selection-picker";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,15 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
       ? [filterProjectId]
       : projectIds;
 
-  const [changeOrders, projects] = await Promise.all([
+  const [changeOrders, projects, selectionRows] = await Promise.all([
     prisma.changeOrder.findMany({
       where: { projectId: { in: filteredIds } },
       include: {
         project: { select: { name: true } },
         createdBy: { select: { name: true } },
+        relatedSelectionSection: {
+          select: { name: true, category: true },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 500,
@@ -55,6 +59,28 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
       where: { id: { in: projectIds } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
+    }),
+    prisma.selectionSection.findMany({
+      where: { package: { projectId: { in: projectIds } } },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        status: true,
+        allowance: true,
+        package: { select: { projectId: true } },
+        images: {
+          orderBy: { sortOrder: "asc" },
+          take: 1,
+          select: { filePath: true },
+        },
+        items: {
+          orderBy: { sortOrder: "asc" },
+          take: 1,
+          select: { label: true, optionValue: true, imageUrl: true },
+        },
+      },
+      orderBy: { sortOrder: "asc" },
     }),
   ]);
 
@@ -83,22 +109,23 @@ export default async function PMChangeOrdersPage({ searchParams }: PageProps) {
           successMessage="Change order submitted"
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
-          <FormField label="Project">
-            <Select
-              name="projectId"
-              required
-              defaultValue={filterProjectId ?? ""}
-            >
-              <option value="" disabled>
-                Select project
-              </option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </FormField>
+          <ChangeOrderSelectionPicker
+            projects={projects}
+            defaultProjectId={filterProjectId ?? ""}
+            selections={selectionRows.map((s) => ({
+              id: s.id,
+              projectId: s.package.projectId,
+              title: s.name,
+              category: s.category,
+              status: s.status,
+              allowance: s.allowance,
+              imageUrl:
+                s.images[0]?.filePath
+                  ? mediaUrl(s.images[0].filePath)
+                  : s.items[0]?.imageUrl ?? null,
+              clientChoice: s.items[0]?.optionValue || s.items[0]?.label || null,
+            }))}
+          />
           <FormField label="Title">
             <Input name="title" required />
           </FormField>

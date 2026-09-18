@@ -54,7 +54,10 @@ model User {
   warrantyTickets   WarrantyTicket[]    @relation("WarrantyClient")
   assignedWarranties WarrantyTicket[]   @relation("WarrantyPM")
   warrantySubWork   WarrantyTicket[]    @relation("WarrantySub")
+  coordinatedWarranties WarrantyTicket[] @relation("WarrantyCoordinator")
+  forwardedWarranties   WarrantyTicket[] @relation("WarrantyForwarded")
   warrantyComments  WarrantyComment[]
+  depositDueDateChanges DepositDueDateHistory[]
   changeOrdersCreated ChangeOrder[]     @relation("COCreator")
   selectionApprovals SelectionApproval[]
   auditLogs         AuditLog[]
@@ -193,6 +196,7 @@ enum Role {
   SALES_MANAGER
   PROJECT_MANAGER
   BOOKKEEPER
+  SERVICE_COORDINATOR
   SUBCONTRACTOR
   CLIENT
 }
@@ -668,20 +672,59 @@ enum DepositStatus {
   WAIVED
 }
 
-model Deposit {
-  id         String        @id @default(cuid())
-  projectId  String?
-  contractId String?
-  label      String
-  amount     Float
-  dueDate    DateTime?
-  status     DepositStatus @default(PENDING)
-  reference  String?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+enum DepositTriggerType {
+  DATE_BASED
+  PHASE_COMPLETION
+  PHASE_COMPLETION_PLUS_OFFSET
+}
 
-  project  Project?          @relation(fields: [projectId], references: [id])
-  contract PurchaseContract? @relation(fields: [contractId], references: [id])
+model Deposit {
+  id                   String             @id @default(cuid())
+  projectId            String?
+  contractId           String?
+  label                String
+  amount               Float
+  /// Current / working due date shown to clients and finance.
+  dueDate              DateTime?
+  /// Original approved/planned due date. Never overwritten by phase delays.
+  plannedDueDate       DateTime?
+  status               DepositStatus      @default(PENDING)
+  triggerType          DepositTriggerType @default(DATE_BASED)
+  linkedScheduleItemId String?
+  offsetDays           Int                @default(0)
+  dueDateChangeReason  String?
+  lastDueDateChangedAt DateTime?
+  reference            String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  project            Project?               @relation(fields: [projectId], references: [id])
+  contract           PurchaseContract?      @relation(fields: [contractId], references: [id])
+  linkedScheduleItem ScheduleItem?          @relation(fields: [linkedScheduleItemId], references: [id], onDelete: SetNull)
+  dueDateHistory     DepositDueDateHistory[]
+
+  @@index([projectId, dueDate])
+  @@index([projectId, status])
+  @@index([linkedScheduleItemId])
+  @@index([triggerType, status])
+}
+
+/// Immutable audit of client-facing due-date changes.
+model DepositDueDateHistory {
+  id                   String   @id @default(cuid())
+  depositId            String
+  previousDueDate      DateTime?
+  newDueDate           DateTime?
+  reason               String
+  linkedScheduleItemId String?
+  linkedPhaseName      String?
+  changedByUserId      String?
+  createdAt            DateTime @default(now())
+
+  deposit   Deposit @relation(fields: [depositId], references: [id], onDelete: Cascade)
+  changedBy User?   @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([depositId, createdAt])
 }
 
 enum ConditionStatus {
@@ -731,12 +774,20 @@ model Task {
   description String?
   status      TaskStatus @default(TODO)
   priority    Priority   @default(MEDIUM)
+  /// Current / working start (forecast). Delays update this, not baseline.
   startDate   DateTime?
+  /// Current / working due (forecast). Delays update this, not baseline.
   dueDate     DateTime?
+  /// Originally approved schedule start. Frozen once established.
+  baselineStartDate DateTime?
+  /// Originally approved schedule finish. Frozen once established.
+  baselineEndDate   DateTime?
+  /// Real start after work begins.
+  actualStartDate   DateTime?
   completedAt DateTime?
   notes       String?
   assigneeId  String?
-  createdById String
+  createdById String?
   /// Google Calendar sync (pushed to assignee/creator calendar)
   googleEventId       String?
   googleCalendarId    String?
@@ -748,7 +799,7 @@ model Task {
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignee  User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  createdBy User    @relation("TaskCreator", fields: [createdById], references: [id])
+  createdBy User?   @relation("TaskCreator", fields: [createdById], references: [id])
 
   @@index([projectId, status])
   @@index([projectId, dueDate])
@@ -769,6 +820,8 @@ model Milestone {
   title       String
   description String?
   dueDate     DateTime?
+  baselineDueDate DateTime?
+  actualDueDate   DateTime?
   status      ScheduleStatus @default(PLANNED)
   sortOrder   Int            @default(0)
   createdAt   DateTime       @default(now())
@@ -786,8 +839,18 @@ model ScheduleItem {
   projectId    String
   title        String
   trade        String?
+  /// Current / working start (forecast). Delays update this, not baseline.
   startDate    DateTime
+  /// Current / working finish (forecast). Delays update this, not baseline.
   endDate      DateTime
+  /// Originally approved schedule start. Frozen once established.
+  baselineStartDate DateTime?
+  /// Originally approved schedule finish. Frozen once established.
+  baselineEndDate   DateTime?
+  /// Real start after work begins.
+  actualStartDate   DateTime?
+  /// Real finish after COMPLETED. Finalizes deposit phase triggers.
+  actualEndDate     DateTime?
   status       ScheduleStatus @default(PLANNED)
   dependsOnId  String?
   assigneeName String?
@@ -801,10 +864,12 @@ model ScheduleItem {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deposits Deposit[]
 
   @@index([projectId, startDate])
   @@index([projectId, status])
+  @@index([projectId, endDate])
   @@index([googleEventId])
 }
 
@@ -936,6 +1001,8 @@ model SelectionSection {
   items         SelectionItem[]
   approvals     SelectionApproval[]
   images        SelectionImage[]
+  changeOrders  ChangeOrder[]
+  changeOrderLinks ChangeOrderSelection[]
 
   @@index([packageId, clientVisible])
 }
@@ -1015,6 +1082,8 @@ model ChangeOrder {
   reason      String?
   status      ChangeOrderStatus @default(DRAFT)
   relatedSelectionItemId String?
+  /// Primary linked selection section (project-scoped, not a copy).
+  relatedSelectionSectionId String?
   attachmentPath String?
   createdById String
   scheduleImpact String?
@@ -1029,8 +1098,29 @@ model ChangeOrder {
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User    @relation("COCreator", fields: [createdById], references: [id])
+  relatedSelectionSection SelectionSection? @relation(fields: [relatedSelectionSectionId], references: [id], onDelete: SetNull)
+  selections ChangeOrderSelection[]
 
   @@index([projectId, status])
+  @@index([relatedSelectionSectionId])
+}
+
+/// Join + frozen snapshot so historical COs stay valid if the Selection later changes.
+model ChangeOrderSelection {
+  id                 String   @id @default(cuid())
+  changeOrderId      String
+  selectionSectionId String
+  snapshotTitle      String
+  snapshotCategory   String?
+  snapshotStatus     String?
+  snapshotAllowance  Float?
+  createdAt          DateTime @default(now())
+
+  changeOrder      ChangeOrder      @relation(fields: [changeOrderId], references: [id], onDelete: Cascade)
+  selectionSection SelectionSection @relation(fields: [selectionSectionId], references: [id], onDelete: Restrict)
+
+  @@unique([changeOrderId, selectionSectionId])
+  @@index([selectionSectionId])
 }
 
 // ─── Field ops ───────────────────────────────────────────────────────────────
@@ -1272,6 +1362,10 @@ model WarrantyTicket {
   eligible        Boolean        @default(true)
   pmId            String?
   subcontractorId String?
+  coordinatorId   String?
+  forwardedToUserId String?
+  forwardedAt     DateTime?
+  triageNotes     String?
   resolution      String?
   closedAt        DateTime?
   clientRepliedAt DateTime?
@@ -1282,8 +1376,16 @@ model WarrantyTicket {
   clientUser    User    @relation("WarrantyClient", fields: [clientUserId], references: [id])
   pm            User?   @relation("WarrantyPM", fields: [pmId], references: [id])
   subcontractor User?   @relation("WarrantySub", fields: [subcontractorId], references: [id])
+  coordinator   User?   @relation("WarrantyCoordinator", fields: [coordinatorId], references: [id])
+  forwardedTo   User?   @relation("WarrantyForwarded", fields: [forwardedToUserId], references: [id])
   comments      WarrantyComment[]
   photos        WarrantyPhoto[]
+
+  @@index([projectId, status])
+  @@index([coordinatorId, status])
+  @@index([clientUserId])
+  @@index([pmId, status])
+  @@index([subcontractorId])
 }
 
 model WarrantyComment {
@@ -1443,6 +1545,12 @@ model Notification {
   body       String?
   href       String?
   tone       String?   // danger | warning | info
+  /// PROJECT | FINANCE | WARRANTY | TASKS | GENERAL
+  category   String?
+  /// NORMAL | IMPORTANT | URGENT
+  priority   String?
+  /// Deterministic idempotency key (per user). Same key = no duplicate.
+  eventKey   String?
   entityType String?
   entityId   String?
   readAt     DateTime?
@@ -1450,8 +1558,10 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, eventKey])
   @@index([userId, createdAt])
   @@index([userId, readAt])
+  @@index([userId, category, createdAt])
   @@index([companyId, createdAt])
   @@index([entityType, entityId])
 }

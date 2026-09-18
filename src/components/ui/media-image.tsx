@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
 import { cn, isImageFileName, mediaThumbnailUrl, mediaUrl } from "@/lib/utils";
 
@@ -50,27 +50,13 @@ export function MediaImage({
           .map((seg) => encodeURIComponent(seg))
           .join("/")}`
       : null;
-  const [useBundled, setUseBundled] = useState(false);
+  const [bundledFor, setBundledFor] = useState<string | null>(null);
+  const useBundled = Boolean(src && bundledFor === src);
   const resolved =
     useBundled && bundled && bundled !== primary ? bundled : primary;
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
-
-  useEffect(() => {
-    setUseBundled(false);
-    setFailedFor(null);
-    setLoadedFor(null);
-  }, [src]);
-
-  // Browser may finish from cache before onLoad is attached — mark ready then.
-  useEffect(() => {
-    const img = imgRef.current;
-    if (!img || !resolved) return;
-    if (img.complete && img.naturalWidth > 0) {
-      setLoadedFor(resolved);
-    }
-  }, [resolved]);
 
   const failed = !resolved || failedFor === resolved;
   const ready = Boolean(resolved) && loadedFor === resolved;
@@ -121,7 +107,7 @@ export function MediaImage({
         onLoad={() => setLoadedFor(resolved)}
         onError={() => {
           if (!useBundled && bundled && bundled !== resolved) {
-            setUseBundled(true);
+            setBundledFor(src ?? null);
             return;
           }
           setFailedFor(resolved);

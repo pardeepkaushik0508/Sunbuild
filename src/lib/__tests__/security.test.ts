@@ -55,6 +55,7 @@ describe("RBAC capabilities", () => {
   it("rejects forged role strings", () => {
     assert.equal(isValidRole("owner"), false);
     assert.equal(isValidRole("OWNER"), true);
+    assert.equal(isValidRole("SERVICE_COORDINATOR"), true);
     assert.equal(isValidRole("SUPERADMIN"), false);
   });
 

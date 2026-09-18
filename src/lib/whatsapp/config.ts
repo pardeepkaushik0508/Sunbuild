@@ -29,7 +29,9 @@ export function getWhatsAppConfig(): WhatsAppConfig | null {
 
 /** Verify-token for Meta GET handshake (may be set before full API credentials). */
 export function getWhatsAppVerifyToken(): string | null {
-  const token = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim();
+  const token =
+    process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim() ||
+    process.env.WHATSAPP_VERIFY_TOKEN?.trim();
   return token || null;
 }
 

@@ -71,6 +71,12 @@ describe("deposit ladder badges (§8)", () => {
       depositPaymentBadge(DepositStatus.PENDING, new Date("2099-01-01")).label,
       "Scheduled"
     );
+    assert.equal(
+      depositPaymentBadge(DepositStatus.OVERDUE, new Date("2020-01-01"), {
+        isOverdue: false,
+      }).label,
+      "Scheduled"
+    );
   });
 });
 

@@ -25,7 +25,7 @@ import {
 } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatCurrency, formatDate, fullName, whatsappLink, cn, mediaUrl } from "@/lib/utils";
-import { EMPTY_FIELD_LABEL, LOT_PLAN_LABEL } from "@/lib/labels";
+import { pickNextDeposit, formatClientDueDate } from "@/lib/deposits/next-deposit";
 import { loadProjectSubcontractorPayments } from "@/lib/payments/subcontractor-summary";
 import { financeRolesCanSeeAllSubPayments } from "@/lib/payments/invoice-flow";
 import { sessionHasFinanceAccess } from "@/lib/authorization";
@@ -121,7 +121,20 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
       take: 20,
     }),
     prisma.deposit.findMany({
-      where: { projectId: id, status: { in: depositOpenStatuses() } },
+      where: { projectId: id },
+      orderBy: { dueDate: "asc" },
+      include: {
+        linkedScheduleItem: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            endDate: true,
+            baselineEndDate: true,
+            actualEndDate: true,
+          },
+        },
+      },
     }),
     prisma.scheduleItem.count({
       where: { projectId: id, status: ScheduleStatus.DELAYED },
@@ -181,9 +194,12 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
     `Hi ${project.buyer?.firstName ?? "there"}, this is your Sunview project team.`
   );
 
+  const nextDeposit = pickNextDeposit(deposits);
   const insights = buildProjectInsights({
     delayedScheduleCount: delayedCount,
-    expectedDepositAmount: deposits.reduce((s, d) => s + d.amount, 0),
+    expectedDepositAmount: deposits
+      .filter((d) => depositOpenStatuses().includes(d.status))
+      .reduce((s, d) => s + d.amount, 0),
     pendingDocCount: docsCount,
   });
 
@@ -323,17 +339,20 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
 
       <ClientInfoStrip
         items={[
-          ...(canViewFinance
-            ? [
-                {
-                  id: "deposit",
-                  label: "Client Deposit",
-                  value: deposits[0]
-                    ? formatCurrency(deposits[0].amount)
-                    : "No deposit yet",
-                },
-              ]
-            : []),
+          {
+            id: "next-amount",
+            label: "Next Due Amount",
+            value: nextDeposit
+              ? formatCurrency(nextDeposit.amount)
+              : "No open deposits",
+          },
+          {
+            id: "due-date",
+            label: "Due Date",
+            value: nextDeposit?.currentDueDate
+              ? formatClientDueDate(nextDeposit.currentDueDate)
+              : "Not set",
+          },
           {
             id: "client",
             label: "Client Name",

@@ -227,6 +227,12 @@ function navForRole(
         ],
         { usersAt: 2 }
       );
+    case Role.SERVICE_COORDINATOR:
+      return [
+        { label: "Overview", href: "/service", icon: LayoutDashboard },
+        { label: "Warranty", href: "/service/warranty", icon: Wrench },
+        { label: "Settings", href: "/settings", icon: Settings },
+      ];
     case Role.SUBCONTRACTOR:
       return withOptionalModules(
         [

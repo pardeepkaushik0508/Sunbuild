@@ -2,6 +2,7 @@ import { ScheduleStatus } from "@prisma/client";
 import {
   updateMilestoneStatusAction,
   updateScheduleItemStatusAction,
+  updateScheduleItemDatesAction,
 } from "@/lib/actions";
 import { StatusBadge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -23,6 +24,8 @@ type ScheduleRow = {
   title: string;
   status: ScheduleStatus;
   endDate: Date | string;
+  startDate?: Date | string | null;
+  baselineEndDate?: Date | string | null;
   projectName: string;
   trade?: string | null;
 };
@@ -144,6 +147,27 @@ export function ScheduleItemStatusList({
                 </StatusBadge>
                 {canManage ? (
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <ActionForm
+                      action={updateScheduleItemDatesAction}
+                      successMessage="Forecast dates updated"
+                      className="flex items-center gap-1.5"
+                    >
+                      <input type="hidden" name="scheduleItemId" value={item.id} />
+                      <input
+                        type="date"
+                        name="endDate"
+                        defaultValue={String(item.endDate).slice(0, 10)}
+                        aria-label={`Current finish for ${item.title}`}
+                        className="h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px]"
+                      />
+                      <SubmitButton
+                        size="sm"
+                        variant="outline"
+                        pendingLabel="Saving…"
+                      >
+                        Update current
+                      </SubmitButton>
+                    </ActionForm>
                     {item.status !== ScheduleStatus.COMPLETED ? (
                       <ActionForm
                         action={updateScheduleItemStatusAction.bind(
@@ -153,6 +177,13 @@ export function ScheduleItemStatusList({
                         )}
                         successMessage="Schedule item completed"
                       >
+                        <input
+                          type="date"
+                          name="actualEndDate"
+                          defaultValue={new Date().toISOString().slice(0, 10)}
+                          aria-label={`Actual finish for ${item.title}`}
+                          className="h-8 rounded-[8px] border border-sb-border bg-white px-2 text-[12px]"
+                        />
                         <SubmitButton
                           size="sm"
                           variant="outline"

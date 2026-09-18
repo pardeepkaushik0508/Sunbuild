@@ -13,7 +13,7 @@ describe("client deposit label", () => {
   it("replaces incorrect Sales Deposit wording", () => {
     assert.equal(depositDisplayLabel(null), CLIENT_DEPOSIT_LABEL);
     assert.equal(depositDisplayLabel("Sales Deposit"), CLIENT_DEPOSIT_LABEL);
-    assert.equal(depositDisplayLabel("Deposit 1"), "Deposit 1");
+    assert.equal(depositDisplayLabel("Further deposit, by date"), CLIENT_DEPOSIT_LABEL);
   });
 });
 
@@ -37,6 +37,7 @@ describe("subcontractor payment privacy", () => {
     assert.equal(financeRolesCanSeeAllSubPayments(Role.PROJECT_MANAGER), true);
     assert.equal(financeRolesCanSeeAllSubPayments(Role.SUBCONTRACTOR), false);
     assert.equal(financeRolesCanSeeAllSubPayments(Role.CLIENT), false);
+    assert.equal(financeRolesCanSeeAllSubPayments(Role.SERVICE_COORDINATOR), false);
   });
 });
 

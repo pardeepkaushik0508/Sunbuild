@@ -7,6 +7,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   SALES_MANAGER: "Sales Manager",
   PROJECT_MANAGER: "Project Manager",
   BOOKKEEPER: "Bookkeeper",
+  SERVICE_COORDINATOR: "Service Coordinator",
   SUBCONTRACTOR: "Subcontractor",
   CLIENT: "Client",
 };
@@ -18,6 +19,7 @@ export const ROLE_HOME: Record<Role, string> = {
   SALES_MANAGER: "/sales",
   PROJECT_MANAGER: "/pm",
   BOOKKEEPER: "/bookkeeper",
+  SERVICE_COORDINATOR: "/service",
   SUBCONTRACTOR: "/sub",
   CLIENT: "/client",
 };
@@ -29,7 +31,7 @@ export function hasFinanceAccess(
 ) {
   if (role === Role.CLIENT || role === Role.SUBCONTRACTOR) return false;
   if (role === Role.OWNER) return true;
-  if (role === Role.CEO) return false;
+  if (role === Role.CEO || role === Role.SERVICE_COORDINATOR) return false;
 
   // Company matrix may deny finance even for Bookkeeper.
   if (matrixFinancialReport === false) return false;
@@ -77,6 +79,7 @@ export function canAccessProject(
   if (role === Role.BOOKKEEPER) return true;
   if (role === Role.SALES_MANAGER) return opts.isAssigned;
   if (role === Role.PROJECT_MANAGER) return Boolean(opts.isPm);
+  if (role === Role.SERVICE_COORDINATOR) return opts.isAssigned;
   if (role === Role.SUBCONTRACTOR) return opts.isAssigned;
   if (role === Role.CLIENT) return opts.isAssigned || opts.isBuyer;
   return false;
@@ -128,6 +131,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Photos", href: "/pm/photos", roles: [Role.PROJECT_MANAGER] },
   { label: "Contracts", href: "/pm/contracts", roles: [Role.PROJECT_MANAGER, Role.OWNER] },
   { label: "Warranty", href: "/pm/warranty", roles: [Role.PROJECT_MANAGER] },
+  { label: "Dashboard", href: "/service", roles: [Role.SERVICE_COORDINATOR] },
+  { label: "Warranty", href: "/service/warranty", roles: [Role.SERVICE_COORDINATOR] },
   { label: "Invoices", href: "/bookkeeper/invoices", roles: [Role.BOOKKEEPER, Role.OWNER] },
   { label: "Jobs", href: "/sub", roles: [Role.SUBCONTRACTOR] },
   { label: "My Home", href: "/client", roles: [Role.CLIENT] },

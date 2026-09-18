@@ -96,7 +96,7 @@ export function NotificationsMenu() {
     };
   }, []);
 
-  const unread = unreadCount > 0 || items.length > 0;
+  const unread = unreadCount > 0;
 
   return (
     <div className="relative" ref={rootRef}>

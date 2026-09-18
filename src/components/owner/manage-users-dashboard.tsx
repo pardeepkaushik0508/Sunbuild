@@ -136,49 +136,25 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
     setSearchValue(data.filters.q);
   }
 
-  const users = useMemo(
-    () =>
-      data.users.map((u) => {
-        const override = rowOverrides[u.userId];
-        return override ? { ...u, ...override } : u;
-      }),
-    [data.users, rowOverrides]
-  );
-
-  // Drop overrides once server data has caught up (same updatedAt / fields).
-  useEffect(() => {
-    setRowOverrides((prev) => {
-      if (Object.keys(prev).length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const u of data.users) {
-        const o = next[u.userId];
-        if (!o) continue;
-        if (
-          (!o.updatedAt || o.updatedAt === u.updatedAt) &&
-          (!o.name || o.name === u.name) &&
-          (!o.email || o.email === u.email) &&
-          (o.phone === undefined || o.phone === u.phone) &&
-          (o.trade === undefined || o.trade === u.trade) &&
-          (!o.role || o.role === u.role) &&
-          (!o.status || o.status === u.status)
-        ) {
-          delete next[u.userId];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
+  const users = useMemo(() => {
+    return data.users.map((u) => {
+      const override = rowOverrides[u.userId];
+      if (!override) return u;
+      const caughtUp =
+        (!override.updatedAt || override.updatedAt === u.updatedAt) &&
+        (!override.name || override.name === u.name) &&
+        (!override.email || override.email === u.email) &&
+        (override.phone === undefined || override.phone === u.phone) &&
+        (override.trade === undefined || override.trade === u.trade) &&
+        (!override.role || override.role === u.role) &&
+        (!override.status || override.status === u.status);
+      return caughtUp ? u : { ...u, ...override };
     });
-  }, [data.users]);
+  }, [data.users, rowOverrides]);
 
-  // Keep the open dialog's selected user in sync with latest list data.
-  useEffect(() => {
-    setSelectedUser((prev) => {
-      if (!prev) return prev;
-      const fresh = users.find((u) => u.userId === prev.userId);
-      return fresh ?? prev;
-    });
-  }, [users]);
+  const selectedUserView = selectedUser
+    ? users.find((u) => u.userId === selectedUser.userId) ?? selectedUser
+    : null;
 
   function resolveUser(user: ManageUserRow): ManageUserRow {
     return users.find((u) => u.userId === user.userId) ?? user;
@@ -766,12 +742,12 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
       {(dialog === "add" || dialog === "edit") && (
         <UserFormDialog
           key={
-            dialog === "edit" && selectedUser
-              ? `edit-${selectedUser.userId}-${selectedUser.updatedAt}-${formNonce}`
+            dialog === "edit" && selectedUserView
+              ? `edit-${selectedUserView.userId}-${selectedUserView.updatedAt}-${formNonce}`
               : `add-${formNonce}`
           }
           mode={dialog}
-          user={selectedUser}
+          user={selectedUserView}
           inviteRoles={data.inviteRoles}
           projects={data.projects}
           onClose={() => {
@@ -843,15 +819,15 @@ export function ManageUsersDashboard({ data }: { data: ManageUsersData }) {
         />
       )}
 
-      {dialog === "view" && selectedUser ? (
+      {dialog === "view" && selectedUserView ? (
         <UserViewDialog
-          user={selectedUser}
+          user={selectedUserView}
           onClose={() => {
             setDialog(null);
             setSelectedUser(null);
           }}
           onEdit={() => {
-            const fresh = resolveUser(selectedUser);
+            const fresh = resolveUser(selectedUserView);
             setSelectedUser(fresh);
             setFormNonce((n) => n + 1);
             setDialog("edit");

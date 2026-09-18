@@ -28,11 +28,11 @@ export function ClientInfoStrip({
   variant?: "cards" | "pills";
 }) {
   return (
-    <section className={cn("space-y-3", className)}>
+    <section className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between gap-3">
         <div className="sb-section-title">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sb-blue-soft text-sb-blue">
-            <Lightbulb size={16} />
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sb-blue-soft text-sb-blue">
+            <Lightbulb size={14} />
           </span>
           Client Information
         </div>
@@ -47,11 +47,11 @@ export function ClientInfoStrip({
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="min-h-[72px] animate-pulse rounded-[12px] border border-sb-border bg-sb-canvas"
+              className="min-h-[56px] animate-pulse rounded-[12px] border border-sb-border bg-sb-canvas"
             />
           ))}
         </div>
@@ -66,7 +66,7 @@ export function ClientInfoStrip({
       ) : (
         <div
           className={cn(
-            "grid gap-3",
+            "grid gap-2",
             variant === "pills"
               ? "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
               : "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
@@ -76,8 +76,8 @@ export function ClientInfoStrip({
             const value = item.value?.trim() || "Not set";
             const inner =
               variant === "pills" ? (
-                <div className="flex min-h-[64px] flex-col items-center justify-center rounded-[12px] border border-sb-border bg-[#f3f4f6] px-3 py-3 text-center transition hover:border-sb-blue/40 hover:bg-white">
-                  <p className="text-[13px] font-semibold text-sb-ink">
+                <div className="flex min-h-[52px] flex-col items-center justify-center rounded-[12px] border border-sb-border bg-[#f3f4f6] px-3 py-2 text-center transition hover:border-sb-blue/40 hover:bg-white">
+                  <p className="text-[12px] font-semibold text-sb-ink">
                     {item.label}
                   </p>
                   <p className="mt-0.5 line-clamp-1 text-[11px] text-sb-muted">
@@ -85,9 +85,9 @@ export function ClientInfoStrip({
                   </p>
                 </div>
               ) : (
-                <div className="flex min-h-[72px] flex-col items-center justify-center rounded-[12px] border border-sb-border bg-sb-surface px-3 py-4 text-center shadow-[var(--sb-shadow)] transition hover:border-sb-blue/40">
-                  <p className="text-sm font-medium text-sb-ink">{item.label}</p>
-                  <p className="mt-1 line-clamp-2 text-xs text-sb-muted">
+                <div className="flex min-h-[56px] flex-col items-center justify-center rounded-[12px] border border-sb-border bg-sb-surface px-3 py-2.5 text-center shadow-[var(--sb-shadow)] transition hover:border-sb-blue/40">
+                  <p className="text-[13px] font-medium text-sb-ink">{item.label}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-sb-muted">
                     {value}
                   </p>
                 </div>

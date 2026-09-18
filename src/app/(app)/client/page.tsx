@@ -42,6 +42,8 @@ import {
   clientLifecycleStatusLabel,
   isWarrantyCoverageActive,
 } from "@/lib/client/flow";
+import { depositDisplayLabel } from "@/lib/labels";
+import { computeDepositDue } from "@/lib/deposits/due";
 
 export default async function ClientHomePage({
   searchParams,
@@ -173,6 +175,18 @@ export default async function ClientHomePage({
     prisma.deposit.findMany({
       where: { projectId: full.id },
       orderBy: { createdAt: "asc" },
+      include: {
+        linkedScheduleItem: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            endDate: true,
+            baselineEndDate: true,
+            actualEndDate: true,
+          },
+        },
+      },
     }),
     prisma.purchaseContract.findFirst({
       where: { projectId: full.id },
@@ -335,6 +349,10 @@ export default async function ClientHomePage({
       assigneeName: item.assigneeName,
       projectName: full.name,
       href: `/client/schedule?projectId=${full.id}`,
+      baselineStartDate: item.baselineStartDate,
+      baselineEndDate: item.baselineEndDate,
+      actualStartDate: item.actualStartDate,
+      actualEndDate: item.actualEndDate,
     }))
   ).map((t) => ({
     ...t,
@@ -457,14 +475,31 @@ export default async function ClientHomePage({
           <ClientLifecycleCard
             title="Deposit ladder"
             empty="No deposits recorded yet."
-            rows={deposits.map((d) => ({
-              id: d.id,
-              title: d.label,
-              detail: d.reference,
-              status: d.status,
-              amount: d.amount,
-              dueDate: d.dueDate?.toISOString() ?? null,
-            }))}
+            rows={deposits.map((d) => {
+              const computed = computeDepositDue({
+                triggerType: d.triggerType,
+                plannedDueDate: d.plannedDueDate ?? d.dueDate,
+                currentDueDate: d.dueDate,
+                offsetDays: d.offsetDays,
+                linkedPhase: d.linkedScheduleItem
+                  ? {
+                      title: d.linkedScheduleItem.title,
+                      status: d.linkedScheduleItem.status,
+                      baselineEnd: d.linkedScheduleItem.baselineEndDate,
+                      currentEnd: d.linkedScheduleItem.endDate,
+                      actualEnd: d.linkedScheduleItem.actualEndDate,
+                    }
+                  : null,
+              });
+              return {
+                id: d.id,
+                title: depositDisplayLabel(d.label),
+                detail: d.reference,
+                status: computed.isOverdue ? "OVERDUE" : d.status,
+                amount: d.amount,
+                dueDate: computed.currentDueDate?.toISOString() ?? null,
+              };
+            })}
           />
         </div>
       ) : null}

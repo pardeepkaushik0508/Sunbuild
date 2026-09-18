@@ -2,6 +2,10 @@ import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { AppSession } from "@/lib/session";
+import {
+  channelsForNotificationType,
+  notificationHrefIsSafe,
+} from "@/lib/notifications/channels";
 
 export type NotificationTone = "danger" | "warning" | "info";
 
@@ -27,6 +31,11 @@ export type CreateNotificationInput = {
   tone?: NotificationTone | null;
   entityType?: string | null;
   entityId?: string | null;
+  eventKey?: string | null;
+  category?: string | null;
+  priority?: string | null;
+  /** Override channel matrix. */
+  channels?: Array<"in_app" | "whatsapp" | "sms">;
 };
 
 export function revalidateNotificationInbox() {
@@ -35,68 +44,124 @@ export function revalidateNotificationInbox() {
 
 export async function createNotification(input: CreateNotificationInput) {
   if (!input.userId) return null;
-  const row = await prisma.notification.create({
-    data: {
-      userId: input.userId,
-      companyId: input.companyId,
-      type: input.type,
-      title: input.title,
-      body: input.body ?? null,
-      href: input.href ?? null,
-      tone: input.tone ?? "info",
-      entityType: input.entityType ?? null,
-      entityId: input.entityId ?? null,
-    },
-  });
-  revalidateNotificationInbox();
+  const matrix = channelsForNotificationType(input.type);
+  const href = notificationHrefIsSafe(input.href) ? input.href ?? null : "/notifications";
+  const eventKey = input.eventKey?.trim() || null;
   try {
-    await smsForNotification(input);
-  } catch {
-    // SMS must never fail the in-app notification or the CRM action.
+    const row = await prisma.notification.create({
+      data: {
+        userId: input.userId,
+        companyId: input.companyId,
+        type: input.type,
+        title: input.title,
+        body: input.body ?? null,
+        href,
+        tone: input.tone ?? "info",
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+        eventKey,
+        category: input.category ?? matrix.category,
+        priority: input.priority ?? matrix.priority,
+      },
+    });
+    revalidateNotificationInbox();
+    await dispatchNotificationChannels(input, matrix.channels);
+    return row;
+  } catch (err) {
+    // Unique eventKey — treat as already delivered.
+    if (
+      eventKey &&
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
+      return null;
+    }
+    throw err;
   }
-  return row;
 }
 
 /** Skip if the same unread notification already exists for this user + entity. */
 export async function createNotificationOnce(input: CreateNotificationInput) {
   if (!input.userId) return null;
-  if (!input.entityId) return createNotification(input);
-  const existing = await prisma.notification.findFirst({
-    where: {
-      userId: input.userId,
-      companyId: input.companyId,
-      type: input.type,
-      entityType: input.entityType ?? undefined,
-      entityId: input.entityId,
-      readAt: null,
-    },
-    select: { id: true },
-  });
-  if (existing) return null;
+  if (input.eventKey) {
+    const existing = await prisma.notification.findUnique({
+      where: {
+        userId_eventKey: {
+          userId: input.userId,
+          eventKey: input.eventKey,
+        },
+      },
+      select: { id: true },
+    });
+    if (existing) return null;
+  } else if (input.entityId) {
+    const existing = await prisma.notification.findFirst({
+      where: {
+        userId: input.userId,
+        companyId: input.companyId,
+        type: input.type,
+        entityType: input.entityType ?? undefined,
+        entityId: input.entityId,
+        readAt: null,
+      },
+      select: { id: true },
+    });
+    if (existing) return null;
+  }
   return createNotification(input);
 }
 
 export async function createNotifications(inputs: CreateNotificationInput[]) {
   const rows = inputs.filter((i) => i.userId);
   if (rows.length === 0) return { count: 0 };
-  const result = await prisma.notification.createMany({
-    data: rows.map((input) => ({
-      userId: input.userId,
-      companyId: input.companyId,
-      type: input.type,
-      title: input.title,
-      body: input.body ?? null,
-      href: input.href ?? null,
-      tone: input.tone ?? "info",
-      entityType: input.entityType ?? null,
-      entityId: input.entityId ?? null,
-    })),
-  });
-  if (result.count > 0) revalidateNotificationInbox();
+  let count = 0;
   for (const input of rows) {
-    await smsForNotification(input);
+    const created = await createNotificationOnce(input);
+    if (created) count += 1;
   }
-  return result;
+  return { count };
+}
+
+async function dispatchNotificationChannels(
+  input: CreateNotificationInput,
+  defaultChannels: Array<"in_app" | "whatsapp" | "sms">
+) {
+  const channels = input.channels ?? defaultChannels;
+  const body = [input.title, input.body].filter(Boolean).join("\n");
+  const projectId =
+    input.entityType === "Project" ? input.entityId : null;
+
+  if (channels.includes("sms")) {
+    try {
+      await smsForNotification(input);
+    } catch (err) {
+      console.error("[twilio] notification SMS skipped", {
+        type: input.type,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
+
+  if (channels.includes("whatsapp")) {
+    try {
+      const { notifyUserByWhatsAppBestEffort } = await import(
+        "@/lib/whatsapp/service"
+      );
+      await notifyUserByWhatsAppBestEffort({
+        userId: input.userId,
+        companyId: input.companyId,
+        body,
+        projectId,
+      });
+    } catch (err) {
+      console.error("[whatsapp] notification send skipped", {
+        type: input.type,
+        message: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  }
 }
 
 async function smsForNotification(input: CreateNotificationInput) {
@@ -274,17 +339,25 @@ export async function notifyProjectManagersOfDailyLog(opts: {
 
 export async function listPersistedNotifications(
   session: AppSession,
-  opts?: { take?: number; unreadOnly?: boolean }
+  opts?: {
+    take?: number;
+    skip?: number;
+    unreadOnly?: boolean;
+    category?: string | null;
+  }
 ) {
-  const take = opts?.take ?? 50;
+  const take = Math.min(opts?.take ?? 50, 100);
+  const skip = opts?.skip ?? 0;
   return prisma.notification.findMany({
     where: {
       userId: session.user.id,
       companyId: session.membership.companyId,
       ...(opts?.unreadOnly ? { readAt: null } : {}),
+      ...(opts?.category ? { category: opts.category } : {}),
     },
     orderBy: { createdAt: "desc" },
     take,
+    skip,
   });
 }
 

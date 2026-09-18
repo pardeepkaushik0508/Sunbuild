@@ -1011,6 +1011,8 @@ export async function createTaskAction(form: FormData) {
     await assertProjectSubcontractor(session, data.assigneeId, data.projectId);
   }
 
+  const startDate = data.startDate ? new Date(data.startDate) : null;
+  const dueDate = data.dueDate ? new Date(data.dueDate) : null;
   const task = await prisma.task.create({
     data: {
       projectId: data.projectId,
@@ -1018,8 +1020,10 @@ export async function createTaskAction(form: FormData) {
       description: data.description || null,
       priority: (data.priority || "MEDIUM") as Priority,
       status: TaskStatus.TODO,
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      startDate: data.startDate ? new Date(data.startDate) : null,
+      dueDate,
+      startDate,
+      baselineStartDate: startDate ?? dueDate,
+      baselineEndDate: dueDate ?? startDate,
       assigneeId: data.assigneeId || null,
       createdById: session.user.id,
     },
@@ -1096,7 +1100,10 @@ export async function updateTaskAction(form: FormData) {
 
   const status = data.status as TaskStatus;
   const nextDue = data.dueDate ? new Date(data.dueDate) : null;
+  const nextStart = data.startDate ? new Date(data.startDate) : null;
   const nextAssignee = data.assigneeId || null;
+  const actualFinishRaw = formString(form, "actualEndDate");
+  const actualFinish = actualFinishRaw ? new Date(actualFinishRaw) : null;
 
   const task = await prisma.task.update({
     where: { id: data.taskId },
@@ -1107,11 +1114,19 @@ export async function updateTaskAction(form: FormData) {
       priority: data.priority as Priority,
       status,
       dueDate: nextDue,
-      startDate: data.startDate ? new Date(data.startDate) : null,
+      startDate: nextStart,
+      baselineStartDate: existing.baselineStartDate ?? nextStart ?? nextDue,
+      baselineEndDate: existing.baselineEndDate ?? nextDue ?? nextStart,
+      actualStartDate:
+        status === TaskStatus.IN_PROGRESS || status === TaskStatus.DONE
+          ? existing.actualStartDate ?? nextStart ?? existing.startDate
+          : existing.actualStartDate,
       assigneeId: nextAssignee,
       completedAt:
         status === TaskStatus.DONE
-          ? existing.completedAt ?? new Date()
+          ? actualFinish && !Number.isNaN(actualFinish.getTime())
+            ? actualFinish
+            : existing.completedAt ?? new Date()
           : null,
     },
   });
@@ -1190,7 +1205,13 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
     where: { id: taskId },
     data: {
       status,
-      completedAt: status === TaskStatus.DONE ? new Date() : null,
+      actualStartDate:
+        status === TaskStatus.IN_PROGRESS || status === TaskStatus.DONE
+          ? task.actualStartDate ?? task.startDate ?? new Date()
+          : task.actualStartDate,
+      completedAt: status === TaskStatus.DONE ? task.completedAt ?? new Date() : null,
+      baselineStartDate: task.baselineStartDate ?? task.startDate ?? task.dueDate,
+      baselineEndDate: task.baselineEndDate ?? task.dueDate ?? task.startDate,
     },
   });
   await syncProjectProgress(task.projectId);
@@ -1315,6 +1336,13 @@ export async function createScheduleItemAction(form: FormData) {
       trade: formString(form, "trade") || null,
       startDate,
       endDate,
+      baselineStartDate: startDate,
+      baselineEndDate: endDate,
+      actualEndDate: status === ScheduleStatus.COMPLETED ? endDate : null,
+      actualStartDate:
+        status === ScheduleStatus.IN_PROGRESS || status === ScheduleStatus.COMPLETED
+          ? startDate
+          : null,
       assigneeName: formString(form, "assigneeName") || null,
       dependsOnId,
       status,
@@ -1383,7 +1411,8 @@ export async function updateMilestoneStatusAction(
 
 export async function updateScheduleItemStatusAction(
   scheduleItemId: string,
-  status: ScheduleStatus
+  status: ScheduleStatus,
+  form?: FormData
 ) {
   try {
     const session = await requireSession();
@@ -1400,11 +1429,45 @@ export async function updateScheduleItemStatusAction(
     if (!item) throw new AppError("Not found");
     await assertProjectAccess(session, item.projectId);
 
+    const previousEnd = item.endDate;
+    const nextEndRaw = form ? formString(form, "endDate") : "";
+    const nextEnd = nextEndRaw ? new Date(nextEndRaw) : item.endDate;
+    const actualFinishRaw = form ? formString(form, "actualEndDate") : "";
+    const actualFinish = actualFinishRaw ? new Date(actualFinishRaw) : null;
+
     await prisma.scheduleItem.update({
       where: { id: scheduleItemId },
-      data: { status },
+      data: {
+        status,
+        // Working schedule may move; baseline stays frozen.
+        endDate:
+          status === ScheduleStatus.COMPLETED
+            ? actualFinish && !Number.isNaN(actualFinish.getTime())
+              ? actualFinish
+              : nextEnd
+            : nextEnd,
+        actualStartDate:
+          status === ScheduleStatus.IN_PROGRESS || status === ScheduleStatus.COMPLETED
+            ? item.actualStartDate ?? item.startDate
+            : item.actualStartDate,
+        actualEndDate:
+          status === ScheduleStatus.COMPLETED
+            ? actualFinish && !Number.isNaN(actualFinish.getTime())
+              ? actualFinish
+              : item.actualEndDate ?? nextEnd
+            : item.actualEndDate,
+        baselineStartDate: item.baselineStartDate ?? item.startDate,
+        baselineEndDate: item.baselineEndDate ?? previousEnd,
+      },
     });
     await syncProjectProgress(item.projectId);
+    const { recalculateDepositsForScheduleItem } = await import(
+      "@/lib/deposits/recalculate"
+    );
+    await recalculateDepositsForScheduleItem({
+      scheduleItemId: item.id,
+      actorUserId: session.user.id,
+    });
     await writeAudit({
       userId: session.user.id,
       companyId: session.membership.companyId,
@@ -1420,6 +1483,64 @@ export async function updateScheduleItemStatusAction(
     console.error("[schedule-status]", e);
     throw new AppError("Could not update schedule item status. Please try again.");
   }
+}
+
+/** Update working/forecast dates without rewriting baseline. */
+export async function updateScheduleItemDatesAction(form: FormData) {
+  const session = await requireSession();
+  requireCapability(session, "manageSchedule");
+  await rateLimitAction(session.user.id, "schedule-dates");
+  const scheduleItemId = formString(form, "scheduleItemId");
+  const item = await prisma.scheduleItem.findUnique({
+    where: { id: scheduleItemId },
+  });
+  if (!item) throw new AppError("Not found");
+  await assertProjectAccess(session, item.projectId);
+
+  const nextStartRaw = formString(form, "startDate");
+  const nextEndRaw = formString(form, "endDate");
+  const actualFinishRaw = formString(form, "actualEndDate");
+  const nextStart = nextStartRaw ? new Date(nextStartRaw) : item.startDate;
+  const nextEnd = nextEndRaw ? new Date(nextEndRaw) : item.endDate;
+  const actualFinish = actualFinishRaw ? new Date(actualFinishRaw) : null;
+  if (Number.isNaN(nextStart.getTime()) || Number.isNaN(nextEnd.getTime())) {
+    throw new AppError("Valid dates are required");
+  }
+  if (nextEnd.getTime() < nextStart.getTime()) {
+    throw new AppError("End date must be on or after start date");
+  }
+
+  await prisma.scheduleItem.update({
+    where: { id: item.id },
+    data: {
+      startDate: nextStart,
+      endDate: nextEnd,
+      baselineStartDate: item.baselineStartDate ?? item.startDate,
+      baselineEndDate: item.baselineEndDate ?? item.endDate,
+      actualEndDate:
+        actualFinish && !Number.isNaN(actualFinish.getTime())
+          ? actualFinish
+          : item.actualEndDate,
+    },
+  });
+  await syncProjectProgress(item.projectId);
+  const { recalculateDepositsForScheduleItem } = await import(
+    "@/lib/deposits/recalculate"
+  );
+  await recalculateDepositsForScheduleItem({
+    scheduleItemId: item.id,
+    actorUserId: session.user.id,
+  });
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: item.projectId,
+    action: "SCHEDULE_DATES_UPDATED",
+    entityType: "ScheduleItem",
+    entityId: item.id,
+    metadata: { startDate: nextStart, endDate: nextEnd },
+  });
+  revalidateScheduleSurfaces(item.projectId);
 }
 
 export async function createRfiAction(form: FormData) {
@@ -2144,6 +2265,7 @@ export async function reviewSelectionSectionAction(
                     reason: "Selection overage",
                     status: ChangeOrderStatus.PENDING_CLIENT,
                     relatedSelectionItemId: item.id,
+                    relatedSelectionSectionId: section.id,
                     createdById: session.user.id,
                   },
                 });
@@ -2204,11 +2326,52 @@ export async function createChangeOrderAction(form: FormData) {
   }
   const data = parsed.data;
   await assertProjectAccess(session, data.projectId);
-  await prisma.changeOrder.create({
+  const selectionSectionId = data.selectionSectionId || "";
+  let selectionSnapshot: {
+    id: string;
+    name: string;
+    category: string | null;
+    status: string;
+    allowance: number | null;
+    notes: string | null;
+  } | null = null;
+  if (selectionSectionId) {
+    const section = await prisma.selectionSection.findFirst({
+      where: {
+        id: selectionSectionId,
+        package: { projectId: data.projectId },
+      },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        status: true,
+        allowance: true,
+        notes: true,
+      },
+    });
+    if (!section) {
+      throw new AppError("Selection does not belong to this project");
+    }
+    selectionSnapshot = section;
+  }
+
+  const title =
+    data.title ||
+    (selectionSnapshot ? `Change order — ${selectionSnapshot.name}` : "Change order");
+  const description =
+    data.description ||
+    (selectionSnapshot
+      ? `Linked selection: ${selectionSnapshot.name}${
+          selectionSnapshot.category ? ` (${selectionSnapshot.category})` : ""
+        }${selectionSnapshot.notes ? `\n${selectionSnapshot.notes}` : ""}`
+      : null);
+
+  const created = await prisma.changeOrder.create({
     data: {
       projectId: data.projectId,
-      title: data.title,
-      description: data.description || null,
+      title,
+      description,
       amount: data.amount,
       scheduleImpact: data.scheduleImpact != null ? String(data.scheduleImpact) : null,
       budgetImpact: typeof data.budgetImpact === "number" ? data.budgetImpact : null,
@@ -2216,8 +2379,21 @@ export async function createChangeOrderAction(form: FormData) {
       status: ChangeOrderStatus.PENDING_CLIENT,
       createdById: session.user.id,
       submittedAt: new Date(),
+      relatedSelectionSectionId: selectionSnapshot?.id ?? null,
     },
   });
+  if (selectionSnapshot) {
+    await prisma.changeOrderSelection.create({
+      data: {
+        changeOrderId: created.id,
+        selectionSectionId: selectionSnapshot.id,
+        snapshotTitle: selectionSnapshot.name,
+        snapshotCategory: selectionSnapshot.category,
+        snapshotStatus: selectionSnapshot.status,
+        snapshotAllowance: selectionSnapshot.allowance,
+      },
+    });
+  }
   revalidateJobsSurfaces(data.projectId);
   revalidatePath("/pm/change-orders");
   revalidatePath("/client");
@@ -2849,8 +3025,33 @@ export async function createWarrantyTicketAction(form: FormData) {
     excludeUserId: session.user.id,
   });
 
+  const coordinators = await prisma.membership.findMany({
+    where: {
+      companyId: session.membership.companyId,
+      role: Role.SERVICE_COORDINATOR,
+      isActive: true,
+      user: { isActive: true, deletedAt: null },
+    },
+    select: { userId: true },
+  });
+  for (const c of coordinators) {
+    if (c.userId === session.user.id) continue;
+    await createNotificationOnce({
+      userId: c.userId,
+      companyId: session.membership.companyId,
+      type: "WARRANTY_TICKET_CREATED",
+      title: `New complaint ${ticket.ticketNumber}`,
+      body: `${session.user.name} submitted “${ticket.title}” on ${project.name}.`,
+      href: `/service/warranty/${ticket.id}`,
+      entityType: "WarrantyTicket",
+      entityId: ticket.id,
+      eventKey: `WARRANTY_TICKET_CREATED:${ticket.id}:${c.userId}`,
+    });
+  }
+
   revalidatePath("/client/warranty");
   revalidatePath("/pm/warranty");
+  revalidatePath("/service/warranty");
   revalidateNotificationInbox();
   redirect(`/client/warranty/${ticket.id}`);
 }
@@ -2947,6 +3148,101 @@ export async function updateWarrantyStatusAction(ticketId: string, form: FormDat
   revalidatePath(`/pm/warranty/${ticketId}`);
   revalidatePath(`/client/warranty/${ticketId}`);
   revalidatePath("/client/warranty");
+  revalidatePath("/service/warranty");
+  revalidatePath(`/service/warranty/${ticketId}`);
+  revalidateNotificationInbox();
+}
+
+export async function triageWarrantyTicketAction(ticketId: string, form: FormData) {
+  const session = await requireSession();
+  requireCapability(session, "manageWarranty");
+  await rateLimitAction(session.user.id, "warranty-triage");
+  const ticket = await prisma.warrantyTicket.findUnique({
+    where: { id: ticketId },
+    include: { project: { select: { companyId: true, name: true, pmId: true } } },
+  });
+  if (!ticket) throw new AppError("Not found");
+  if (ticket.project.companyId !== session.membership.companyId) {
+    throw new ForbiddenError();
+  }
+  await assertProjectAccess(session, ticket.projectId);
+
+  const triageNotes = formString(form, "triageNotes") || ticket.triageNotes;
+  const category = formString(form, "category") || ticket.category;
+  const forwardedToUserId = formString(form, "forwardedToUserId") || null;
+  const statusRaw = formString(form, "status") as WarrantyStatus;
+  const status = Object.values(WarrantyStatus).includes(statusRaw)
+    ? statusRaw
+    : WarrantyStatus.UNDER_REVIEW;
+
+  if (forwardedToUserId) {
+    await assertCompanyUser(session, forwardedToUserId);
+  }
+
+  await prisma.warrantyTicket.update({
+    where: { id: ticketId },
+    data: {
+      triageNotes,
+      category,
+      status,
+      coordinatorId: ticket.coordinatorId ?? session.user.id,
+      forwardedToUserId,
+      forwardedAt: forwardedToUserId ? new Date() : ticket.forwardedAt,
+      pmId: forwardedToUserId || ticket.pmId,
+    },
+  });
+
+  if (formString(form, "comment")) {
+    await prisma.warrantyComment.create({
+      data: {
+        ticketId,
+        userId: session.user.id,
+        content: formString(form, "comment"),
+      },
+    });
+  }
+
+  if (forwardedToUserId && forwardedToUserId !== session.user.id) {
+    const membership = await prisma.membership.findFirst({
+      where: {
+        userId: forwardedToUserId,
+        companyId: session.membership.companyId,
+        isActive: true,
+      },
+      select: { role: true },
+    });
+    const href =
+      membership?.role === Role.SUBCONTRACTOR
+        ? `/sub/warranty/${ticketId}`
+        : membership?.role === Role.SERVICE_COORDINATOR
+          ? `/service/warranty/${ticketId}`
+          : `/pm/warranty/${ticketId}`;
+    await createNotificationOnce({
+      userId: forwardedToUserId,
+      companyId: session.membership.companyId,
+      type: "WARRANTY_FORWARDED",
+      title: `Warranty ${ticket.ticketNumber} forwarded to you`,
+      body: `${session.user.name} routed “${ticket.title}” (${ticket.project.name}).`,
+      href,
+      entityType: "WarrantyTicket",
+      entityId: `${ticketId}:forward:${forwardedToUserId}`,
+      eventKey: `WARRANTY_FORWARDED:${ticketId}:${forwardedToUserId}`,
+    });
+  }
+
+  await writeAudit({
+    userId: session.user.id,
+    companyId: session.membership.companyId,
+    projectId: ticket.projectId,
+    action: "WARRANTY_TRIAGED",
+    entityType: "WarrantyTicket",
+    entityId: ticketId,
+    metadata: { status, forwardedToUserId, category },
+  });
+
+  revalidatePath("/service/warranty");
+  revalidatePath(`/service/warranty/${ticketId}`);
+  revalidatePath("/pm/warranty");
   revalidateNotificationInbox();
 }
 

@@ -170,6 +170,7 @@ export const changeOrderFormSchema = z.object({
     z.coerce.number().optional()
   ),
   reason: optionalText("Reason", 500),
+  selectionSectionId: z.string().optional().or(z.literal("")),
 });
 
 export const configureProjectFormSchema = z.object({

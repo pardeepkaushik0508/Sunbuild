@@ -74,7 +74,8 @@ export function isWarrantyCoverageActive(input: {
 
 export function depositPaymentBadge(
   status: DepositStatus | string,
-  dueDate?: Date | string | null
+  dueDate?: Date | string | null,
+  opts?: { isOverdue?: boolean }
 ): {
   label: string;
   tone: "success" | "warning" | "danger" | "default" | "info";
@@ -83,7 +84,12 @@ export function depositPaymentBadge(
   if (s === DepositStatus.RECEIVED || s === "WAIVED") {
     return { label: s === "WAIVED" ? "Waived" : "Received", tone: "success" };
   }
-  if (s === DepositStatus.OVERDUE) {
+  if (opts?.isOverdue === false) {
+    const due: DueBadge = resolveDueBadge(dueDate, { isSettled: false });
+    if (due === "DUE_SOON") return { label: "Due soon", tone: "warning" };
+    return { label: "Scheduled", tone: "warning" };
+  }
+  if (s === DepositStatus.OVERDUE || opts?.isOverdue === true) {
     return { label: "Overdue", tone: "danger" };
   }
 

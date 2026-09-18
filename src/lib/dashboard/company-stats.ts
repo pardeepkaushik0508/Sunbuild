@@ -161,7 +161,7 @@ export async function loadCompanyOverviewStats(
     }),
     prisma.project.groupBy({
       by: ["companyId", "status"],
-      where: { companyId: ids },
+      where: { companyId: ids, deletedAt: null },
       _count: { _all: true },
     }),
     // Deadline Today: open tasks overdue or due today (by company via project).
@@ -169,7 +169,7 @@ export async function loadCompanyOverviewStats(
       where: {
         dueDate: { not: null, lt: endOfToday },
         status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
-        project: { companyId: ids },
+        project: { companyId: ids, deletedAt: null },
       },
       select: { project: { select: { companyId: true } } },
     }),
@@ -179,6 +179,7 @@ export async function loadCompanyOverviewStats(
       where: {
         companyId: ids,
         status: { not: ProjectStatus.CANCELLED },
+        deletedAt: null,
         purchasePrice: { not: null },
         createdAt: { gte: yearStart },
       },
@@ -191,6 +192,7 @@ export async function loadCompanyOverviewStats(
         project: {
           companyId: ids,
           status: { not: ProjectStatus.CANCELLED },
+          deletedAt: null,
         },
       },
       select: {
@@ -203,6 +205,7 @@ export async function loadCompanyOverviewStats(
       by: ["companyId"],
       where: {
         companyId: ids,
+        deletedAt: null,
         createdAt: { gte: lastMonthStart, lt: thisMonthStart },
       },
       _count: { _all: true },
@@ -213,6 +216,7 @@ export async function loadCompanyOverviewStats(
       where: {
         companyId: ids,
         createdAt: { gte: secondLastMonthStart, lt: lastMonthStart },
+        deletedAt: null,
       },
       _count: { _all: true },
     }),

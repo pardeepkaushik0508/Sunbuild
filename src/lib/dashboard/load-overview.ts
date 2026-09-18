@@ -10,7 +10,6 @@ import {
   depositOpenStatuses,
 } from "@/lib/insights";
 import { computeProjectProgress } from "@/lib/dashboard/progress";
-import { depositDisplayLabel } from "@/lib/labels";
 import { buildGanttTree, tasksToScheduleRows } from "@/lib/dashboard/gantt-tree";
 import {
   loadCompanyOverviewStats,
@@ -23,6 +22,7 @@ import {
 } from "@/lib/jobs/constants";
 import { clientProjectStatusLabel } from "@/lib/jobs/status";
 import { formatCurrency, fullName } from "@/lib/utils";
+import { pickNextDeposit, formatClientDueDate } from "@/lib/deposits/next-deposit";
 import type { AppSession } from "@/lib/session";
 import { getAccessibleProjectIds } from "@/lib/session";
 import type { InsightCard } from "@/components/dashboard/ai-insights";
@@ -182,6 +182,18 @@ export async function loadOverviewDashboardData(input: {
           where: { status: { in: depositOpenStatuses() } },
           orderBy: { dueDate: "asc" },
           take: 3,
+          include: {
+            linkedScheduleItem: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                endDate: true,
+                baselineEndDate: true,
+                actualEndDate: true,
+              },
+            },
+          },
         },
         contracts: {
           orderBy: { createdAt: "desc" },
@@ -324,6 +336,10 @@ export async function loadOverviewDashboardData(input: {
       assigneeName: item.assigneeName,
       projectName: item.project.name,
       href: `/pm/schedule?projectId=${item.projectId}`,
+      baselineStartDate: item.baselineStartDate,
+      baselineEndDate: item.baselineEndDate,
+      actualStartDate: item.actualStartDate,
+      actualEndDate: item.actualEndDate,
     })),
     ...tasksToScheduleRows(
       tasksForGantt.map((t) => ({
@@ -336,6 +352,10 @@ export async function loadOverviewDashboardData(input: {
         assigneeName: t.assignee?.name ?? null,
         projectName: t.project.name,
         projectId: t.project.id,
+        baselineStartDate: t.baselineStartDate,
+        baselineEndDate: t.baselineEndDate,
+        actualStartDate: t.actualStartDate,
+        completedAt: t.completedAt,
       }))
     ),
   ]);
@@ -479,17 +499,6 @@ export async function loadOverviewDashboardData(input: {
   };
 }
 
-function uniqueAssignees(memberships: PersonOption[]) {
-  const seen = new Set<string>();
-  const out: PersonOption[] = [];
-  for (const m of memberships) {
-    if (seen.has(m.id)) continue;
-    seen.add(m.id);
-    out.push(m);
-  }
-  return out;
-}
-
 function formatRelativeDue(date: Date) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -520,7 +529,24 @@ function buildClientItems(
           email: string | null;
           phone: string | null;
         } | null;
-        deposits: Array<{ label: string; amount: number; status: string }>;
+        deposits: Array<{
+          id: string;
+          label: string;
+          amount: number;
+          status: string;
+          dueDate: Date | null;
+          plannedDueDate?: Date | null;
+          triggerType?: string | null;
+          offsetDays?: number | null;
+          linkedScheduleItem?: {
+            id: string;
+            title: string;
+            status: string;
+            endDate: Date;
+            baselineEndDate: Date | null;
+            actualEndDate: Date | null;
+          } | null;
+        }>;
         contracts: Array<{ status: string; purchasePrice: number | null }>;
         pm: { name: string } | null;
       }
@@ -529,20 +555,43 @@ function buildClientItems(
 ): ClientInfoItem[] {
   if (!project) return [];
 
-  const deposit = project.deposits[0];
+  const next = pickNextDeposit(
+    project.deposits.map((d) => ({
+      ...d,
+      linkedScheduleItem: d.linkedScheduleItem
+        ? {
+            id: d.linkedScheduleItem.id,
+            title: d.linkedScheduleItem.title,
+            status: d.linkedScheduleItem.status,
+            endDate: d.linkedScheduleItem.endDate,
+            baselineEndDate: d.linkedScheduleItem.baselineEndDate,
+            actualEndDate: d.linkedScheduleItem.actualEndDate,
+          }
+        : null,
+    }))
+  );
   const contract = project.contracts[0];
   const clientName = project.buyer
     ? fullName(project.buyer.firstName, project.buyer.lastName)
     : null;
 
+  const financeHref =
+    _basePath === "/owner" ? "/bookkeeper/invoices" : `/pm/projects/${project.id}`;
+
   return [
     {
-      id: "deposit",
-      label: depositDisplayLabel(deposit?.label),
-      value: deposit
-        ? `${formatCurrency(deposit.amount)} · ${deposit.status}`
-        : "No open deposits",
-      href: "/bookkeeper/invoices",
+      id: "next-amount",
+      label: "Next Due Amount",
+      value: next ? formatCurrency(next.amount) : "No open deposits",
+      href: financeHref,
+    },
+    {
+      id: "due-date",
+      label: "Due Date",
+      value: next?.currentDueDate
+        ? formatClientDueDate(next.currentDueDate)
+        : "Not set",
+      href: financeHref,
     },
     {
       id: "client",

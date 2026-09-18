@@ -15,13 +15,14 @@ import { requireRole } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { resolveOwnerCompanies } from "@/lib/dashboard/company-stats";
+import { computeDepositDue } from "@/lib/deposits/due";
 
 export default async function OwnerAlertsPage() {
   const session = await requireRole(Role.OWNER);
   const companyIds = resolveOwnerCompanies(session).map((c) => c.id);
   const now = new Date();
 
-  const [highPriorityTasks, openRfis, overdueDeposits] = await Promise.all([
+  const [highPriorityTasks, openRfis, overdueDepositRows] = await Promise.all([
     prisma.task.findMany({
       where: {
         priority: { in: [Priority.HIGH, Priority.MEDIUM] },
@@ -56,11 +57,43 @@ export default async function OwnerAlertsPage() {
           },
         ],
       },
-      include: { project: { select: { id: true, name: true } } },
+      include: {
+        project: { select: { id: true, name: true } },
+        linkedScheduleItem: {
+          select: {
+            title: true,
+            status: true,
+            endDate: true,
+            baselineEndDate: true,
+            actualEndDate: true,
+          },
+        },
+      },
       orderBy: { dueDate: "asc" },
       take: 500,
     }),
   ]);
+
+  const overdueDeposits = overdueDepositRows.filter((d) =>
+    computeDepositDue(
+      {
+        triggerType: d.triggerType,
+        plannedDueDate: d.plannedDueDate ?? d.dueDate,
+        currentDueDate: d.dueDate,
+        offsetDays: d.offsetDays,
+        linkedPhase: d.linkedScheduleItem
+          ? {
+              title: d.linkedScheduleItem.title,
+              status: d.linkedScheduleItem.status,
+              baselineEnd: d.linkedScheduleItem.baselineEndDate,
+              currentEnd: d.linkedScheduleItem.endDate,
+              actualEnd: d.linkedScheduleItem.actualEndDate,
+            }
+          : null,
+      },
+      now
+    ).isOverdue
+  );
 
   const hasAlerts =
     highPriorityTasks.length > 0 ||
