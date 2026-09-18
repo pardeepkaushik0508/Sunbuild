@@ -1,17 +1,26 @@
 -- Twilio SMS stored in the same SUNBUILD database (no separate API service).
+-- Idempotent: production was previously synced with db push.
 
-CREATE TYPE "SmsMessageDirection" AS ENUM ('INBOUND', 'OUTBOUND');
+DO $$ BEGIN
+  CREATE TYPE "SmsMessageDirection" AS ENUM ('INBOUND', 'OUTBOUND');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE "SmsMessageStatus" AS ENUM (
-  'QUEUED',
-  'SENT',
-  'DELIVERED',
-  'UNDELIVERED',
-  'FAILED',
-  'RECEIVED'
-);
+DO $$ BEGIN
+  CREATE TYPE "SmsMessageStatus" AS ENUM (
+    'QUEUED',
+    'SENT',
+    'DELIVERED',
+    'UNDELIVERED',
+    'FAILED',
+    'RECEIVED'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TABLE "SmsMessage" (
+CREATE TABLE IF NOT EXISTS "SmsMessage" (
   "id" TEXT NOT NULL,
   "companyId" TEXT,
   "projectId" TEXT,
@@ -33,15 +42,39 @@ CREATE TABLE "SmsMessage" (
   CONSTRAINT "SmsMessage_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "SmsMessage_twilioSid_key" ON "SmsMessage"("twilioSid");
-CREATE INDEX "SmsMessage_companyId_sentAt_idx" ON "SmsMessage"("companyId", "sentAt");
-CREATE INDEX "SmsMessage_leadId_sentAt_idx" ON "SmsMessage"("leadId", "sentAt");
-CREATE INDEX "SmsMessage_projectId_sentAt_idx" ON "SmsMessage"("projectId", "sentAt");
-CREATE INDEX "SmsMessage_toNumber_idx" ON "SmsMessage"("toNumber");
-CREATE INDEX "SmsMessage_status_idx" ON "SmsMessage"("status");
+CREATE UNIQUE INDEX IF NOT EXISTS "SmsMessage_twilioSid_key" ON "SmsMessage"("twilioSid");
+CREATE INDEX IF NOT EXISTS "SmsMessage_companyId_sentAt_idx" ON "SmsMessage"("companyId", "sentAt");
+CREATE INDEX IF NOT EXISTS "SmsMessage_leadId_sentAt_idx" ON "SmsMessage"("leadId", "sentAt");
+CREATE INDEX IF NOT EXISTS "SmsMessage_projectId_sentAt_idx" ON "SmsMessage"("projectId", "sentAt");
+CREATE INDEX IF NOT EXISTS "SmsMessage_toNumber_idx" ON "SmsMessage"("toNumber");
+CREATE INDEX IF NOT EXISTS "SmsMessage_status_idx" ON "SmsMessage"("status");
 
-ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_buyerId_fkey" FOREIGN KEY ("buyerId") REFERENCES "Buyer"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_senderUserId_fkey" FOREIGN KEY ("senderUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_buyerId_fkey" FOREIGN KEY ("buyerId") REFERENCES "Buyer"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "SmsMessage" ADD CONSTRAINT "SmsMessage_senderUserId_fkey" FOREIGN KEY ("senderUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
