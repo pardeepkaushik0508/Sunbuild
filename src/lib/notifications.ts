@@ -34,6 +34,7 @@ export type CreateNotificationInput = {
   eventKey?: string | null;
   category?: string | null;
   priority?: string | null;
+  projectId?: string | null;
   /** Override channel matrix. */
   channels?: Array<"in_app" | "whatsapp" | "sms">;
 };
@@ -65,7 +66,7 @@ export async function createNotification(input: CreateNotificationInput) {
       },
     });
     revalidateNotificationInbox();
-    await dispatchNotificationChannels(input, matrix.channels);
+    await dispatchNotificationChannels(input, matrix.channels, row.id);
     return row;
   } catch (err) {
     // Unique eventKey — treat as already delivered.
@@ -126,16 +127,33 @@ export async function createNotifications(inputs: CreateNotificationInput[]) {
 
 async function dispatchNotificationChannels(
   input: CreateNotificationInput,
-  defaultChannels: Array<"in_app" | "whatsapp" | "sms">
+  defaultChannels: Array<"in_app" | "whatsapp" | "sms">,
+  notificationId?: string | null
 ) {
   const channels = input.channels ?? defaultChannels;
-  const body = [input.title, input.body].filter(Boolean).join("\n");
   const projectId =
-    input.entityType === "Project" ? input.entityId : null;
+    input.projectId ??
+    (input.entityType === "Project" ? input.entityId : null);
 
   if (channels.includes("sms")) {
     try {
-      await smsForNotification(input);
+      const { sendTwilioSms } = await import("@/lib/twilio/sms");
+      await sendTwilioSms({
+        recipientUserId: input.userId,
+        companyId: input.companyId,
+        projectId,
+        eventType: input.type,
+        body: [input.title, input.body].filter(Boolean).join("\n"),
+        entityType: input.entityType,
+        entityId: input.entityId,
+        notificationId,
+        href: input.href,
+        projectName: input.body,
+        entityTitle: input.title,
+        idempotencyKey: input.eventKey
+          ? `${input.eventKey}:SMS`
+          : undefined,
+      });
     } catch (err) {
       console.error("[twilio] notification SMS skipped", {
         type: input.type,
@@ -146,15 +164,39 @@ async function dispatchNotificationChannels(
 
   if (channels.includes("whatsapp")) {
     try {
-      const { notifyUserByWhatsAppBestEffort } = await import(
-        "@/lib/whatsapp/service"
+      const { isAutomatedWhatsAppTwilio } = await import(
+        "@/lib/messaging/providers"
       );
-      await notifyUserByWhatsAppBestEffort({
-        userId: input.userId,
-        companyId: input.companyId,
-        body,
-        projectId,
-      });
+      if (isAutomatedWhatsAppTwilio()) {
+        const { sendTwilioWhatsApp } = await import("@/lib/twilio/whatsapp");
+        await sendTwilioWhatsApp({
+          recipientUserId: input.userId,
+          companyId: input.companyId,
+          projectId,
+          eventType: input.type,
+          body: [input.title, input.body].filter(Boolean).join("\n"),
+          entityType: input.entityType,
+          entityId: input.entityId,
+          notificationId,
+          href: input.href,
+          projectName: input.body,
+          entityTitle: input.title,
+          recipientName: null,
+          idempotencyKey: input.eventKey
+            ? `${input.eventKey}:WHATSAPP`
+            : undefined,
+        });
+      } else {
+        const { notifyUserByWhatsAppBestEffort } = await import(
+          "@/lib/whatsapp/service"
+        );
+        await notifyUserByWhatsAppBestEffort({
+          userId: input.userId,
+          companyId: input.companyId,
+          body: [input.title, input.body].filter(Boolean).join("\n"),
+          projectId,
+        });
+      }
     } catch (err) {
       console.error("[whatsapp] notification send skipped", {
         type: input.type,
@@ -166,13 +208,19 @@ async function dispatchNotificationChannels(
 
 async function smsForNotification(input: CreateNotificationInput) {
   try {
-    const { notifyUserBySmsBestEffort } = await import("@/lib/twilio/service");
-    const body = [input.title, input.body].filter(Boolean).join("\n");
-    await notifyUserBySmsBestEffort({
-      userId: input.userId,
+    const { sendTwilioSms } = await import("@/lib/twilio/sms");
+    await sendTwilioSms({
+      recipientUserId: input.userId,
       companyId: input.companyId,
-      body,
+      body: [input.title, input.body].filter(Boolean).join("\n"),
+      eventType: input.type,
       projectId: input.entityType === "Project" ? input.entityId : null,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      href: input.href,
+      projectName: input.body,
+      entityTitle: input.title,
+      idempotencyKey: input.eventKey ? `${input.eventKey}:SMS` : undefined,
     });
   } catch (err) {
     console.error("[twilio] notification SMS skipped", {

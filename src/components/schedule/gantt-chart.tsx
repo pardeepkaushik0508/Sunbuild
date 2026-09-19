@@ -88,6 +88,42 @@ function barLayout(
   };
 }
 
+/** Orthogonal finish-to-start connector (x in 0–100%, y in px). */
+function elbowDependencyPath(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): string {
+  const stub = 1.4;
+  if (Math.abs(y1 - y2) < 1) {
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+  const exitX = x1 + stub;
+  if (x2 >= exitX + 0.4) {
+    const midX = Math.max(exitX, (x1 + x2) / 2);
+    return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+  }
+  const bypassX = Math.max(x1, x2) + stub * 2.2;
+  const midY = y1 + (y2 - y1) / 2;
+  return `M ${x1} ${y1} L ${bypassX} ${y1} L ${bypassX} ${midY} L ${x2 - stub} ${midY} L ${x2 - stub} ${y2} L ${x2} ${y2}`;
+}
+
+function varianceBarLabel(days: number | null | undefined): string | null {
+  if (days == null || days === 0) return null;
+  const abs = Math.abs(days);
+  const unit = abs === 1 ? "day" : "days";
+  return days > 0 ? `(+${days} ${unit})` : `(−${abs} ${unit})`;
+}
+
+/** Baseline sits on top; current/actual is flush underneath (no gap). */
+const BASELINE_BAR_H = 12;
+const WORKING_BAR_H = 18;
+const BASELINE_BAR_TOP = Math.round(
+  (GANTT_ROW_HEIGHT_DUAL - BASELINE_BAR_H - WORKING_BAR_H) / 2
+);
+const WORKING_BAR_TOP = BASELINE_BAR_TOP + BASELINE_BAR_H;
+
 export type GanttChartProps = {
   tasks: GanttTask[];
   progressPercent?: number;
@@ -102,10 +138,10 @@ export function GanttChart({
   progressPercent = 0,
   addHref,
   className,
-  defaultView = "day",
+  defaultView,
   projectLabel,
 }: GanttChartProps) {
-  const [view, setView] = useState<ViewMode>(defaultView);
+  const [view, setView] = useState<ViewMode | null>(defaultView ?? null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
@@ -206,7 +242,7 @@ export function GanttChart({
     if (customStart && !Number.isNaN(customStart.getTime())) {
       return {
         start: customStart,
-        end: addDays(customStart, view === "month" ? 60 : 30),
+        end: addDays(customStart, view === "month" ? 90 : view === "week" ? 60 : 30),
       };
     }
     return dataRange;
@@ -308,6 +344,7 @@ export function GanttChart({
   }, [visible]);
 
   const deps = useMemo(() => {
+    const workingMidY = WORKING_BAR_TOP + WORKING_BAR_H / 2;
     return visible
       .filter((t) => t.dependsOnId && idToIndex.has(t.dependsOnId))
       .map((t) => {
@@ -315,20 +352,28 @@ export function GanttChart({
         const toIdx = idToIndex.get(t.id)!;
         const from = visible[fromIdx];
         const to = visible[toIdx];
-        const fromBar = barLayout(from.start, from.end, range.start, range.end);
-        const toBar = barLayout(to.start, to.end, range.start, range.end);
+        const fromStart = from.actualStart ?? from.start;
+        const fromEnd = from.actualEnd ?? from.end;
+        const toStart = to.actualStart ?? to.start;
+        const toEnd = to.actualEnd ?? to.end;
+        const fromBar = barLayout(fromStart, fromEnd, range.start, range.end);
+        const toBar = barLayout(toStart, toEnd, range.start, range.end);
         return {
           x1: fromBar.left + fromBar.width,
-          y1: headerH + fromIdx * rowH + rowH / 2,
+          y1: fromIdx * rowH + workingMidY,
           x2: toBar.left,
-          y2: headerH + toIdx * rowH + rowH / 2,
+          y2: toIdx * rowH + workingMidY,
         };
       });
-  }, [visible, idToIndex, range, headerH, rowH]);
+  }, [visible, idToIndex, range, rowH]);
 
   const timelineLabel = `${format(range.start, "MMM d")} – ${format(range.end, "MMM d, yyyy")}`;
   // Min width from column count; grid track grows with `1fr` so week/day/month fill the card.
-  const timelineMinWidth = Math.max(columns.length * colMinWidth, view === "week" ? 720 : 640);
+  const activeView: ViewMode = view ?? scale.primary;
+  const timelineMinWidth = Math.max(
+    columns.length * colMinWidth,
+    activeView === "week" ? 720 : 640
+  );
 
   function togglePhase(id: string) {
     setCollapsed((prev) => {
@@ -356,7 +401,7 @@ export function GanttChart({
         className
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sb-border px-4 py-3">
+      <div className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-sb-border bg-sb-surface px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="sb-pill-toggle" role="tablist" aria-label="Timeline scale">
             {(["day", "week", "month"] as ViewMode[]).map((mode) => (
@@ -364,8 +409,8 @@ export function GanttChart({
                 key={mode}
                 type="button"
                 role="tab"
-                aria-selected={view === mode}
-                className={cn(view === mode && "is-active")}
+                aria-selected={activeView === mode}
+                className={cn(activeView === mode && "is-active")}
                 onClick={() => setView(mode)}
               >
                 {mode[0].toUpperCase() + mode.slice(1)}
@@ -467,9 +512,7 @@ export function GanttChart({
                       <span
                         className={cn(
                           "mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full",
-                          task.isCritical
-                            ? "bg-sb-gantt-critical"
-                            : STATUS_DOT[task.status]
+                          STATUS_DOT[task.status]
                         )}
                       />
                     )}
@@ -608,39 +651,33 @@ export function GanttChart({
                 ) : null}
 
                 <svg
-                  className="pointer-events-none absolute inset-0 z-10 h-full w-full"
-                  viewBox={`0 0 1000 ${Math.max(visible.length, 1) * rowH + headerH}`}
+                  className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
+                  viewBox={`0 0 100 ${Math.max(visible.length, 1) * rowH}`}
                   preserveAspectRatio="none"
                 >
-                  <defs>
-                    <marker
-                      id="gantt-arrow"
-                      markerWidth="6"
-                      markerHeight="6"
-                      refX="5"
-                      refY="3"
-                      orient="auto"
-                    >
-                      <path d="M0,0 L6,3 L0,6 Z" fill="#9ca3af" />
-                    </marker>
-                  </defs>
-                  {deps.map((d, i) => {
-                    const x1 = d.x1 * 10;
-                    const x2 = d.x2 * 10;
-                    const midX = (x1 + x2) / 2;
-                    return (
-                      <path
-                        key={i}
-                        d={`M ${x1} ${d.y1} C ${midX} ${d.y1}, ${midX} ${d.y2}, ${x2} ${d.y2}`}
-                        fill="none"
-                        stroke="#9ca3af"
-                        strokeWidth="1.5"
-                        vectorEffect="non-scaling-stroke"
-                        markerEnd="url(#gantt-arrow)"
-                      />
-                    );
-                  })}
+                  {deps.map((d, i) => (
+                    <path
+                      key={i}
+                      d={elbowDependencyPath(d.x1, d.y1, d.x2, d.y2)}
+                      fill="none"
+                      stroke="#9ca3af"
+                      strokeWidth="1.25"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
                 </svg>
+                {deps.map((d, i) => (
+                  <span
+                    key={`dep-arrow-${i}`}
+                    className="pointer-events-none absolute z-10 h-0 w-0 border-y-[4px] border-y-transparent border-l-[6px] border-l-[#9ca3af]"
+                    style={{
+                      left: `${d.x2}%`,
+                      top: d.y2,
+                      transform: "translate(-100%, -50%)",
+                    }}
+                    aria-hidden
+                  />
+                ))}
 
                 {visible.map((task, idx) => {
                   const workingStart = task.actualStart ?? task.start;
@@ -661,9 +698,8 @@ export function GanttChart({
                     differenceInCalendarDays(workingEnd, workingStart) + 1;
                   const progress = clampPct(task.progress ?? 0);
                   const isPhase = Boolean(task.isPhase || task.status === "PHASE");
-                  const barColor = task.isCritical
-                    ? "bg-sb-gantt-critical"
-                    : STATUS_COLOR[task.status];
+                  const barColor = STATUS_COLOR[task.status];
+                  const delayLabel = varianceBarLabel(task.variance.days);
 
                   const showHover = (
                     e: MouseEvent<HTMLDivElement | HTMLAnchorElement>
@@ -697,16 +733,37 @@ export function GanttChart({
                         key={task.id}
                         className="absolute z-[15]"
                         style={{
-                          top: idx * rowH + 22,
+                          top: idx * rowH + BASELINE_BAR_TOP,
                           left: `${workingBar.left}%`,
                           width: `${workingBar.width}%`,
-                          height: 18,
+                          height: BASELINE_BAR_H + WORKING_BAR_H,
                         }}
                       >
-                        <div className="h-full overflow-hidden rounded-md bg-sb-gantt-phase opacity-90 shadow-sm" />
+                        <div className="h-full rounded-sm bg-sb-gantt-phase opacity-90" />
                       </div>
                     );
                   }
+
+                  const workingBarEl = (
+                    <div
+                      className={cn(
+                        "relative flex h-full items-center justify-center overflow-hidden rounded-b-sm",
+                        barColor
+                      )}
+                    >
+                      {progress > 0 && progress < 100 ? (
+                        <div
+                          className="absolute inset-y-0 left-0 bg-black/10"
+                          style={{ width: `${progress}%` }}
+                        />
+                      ) : null}
+                      {delayLabel ? (
+                        <span className="relative z-[1] truncate px-1 text-[10px] font-semibold text-sb-ink/90">
+                          {delayLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
 
                   return (
                     <div
@@ -719,15 +776,15 @@ export function GanttChart({
                         className="absolute cursor-pointer"
                         data-gantt-bar="baseline"
                         style={{
-                          top: 12,
+                          top: BASELINE_BAR_TOP,
                           left: `${baselineBar.left}%`,
                           width: `${baselineBar.width}%`,
-                          height: 12,
+                          height: BASELINE_BAR_H,
                         }}
                         onMouseEnter={showHover}
                         onMouseLeave={() => setHover(null)}
                       >
-                        <div className="h-full overflow-hidden rounded-sm bg-slate-400/70 ring-1 ring-slate-500/30" />
+                        <div className="h-full rounded-t-sm bg-sb-gantt-baseline" />
                       </div>
                       {task.href ? (
                         <Link
@@ -735,65 +792,32 @@ export function GanttChart({
                           className="absolute cursor-pointer"
                           data-gantt-bar="actual"
                           style={{
-                            top: 28,
+                            top: WORKING_BAR_TOP,
                             left: `${workingBar.left}%`,
                             width: `${workingBar.width}%`,
-                            height: 14,
+                            height: WORKING_BAR_H,
                           }}
                           onMouseEnter={showHover}
                           onMouseLeave={() => setHover(null)}
                         >
-                          <div
-                            className={cn(
-                              "relative h-full overflow-hidden rounded-md shadow-sm",
-                              barColor
-                            )}
-                          >
-                            {progress > 0 && progress < 100 ? (
-                              <div
-                                className="absolute inset-y-0 left-0 bg-black/15"
-                                style={{ width: `${progress}%` }}
-                              />
-                            ) : null}
-                          </div>
+                          {workingBarEl}
                         </Link>
                       ) : (
                         <div
                           className="absolute cursor-pointer"
                           data-gantt-bar="actual"
                           style={{
-                            top: 28,
+                            top: WORKING_BAR_TOP,
                             left: `${workingBar.left}%`,
                             width: `${workingBar.width}%`,
-                            height: 14,
+                            height: WORKING_BAR_H,
                           }}
                           onMouseEnter={showHover}
                           onMouseLeave={() => setHover(null)}
                         >
-                          <div
-                            className={cn(
-                              "relative h-full overflow-hidden rounded-md shadow-sm",
-                              barColor
-                            )}
-                          />
+                          {workingBarEl}
                         </div>
                       )}
-                      {task.variance.days != null && task.variance.days !== 0 ? (
-                        <span
-                          className={cn(
-                            "pointer-events-none absolute text-[10px] font-semibold",
-                            task.variance.kind === "late"
-                              ? "text-sb-gantt-risk"
-                              : "text-sb-gantt-done"
-                          )}
-                          style={{
-                            top: 44,
-                            left: `calc(${workingBar.left}% + ${workingBar.width}% + 6px)`,
-                          }}
-                        >
-                          {task.variance.signedLabel}
-                        </span>
-                      ) : null}
                     </div>
                   );
                 })}
@@ -820,16 +844,12 @@ export function GanttChart({
           Timeline: <span className="text-sb-ink">{timelineLabel}</span>
         </p>
         <p className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-5 rounded-sm bg-slate-400/70" />
+          <span className="h-2 w-5 bg-sb-gantt-baseline" />
           Baseline
         </p>
         <p className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-5 rounded-sm bg-sb-gantt-progress" />
+          <span className="h-2 w-5 bg-sb-gantt-progress" />
           Current / Actual
-        </p>
-        <p className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-sb-gantt-critical" />
-          Critical Path
         </p>
         <div className="ml-auto flex flex-wrap gap-3">
           {(

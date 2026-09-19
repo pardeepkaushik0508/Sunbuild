@@ -10,11 +10,11 @@ import {
   assertProjectAccess,
   type AppSession,
 } from "@/lib/session";
-import { requireTwilioConfig, getTwilioConfig } from "@/lib/twilio/config";
+import { requireTwilioConfig } from "@/lib/twilio/config";
 import { sendTwilioSms } from "@/lib/twilio/client";
 import { getTwilioWebhookUrls } from "@/lib/twilio/webhooks";
 import { mapTwilioMessageStatus } from "@/lib/twilio/status";
-import { maskPhone, phoneMatchTail, toE164 } from "@/lib/twilio/phone";
+import { inferPhoneRegion, maskPhone, phoneMatchTail, toE164 } from "@/lib/twilio/phone";
 import {
   INVALID_RECIPIENT_DIAGNOSTIC,
   parseTwilioSendError,
@@ -105,10 +105,22 @@ export async function sendSmsMessage(input: {
   let toRaw = input.to?.trim() || "";
   const requestedLeadId = input.leadId?.trim() || null;
   const requestedProjectId = input.projectId?.trim() || null;
+  if (!requestedLeadId && !requestedProjectId) {
+    throw new AppError(
+      "SMS must be bound to a lead or project. Arbitrary destinations are not allowed.",
+      400,
+      "SMS_ENTITY_REQUIRED"
+    );
+  }
   const leadId = requestedLeadId;
   let projectId = requestedProjectId;
   let buyerId: string | null = null;
   const companyId = input.session.membership.companyId;
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { province: true },
+  });
+  const region = inferPhoneRegion({ province: company?.province }) ?? "CA";
 
   if (leadId) {
     await assertLeadAccess(input.session, leadId);
@@ -132,7 +144,7 @@ export async function sendSmsMessage(input: {
     if (!toRaw && project.buyer?.phone) toRaw = project.buyer.phone;
   }
 
-  const toNumber = toE164(toRaw);
+  const toNumber = toE164(toRaw, { defaultRegion: region });
   if (!toNumber) {
     throw new AppError(INVALID_RECIPIENT_DIAGNOSTIC, 400, "INVALID_RECIPIENT_NUMBER");
   }
@@ -147,7 +159,8 @@ export async function sendSmsMessage(input: {
     throw new AppError(outbound.message, 400, outbound.code);
   }
 
-  const { status: statusCallback } = getTwilioWebhookUrls(input.request);
+  const webhooks = getTwilioWebhookUrls(input.request);
+  const statusCallback = webhooks.public ? webhooks.smsStatus : undefined;
 
   const queued = await prisma.smsMessage.create({
     data: {
@@ -289,12 +302,13 @@ export async function sendTrialSmsToCompanyUser(input: {
     );
   }
 
-  const toNumber = toE164(membership.user.phone || "");
+  const toNumber = toE164(membership.user.phone || "", { defaultRegion: "CA" });
   if (!toNumber) {
     throw new AppError(INVALID_RECIPIENT_DIAGNOSTIC, 400, "INVALID_RECIPIENT_NUMBER");
   }
 
-  const { status: statusCallback } = getTwilioWebhookUrls(input.request);
+  const webhooks = getTwilioWebhookUrls(input.request);
+  const statusCallback = webhooks.public ? webhooks.smsStatus : undefined;
   const queued = await prisma.smsMessage.create({
     data: {
       companyId,
@@ -364,153 +378,14 @@ export async function notifyUserBySmsBestEffort(input: {
   body: string;
   projectId?: string | null;
 }): Promise<void> {
-  try {
-    const config = getTwilioConfig();
-    if (!config) {
-      console.warn("[twilio] best-effort SMS skipped: Twilio is not configured");
-      return;
-    }
-
-    const text = input.body.trim();
-    if (!text) return;
-
-    const user = await prisma.user.findUnique({
-      where: { id: input.userId },
-      select: { phone: true, name: true },
-    });
-    if (!user?.phone?.trim()) {
-      console.warn("[twilio] best-effort SMS skipped: user has no phone", {
-        userId: input.userId,
-        name: user?.name ?? null,
-      });
-      return;
-    }
-
-    const toNumber = toE164(user.phone);
-    if (!toNumber) {
-      console.warn("[twilio] best-effort SMS failed: invalid recipient", {
-        userId: input.userId,
-        toDisplay: maskPhone(user.phone),
-      });
-      await prisma.smsMessage
-        .create({
-          data: {
-            companyId: input.companyId,
-            projectId: input.projectId || null,
-            senderUserId: null,
-            direction: "OUTBOUND",
-            fromNumber: null,
-            toNumber: user.phone.trim().slice(0, 32),
-            body: text.slice(0, 1600),
-            status: "FAILED",
-            errorCode: "INVALID_RECIPIENT_NUMBER",
-            errorMessage: INVALID_RECIPIENT_DIAGNOSTIC,
-          },
-        })
-        .catch((err) => {
-          console.warn("[twilio] could not persist invalid-recipient SMS row", err);
-        });
-      return;
-    }
-
-    const trialFrom = assertTrialFromConfigured(config);
-    if (!trialFrom.ok) {
-      await prisma.smsMessage
-        .create({
-          data: {
-            companyId: input.companyId,
-            projectId: input.projectId || null,
-            senderUserId: null,
-            direction: "OUTBOUND",
-            fromNumber: null,
-            toNumber,
-            body: text.slice(0, 1600),
-            status: "FAILED",
-            errorCode: "MISSING_TRIAL_FROM",
-            errorMessage: trialFrom.message,
-          },
-        })
-        .catch((err) => {
-          console.warn("[twilio] could not persist missing-trial-from SMS row", err);
-        });
-      return;
-    }
-
-    const outbound = resolveOutboundTwilioBody(config, text.slice(0, 1600));
-    if (!outbound.ok) {
-      await prisma.smsMessage
-        .create({
-          data: {
-            companyId: input.companyId,
-            projectId: input.projectId || null,
-            senderUserId: null,
-            direction: "OUTBOUND",
-            fromNumber: null,
-            toNumber,
-            body: text.slice(0, 1600),
-            status: "FAILED",
-            errorCode: "INVALID_TRIAL_TEMPLATE",
-            errorMessage: outbound.message,
-          },
-        })
-        .catch((err) => {
-          console.warn("[twilio] could not persist invalid-template SMS row", err);
-        });
-      return;
-    }
-
-    const { status: statusCallback } = getTwilioWebhookUrls();
-    const queued = await prisma.smsMessage.create({
-      data: {
-        companyId: input.companyId,
-        projectId: input.projectId || null,
-        senderUserId: null,
-        direction: "OUTBOUND",
-        fromNumber: config.phoneNumber,
-        toNumber,
-        body: outbound.intendedBody.slice(0, 1600),
-        status: "QUEUED",
-      },
-    });
-
-    const sent = await sendTwilioSms(config, {
-      to: toNumber,
-      body: outbound.twilioBody,
-      statusCallback,
-    });
-    const twilioFailed = !sent.sid || sent.status === "failed";
-    const mapped = twilioFailed
-      ? "FAILED"
-      : mapTwilioMessageStatus(sent.status) || "SENT";
-
-    await prisma.smsMessage.update({
-      where: { id: queued.id },
-      data: {
-        twilioSid: sent.sid,
-        status: mapped === "RECEIVED" ? "SENT" : mapped,
-        fromNumber: sent.from || config.phoneNumber,
-        errorCode: sent.errorCode,
-        errorMessage: sent.errorMessage,
-      },
-    });
-
-    if (twilioFailed) {
-      console.error("[twilio] best-effort SMS failed", {
-        userId: input.userId,
-        toDisplay: maskPhone(toNumber),
-        errorCode: sent.errorCode,
-        errorMessage: sent.errorMessage,
-        unverifiedRecipient: sent.unverifiedRecipient,
-        trialRestriction: sent.trialRestriction,
-        mode: config.mode,
-      });
-    }
-  } catch (err) {
-    console.error("[twilio] best-effort SMS did not send", {
-      userId: input.userId,
-      message: err instanceof Error ? err.message : "unknown",
-    });
-  }
+  const { sendTwilioSms } = await import("@/lib/twilio/sms");
+  await sendTwilioSms({
+    recipientUserId: input.userId,
+    companyId: input.companyId,
+    body: input.body,
+    eventType: "NOTIFICATION",
+    projectId: input.projectId,
+  });
 }
 
 export async function applyTwilioStatusCallback(
@@ -523,6 +398,16 @@ export async function applyTwilioStatusCallback(
   const parsed = parseTwilioSendError({
     code: params.ErrorCode,
     message: params.ErrorMessage,
+  });
+
+  const { applyDeliveryStatusCallback } = await import(
+    "@/lib/messaging/delivery"
+  );
+  await applyDeliveryStatusCallback({
+    messageSid: sid,
+    messageStatus: params.MessageStatus || params.SmsStatus,
+    errorCode: params.ErrorCode,
+    errorMessage: params.ErrorMessage,
   });
 
   const existing = await prisma.smsMessage.findUnique({

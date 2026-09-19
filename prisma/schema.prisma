@@ -67,6 +67,7 @@ model User {
   microsoftTodoProjectLinks MicrosoftTodoProjectLink[]
   whatsappMessagesSent      WhatsAppMessage[]           @relation("WhatsAppSender")
   smsMessagesSent           SmsMessage[]                @relation("SmsSender")
+  communicationDeliveries   CommunicationDelivery[]     @relation("CommunicationRecipient")
   sitePagesUpdated          SitePage[]                  @relation("SitePageUpdater")
   notifications             Notification[]
   statementsOfAdjustmentsGenerated StatementOfAdjustments[] @relation("SoaGeneratedBy")
@@ -162,6 +163,7 @@ model Company {
   soas        ScheduleOfAllowances[]
   statementsOfAdjustments StatementOfAdjustments[]
   smsMessages             SmsMessage[]
+  communicationDeliveries CommunicationDelivery[]
 }
 
 /// Typed key/value settings. Scopes must not be mixed:
@@ -449,6 +451,7 @@ model Project {
   microsoftTodoLinks MicrosoftTodoProjectLink[]
   whatsappConversations WhatsAppConversation[]
   smsMessages           SmsMessage[]
+  communicationDeliveries CommunicationDelivery[]
   statementsOfAdjustments StatementOfAdjustments[]
 
   @@index([companyId, status])
@@ -1533,6 +1536,78 @@ model SmsMessage {
   @@index([projectId, sentAt])
   @@index([toNumber])
   @@index([status])
+}
+
+enum CommunicationChannel {
+  SMS
+  WHATSAPP
+}
+
+enum CommunicationProvider {
+  TWILIO
+  META
+}
+
+enum CommunicationDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum CommunicationDeliveryStatus {
+  PENDING
+  QUEUED
+  ACCEPTED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  UNDELIVERED
+  INVALID_PHONE
+  SKIPPED
+  NOT_CONFIGURED
+  OPTED_OUT
+}
+
+/// Automated SMS/WhatsApp delivery history (complements in-app Notification).
+model CommunicationDelivery {
+  id               String                       @id @default(cuid())
+  companyId        String?
+  recipientUserId  String?
+  projectId        String?
+  notificationId   String?
+  entityType       String?
+  entityId         String?
+  eventType        String
+  channel          CommunicationChannel
+  provider         CommunicationProvider        @default(TWILIO)
+  direction        CommunicationDirection       @default(OUTBOUND)
+  toNumber         String
+  fromNumber       String?
+  twilioMessageSid String?                      @unique
+  contentSid       String?
+  messagePreview   String?
+  status           CommunicationDeliveryStatus  @default(PENDING)
+  errorCode        String?
+  errorMessage     String?
+  idempotencyKey   String?                      @unique
+  attemptCount     Int                          @default(0)
+  createdAt        DateTime                     @default(now())
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  readAt           DateTime?
+  failedAt         DateTime?
+  updatedAt        DateTime                     @updatedAt
+
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recipient User?    @relation("CommunicationRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, createdAt])
+  @@index([companyId, eventType, createdAt])
+  @@index([channel, status, createdAt])
+  @@index([toNumber, direction, createdAt])
+  @@index([notificationId])
 }
 
 /// In-app notifications (bell + /notifications inbox).

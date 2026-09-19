@@ -38,6 +38,24 @@ type ChatMessage = {
   sentAt: string | Date;
 };
 
+type InboxStatus = {
+  configured: boolean;
+  provider: "twilio" | "meta" | null;
+  trialSandbox: boolean;
+};
+
+function applyInboxStatus(
+  data: Partial<InboxStatus>,
+  setInbox: (status: InboxStatus) => void
+) {
+  if (typeof data.configured !== "boolean") return;
+  setInbox({
+    configured: data.configured,
+    provider: data.provider ?? null,
+    trialSandbox: Boolean(data.trialSandbox),
+  });
+}
+
 function Avatar({
   name,
   kind,
@@ -85,12 +103,28 @@ export function WhatsAppSidebar({
   const [loadingChat, setLoadingChat] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [chatConfigured, setChatConfigured] = useState(true);
+  const [inbox, setInbox] = useState<InboxStatus | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatConfigured = inbox?.configured ?? true;
+  const trialSandbox = inbox?.trialSandbox ?? false;
 
   const contacts =
     initialContacts.length > 0 ? initialContacts : fetchedContacts;
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch("/api/whatsapp/status")
+      .then((r) => r.json())
+      .then((data: Partial<InboxStatus>) => {
+        if (!cancelled) applyInboxStatus(data, setInbox);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || initialContacts.length > 0) return;
@@ -101,11 +135,15 @@ export function WhatsAppSidebar({
     });
     fetch("/api/whatsapp/contacts")
       .then((r) => r.json())
-      .then((data: { contacts?: WhatsAppContact[] }) => {
-        if (!cancelled && Array.isArray(data.contacts)) {
-          setFetchedContacts(data.contacts);
+      .then(
+        (data: { contacts?: WhatsAppContact[] } & Partial<InboxStatus>) => {
+          if (cancelled) return;
+          if (Array.isArray(data.contacts)) {
+            setFetchedContacts(data.contacts);
+          }
+          applyInboxStatus(data, setInbox);
         }
-      })
+      )
       .catch(() => {
         if (!cancelled) setFetchedContacts([]);
       })
@@ -135,6 +173,7 @@ export function WhatsAppSidebar({
 
     const params = new URLSearchParams();
     if (active.projectId) params.set("projectId", active.projectId);
+    if (active.phone) params.set("phone", active.phone);
 
     fetch(`/api/whatsapp/messages?${params.toString()}`)
       .then((r) => r.json())
@@ -142,15 +181,15 @@ export function WhatsAppSidebar({
         (data: {
           messages?: ChatMessage[];
           configured?: boolean;
+          provider?: "twilio" | "meta" | null;
+          trialSandbox?: boolean;
           error?: string;
         }) => {
           if (cancelled) return;
           if (data.messages) {
             setMessages(data.messages);
           }
-          if (typeof data.configured === "boolean") {
-            setChatConfigured(data.configured);
-          }
+          applyInboxStatus(data, setInbox);
           if (data.error && !data.messages) {
             setChatError(data.error);
           }
@@ -216,7 +255,7 @@ export function WhatsAppSidebar({
               : m
           )
         );
-        setChatError(data.error || "Failed to send message via Meta Cloud API.");
+        setChatError(data.error || "Failed to send WhatsApp message.");
       } else if (data.message) {
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? data.message : m))
@@ -391,14 +430,27 @@ export function WhatsAppSidebar({
               ) : null}
             </div>
 
-            {/* Cloud API Unconfigured Banner */}
             {!chatConfigured ? (
               <div className="flex items-center gap-2 bg-[#fffbeb] px-4 py-2 text-xs text-[#92400e] border-b border-[#fef3c7]">
                 <AlertCircle size={14} className="shrink-0" />
                 <span>
-                  WhatsApp Cloud API test mode. Outbound messages log locally;
-                  live web links available.
+                  WhatsApp is not configured. Set TWILIO_WHATSAPP_FROM on the
+                  server, then restart the app.
                 </span>
+              </div>
+            ) : trialSandbox ? (
+              <div className="flex items-center gap-2 bg-[#ecfdf3] px-4 py-2 text-xs text-[#166534] border-b border-[#bbf7d0]">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>
+                  Twilio WhatsApp is connected. Messages send through Twilio, not
+                  Meta test mode. Recipients must join the Twilio sandbox once
+                  before they can receive live chats.
+                </span>
+              </div>
+            ) : inbox?.provider === "twilio" ? (
+              <div className="flex items-center gap-2 bg-[#ecfdf3] px-4 py-2 text-xs text-[#166534] border-b border-[#bbf7d0]">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>Twilio WhatsApp is connected. Messages send live.</span>
               </div>
             ) : null}
 

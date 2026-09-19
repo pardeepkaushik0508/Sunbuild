@@ -20,6 +20,11 @@ export type ChannelMatrixEntry = {
  * Unlisted types are in-app only.
  */
 export const NOTIFICATION_CHANNEL_MATRIX: Record<string, ChannelMatrixEntry> = {
+  SELECTION_DUE_3_DAYS: {
+    channels: ["in_app", "whatsapp"],
+    category: "PROJECT",
+    priority: "IMPORTANT",
+  },
   SELECTION_DUE_IN_3_DAYS: {
     channels: ["in_app", "whatsapp"],
     category: "PROJECT",

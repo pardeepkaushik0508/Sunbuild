@@ -62,7 +62,7 @@ export function resolveOutboundTwilioBody(
 export type TwilioMessagePayload = {
   to: string;
   body: string;
-  statusCallback: string;
+  statusCallback?: string;
   messagingServiceSid?: string;
   from?: string;
 };
@@ -86,6 +86,9 @@ export function buildTwilioMessagePayload(
       phoneNumber: config.phoneNumber,
     }),
   };
+  if (!payload.statusCallback) {
+    delete payload.statusCallback;
+  }
 
   return payload;
 }

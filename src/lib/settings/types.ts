@@ -85,6 +85,12 @@ export type TwilioIntegrationSettings = {
   trialReady?: boolean | null;
   statusCallbackUrl: string;
   inboundWebhookUrl: string;
+  smsStatusCallbackUrl?: string;
+  whatsappStatusCallbackUrl?: string;
+  whatsappIncomingWebhookUrl?: string;
+  whatsappConfigured?: boolean;
+  whatsappFromDisplay?: string | null;
+  whatsappMode?: "trial_sandbox" | "production" | "not_configured";
   recentFailures: TwilioFailureSample[];
   diagnostics: string[];
 };

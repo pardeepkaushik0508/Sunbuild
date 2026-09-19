@@ -17,6 +17,11 @@ import {
   type TwilioMode,
 } from "@/lib/twilio/mode";
 
+export type TwilioAuthConfig = {
+  accountSid: string;
+  authToken: string;
+};
+
 export type TwilioConfig = {
   mode: TwilioMode;
   accountSid: string;
@@ -25,6 +30,14 @@ export type TwilioConfig = {
   phoneNumber: string | null;
   senderMode: Exclude<TwilioSenderMode, "not_configured">;
   trialTemplate: string | null;
+};
+
+export type TwilioWhatsAppConfig = {
+  mode: TwilioMode;
+  accountSid: string;
+  authToken: string;
+  from: string;
+  testContentSid: string | null;
 };
 
 export type TwilioFailureSample = {
@@ -53,15 +66,55 @@ export type PublicTwilioSettings = {
   trialReady: boolean | null;
   statusCallbackUrl: string;
   inboundWebhookUrl: string;
+  smsStatusCallbackUrl: string;
+  whatsappStatusCallbackUrl: string;
+  whatsappIncomingWebhookUrl: string;
+  whatsappConfigured: boolean;
+  whatsappFromDisplay: string | null;
+  whatsappMode: "trial_sandbox" | "production" | "not_configured";
   recentFailures: TwilioFailureSample[];
   diagnostics: string[];
 };
 
-export function getTwilioConfig(): TwilioConfig | null {
-  const mode = getTwilioMode();
+export function getTwilioAuthConfig(): TwilioAuthConfig | null {
   const rawSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const accountSid = rawSid ? normalizeTwilioAccountSid(rawSid) : "";
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+  if (!accountSid || !authToken) return null;
+  return { accountSid, authToken };
+}
+
+export function isTwilioTrialMode(): boolean {
+  return getTwilioMode() === "trial";
+}
+
+export function getTwilioWhatsAppConfig(): TwilioWhatsAppConfig | null {
+  const auth = getTwilioAuthConfig();
+  const from = process.env.TWILIO_WHATSAPP_FROM?.trim() || "";
+  if (!auth || !from) return null;
+  return {
+    mode: getTwilioMode(),
+    accountSid: auth.accountSid,
+    authToken: auth.authToken,
+    from,
+    testContentSid: process.env.TWILIO_WHATSAPP_TEST_CONTENT_SID?.trim() || null,
+  };
+}
+
+export function isTwilioWhatsAppConfigured(): boolean {
+  return getTwilioWhatsAppConfig() !== null;
+}
+
+export function isTwilioSmsConfigured(): boolean {
+  return getTwilioConfig() !== null;
+}
+
+export function getTwilioConfig(): TwilioConfig | null {
+  const mode = getTwilioMode();
+  const auth = getTwilioAuthConfig();
+  const rawSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const accountSid = auth?.accountSid ?? "";
+  const authToken = auth?.authToken ?? "";
   const messagingServiceSid =
     process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() || null;
   const phoneNumber = process.env.TWILIO_PHONE_NUMBER?.trim() || null;
@@ -95,7 +148,7 @@ export function getTwilioConfig(): TwilioConfig | null {
 }
 
 export function isTwilioConfigured(): boolean {
-  return getTwilioConfig() !== null;
+  return isTwilioSmsConfigured() || isTwilioWhatsAppConfigured();
 }
 
 export function requireTwilioConfig(): TwilioConfig {
@@ -141,6 +194,7 @@ function diagnosticsFor(
         "SMS is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER (or TWILIO_MESSAGING_SERVICE_SID)."
       );
     }
+    lines.push(...whatsappDiagnosticLines());
     return lines;
   }
 
@@ -198,6 +252,7 @@ function diagnosticsFor(
         "A stored SMS failed with 572003 (From not assigned to this verified recipient). Copy the exact From trial number from Console → Try out SMS into TWILIO_PHONE_NUMBER and redeploy."
       );
     }
+    lines.push(...whatsappDiagnosticLines());
     return lines;
   }
 
@@ -262,6 +317,38 @@ function diagnosticsFor(
   if (recentFailures.some((f) => f.unverifiedRecipient)) {
     lines.push(
       "A stored SMS was rejected because the recipient is not verified. Verify the number in Twilio Console, or upgrade the account."
+    );
+  }
+  lines.push(...whatsappDiagnosticLines());
+  return lines;
+}
+
+function whatsappDiagnosticLines(): string[] {
+  const wa = getTwilioWhatsAppConfig();
+  const lines: string[] = [];
+  if (!wa) {
+    lines.push(
+      "Twilio WhatsApp is NOT_CONFIGURED. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM."
+    );
+    return lines;
+  }
+  lines.push(
+    `Twilio WhatsApp: ${wa.mode === "trial" ? "Trial Sandbox" : "Configured"}`
+  );
+  if (wa.mode === "trial") {
+    lines.push(
+      "WhatsApp Trial recipient must be verified/joined to the Twilio Sandbox (send the join code)."
+    );
+    lines.push(
+      "WhatsApp Trial business-initiated messages use TWILIO_WHATSAPP_TEST_CONTENT_SID (pre-approved template), not custom SUNBUILD copy."
+    );
+    if (!wa.testContentSid) {
+      lines.push(
+        "TWILIO_WHATSAPP_TEST_CONTENT_SID is missing — business-initiated Trial WhatsApp cannot be sent outside a 24-hour session."
+      );
+    }
+    lines.push(
+      "Custom production Utility templates require a Twilio account upgrade and approved Content templates."
     );
   }
   return lines;
@@ -353,32 +440,52 @@ export async function getPublicTwilioSettings(
     ),
   }));
 
+  const waConfig = getTwilioWhatsAppConfig();
+  const whatsappConfigured = Boolean(waConfig);
+  const whatsappFromDisplay = waConfig ? maskPhone(waConfig.from) : null;
+  const whatsappMode: PublicTwilioSettings["whatsappMode"] = !waConfig
+    ? "not_configured"
+    : mode === "trial"
+      ? "trial_sandbox"
+      : "production";
+  const webhookFields = {
+    statusCallbackUrl: webhooks.smsStatus || webhooks.status,
+    inboundWebhookUrl: webhooks.inbound,
+    smsStatusCallbackUrl: webhooks.smsStatus || webhooks.status,
+    whatsappStatusCallbackUrl: webhooks.whatsappStatus,
+    whatsappIncomingWebhookUrl: webhooks.whatsappIncoming,
+    whatsappConfigured,
+    whatsappFromDisplay,
+    whatsappMode,
+  };
+
   const baseDiagLive = {
     liveAuthOk: null as boolean | null,
     fromNumberOwned: null as boolean | null,
     phoneNumber: config?.phoneNumber ?? null,
     trialTemplate,
-    accountSidDisplay: config ? maskAccountSid(config.accountSid) : null,
+    accountSidDisplay: config
+      ? maskAccountSid(config.accountSid)
+      : maskAccountSid(getTwilioAuthConfig()?.accountSid),
     authTokenConfigured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim()),
-    statusCallbackUrl: webhooks.status,
+    statusCallbackUrl: webhookFields.statusCallbackUrl,
   };
 
   if (!config) {
     return {
       status: "setup_required",
-      provider: null,
+      provider: whatsappConfigured ? "twilio" : null,
       mode,
       senderMode,
       fromDisplay: null,
-      accountSidDisplay: null,
+      accountSidDisplay: maskAccountSid(getTwilioAuthConfig()?.accountSid),
       authTokenConfigured: Boolean(process.env.TWILIO_AUTH_TOKEN?.trim()),
       trialTemplate: mode === "trial" ? trialTemplate : null,
       messagingServiceConfigured: false,
       liveAuthOk: null,
       fromNumberOwned: null,
       trialReady: null,
-      statusCallbackUrl: webhooks.status,
-      inboundWebhookUrl: webhooks.inbound,
+      ...webhookFields,
       recentFailures,
       diagnostics: diagnosticsFor(mode, senderMode, recentFailures, baseDiagLive),
     };
@@ -416,8 +523,7 @@ export async function getPublicTwilioSettings(
     liveAuthOk: live.liveAuthOk,
     fromNumberOwned: live.fromNumberOwned,
     trialReady,
-    statusCallbackUrl: webhooks.status,
-    inboundWebhookUrl: webhooks.inbound,
+    ...webhookFields,
     recentFailures,
     diagnostics: diagnosticsFor(mode, senderMode, recentFailures, {
       liveAuthOk: live.liveAuthOk,

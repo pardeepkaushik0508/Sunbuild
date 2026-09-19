@@ -14,7 +14,8 @@ export type GanttScalePlan = {
 
 /**
  * Adaptive Gantt timeline for the selected date range.
- * Long ranges must not render an unusable daily grid of every day number.
+ * An explicit Day / Week / Month choice always wins; auto-scale is only used
+ * when the user has not picked a view.
  */
 export function resolveGanttScale(
   rangeStart: Date,
@@ -26,8 +27,7 @@ export function resolveGanttScale(
     differenceInCalendarDays(rangeEnd, rangeStart) + 1
   );
 
-  // User preference is honoured when it remains readable for the span.
-  if (preferred === "month" && spanDays >= 21) {
+  if (preferred === "month") {
     return {
       primary: "month",
       secondary: spanDays <= 150 ? "week" : "none",
@@ -35,7 +35,7 @@ export function resolveGanttScale(
       reason: "preferred-month",
     };
   }
-  if (preferred === "week" && spanDays >= 8 && spanDays <= 120) {
+  if (preferred === "week") {
     return {
       primary: "week",
       secondary: "none",
@@ -43,11 +43,11 @@ export function resolveGanttScale(
       reason: "preferred-week",
     };
   }
-  if (preferred === "day" && spanDays <= 45) {
+  if (preferred === "day") {
     return {
       primary: "day",
       secondary: "none",
-      colMinWidth: 36,
+      colMinWidth: spanDays > 90 ? 28 : 36,
       reason: "preferred-day",
     };
   }

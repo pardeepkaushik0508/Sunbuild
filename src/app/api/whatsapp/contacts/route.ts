@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { requireApiSession, getAccessibleProjectIds } from "@/lib/session";
 import { sessionHasClientCommunication } from "@/lib/authorization";
 import { getWhatsAppContacts } from "@/lib/whatsapp-contacts";
+import { getWhatsAppInboxStatus } from "@/lib/messaging/provider-select";
 import { toSafeErrorMessage } from "@/lib/errors";
 import {
   ACTION_RATE,
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       accessibleProjectIds: projectIds,
     });
     return NextResponse.json(
-      { contacts },
+      { contacts, ...getWhatsAppInboxStatus() },
       { headers: { "Cache-Control": "private, max-age=30" } }
     );
   } catch (error) {

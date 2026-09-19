@@ -1,7 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { getTwilioConfig } from "@/lib/twilio/config";
+import { getTwilioAuthConfig } from "@/lib/twilio/config";
 import { validateTwilioSignature } from "@/lib/twilio/client";
 
 export type TwilioFormParams = Record<string, string>;
@@ -41,7 +41,7 @@ export function assertValidTwilioRequest(
   publicUrl: string,
   params: TwilioFormParams
 ): boolean {
-  const config = getTwilioConfig();
+  const config = getTwilioAuthConfig();
   if (!config) return false;
   if (!signature) return false;
   return validateTwilioSignature(config.authToken, signature, publicUrl, params);

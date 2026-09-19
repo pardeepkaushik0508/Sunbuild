@@ -1,8 +1,27 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { getWhatsAppConfig, isWhatsAppConfigured } from "@/lib/whatsapp/config";
+import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { AppError } from "@/lib/errors";
+import { getWhatsAppInboxStatus } from "@/lib/messaging/provider-select";
+import {
+  getTwilioWhatsAppConfig,
+  isTwilioTrialMode,
+} from "@/lib/twilio/config";
+import { sendTwilioWhatsAppMessage } from "@/lib/twilio/client";
+import { getTwilioWebhookUrls } from "@/lib/twilio/webhooks";
+import {
+  inferPhoneRegion,
+  normalizeToE164,
+} from "@/lib/twilio/phone";
+import {
+  resolveWhatsAppContentSid,
+  trialContentVariables,
+} from "@/lib/twilio/whatsapp-templates";
+import {
+  SANDBOX_NOT_JOINED_DIAGNOSTIC,
+  INVALID_RECIPIENT_DIAGNOSTIC,
+} from "@/lib/twilio/errors";
 
 export type WhatsAppMessageItem = {
   id: string;
@@ -34,9 +53,96 @@ function normalizePhone(phone: string): string {
   return phone.replace(/[^\d]/g, "");
 }
 
+export { getWhatsAppInboxStatus };
+
+async function sendStaffMessageViaTwilio(input: {
+  toPhone: string;
+  body: string;
+  companyId: string;
+  recipientName?: string | null;
+  projectName?: string | null;
+}): Promise<{
+  sid: string | null;
+  status: "SENT" | "FAILED";
+  errorMessage: string | null;
+}> {
+  const wa = getTwilioWhatsAppConfig();
+  if (!wa) {
+    return {
+      sid: null,
+      status: "FAILED",
+      errorMessage: "Twilio WhatsApp is not configured.",
+    };
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: input.companyId },
+    select: { province: true },
+  });
+  const region = inferPhoneRegion({ province: company?.province }) ?? "CA";
+  const normalized = normalizeToE164(input.toPhone, { defaultRegion: region });
+  if (!normalized.ok) {
+    return {
+      sid: null,
+      status: "FAILED",
+      errorMessage: INVALID_RECIPIENT_DIAGNOSTIC,
+    };
+  }
+
+  const webhooks = getTwilioWebhookUrls();
+  const statusCallback = webhooks.public ? webhooks.whatsappStatus : undefined;
+
+  // Staff chat must send the typed text. Do not substitute a ContentSid
+  // template just because the CRM has no inbound session row yet.
+  let sent = await sendTwilioWhatsAppMessage(wa, {
+    to: normalized.e164,
+    body: input.body,
+    statusCallback,
+  });
+
+  if (
+    (!sent.sid || sent.status === "failed") &&
+    sent.outsideSessionWindow
+  ) {
+    const contentSid =
+      resolveWhatsAppContentSid({
+        eventType: "STAFF_CHAT",
+        trial: isTwilioTrialMode(),
+        hasCustomerSession: false,
+      }).contentSid || wa.testContentSid;
+    if (contentSid) {
+      sent = await sendTwilioWhatsAppMessage(wa, {
+        to: normalized.e164,
+        contentSid,
+        contentVariables: trialContentVariables({
+          recipientName: input.recipientName,
+          projectName: input.projectName,
+        }),
+        statusCallback,
+      });
+    }
+  }
+
+  if (!sent.sid || sent.status === "failed") {
+    return {
+      sid: sent.sid,
+      status: "FAILED",
+      errorMessage: sent.sandboxNotJoined
+        ? SANDBOX_NOT_JOINED_DIAGNOSTIC
+        : sent.errorMessage,
+    };
+  }
+
+  return {
+    sid: sent.sid,
+    status: "SENT",
+    errorMessage: null,
+  };
+}
+
 /**
- * Send an outbound message to a client on WhatsApp via Meta Cloud API.
- * Always records the message in PostgreSQL; records failure reason if Meta API is unavailable.
+ * Send an outbound staff WhatsApp message (Twilio when configured, else Meta).
+ * Always records the message in PostgreSQL; records the provider failure reason.
  */
 export async function sendWhatsAppMessage(input: {
   projectId: string;
@@ -93,10 +199,22 @@ export async function sendWhatsAppMessage(input: {
   let whatsappMessageId: string | null = null;
   let errorMessage: string | null = null;
 
-  if (!config) {
+  const inbox = getWhatsAppInboxStatus();
+  if (inbox.provider === "twilio") {
+    const sent = await sendStaffMessageViaTwilio({
+      toPhone,
+      body: body.trim(),
+      companyId: project.companyId,
+      recipientName: clientName,
+      projectName: project.name,
+    });
+    status = sent.status;
+    whatsappMessageId = sent.sid;
+    errorMessage = sent.errorMessage;
+  } else if (!config) {
     status = "FAILED";
     errorMessage =
-      "WhatsApp Cloud API is not configured. Configure WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.";
+      "WhatsApp is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_WHATSAPP_FROM.";
   } else {
     try {
       const url = `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`;
@@ -176,6 +294,8 @@ export async function getConversationMessages(
   conversation: WhatsAppConversationSummary;
   messages: WhatsAppMessageItem[];
   configured: boolean;
+  provider: "twilio" | "meta" | null;
+  trialSandbox: boolean;
 }> {
   const conversation = await prisma.whatsAppConversation.findUnique({
     where: { id: conversationId },
@@ -240,7 +360,7 @@ export async function getConversationMessages(
       errorMessage: m.errorMessage,
       sentAt: m.sentAt,
     })),
-    configured: isWhatsAppConfigured(),
+    ...getWhatsAppInboxStatus(),
   };
 }
 
@@ -249,7 +369,8 @@ export async function getConversationMessages(
  */
 export async function getOrCreateProjectConversation(
   projectId: string,
-  accessibleProjectIds: string[]
+  accessibleProjectIds: string[],
+  phone?: string | null
 ): Promise<string> {
   if (!accessibleProjectIds.includes(projectId)) {
     throw new AppError("Access denied to this project", 403);
@@ -261,7 +382,7 @@ export async function getOrCreateProjectConversation(
   });
   if (!project) throw new AppError("Project not found", 404);
 
-  const rawPhone = project.buyer?.phone || "";
+  const rawPhone = phone?.trim() || project.buyer?.phone || "";
   const clientPhone = normalizePhone(rawPhone) || `proj_${projectId}`;
   const clientName = project.buyer
     ? `${project.buyer.firstName} ${project.buyer.lastName}`.trim()
@@ -432,6 +553,21 @@ export async function notifyUserByWhatsAppBestEffort(input: {
   projectId?: string | null;
 }): Promise<WhatsAppDispatchResult> {
   try {
+    const { isAutomatedWhatsAppTwilio } = await import(
+      "@/lib/messaging/providers"
+    );
+    if (isAutomatedWhatsAppTwilio()) {
+      const { sendTwilioWhatsApp } = await import("@/lib/twilio/whatsapp");
+      await sendTwilioWhatsApp({
+        recipientUserId: input.userId,
+        companyId: input.companyId,
+        body: input.body,
+        eventType: "NOTIFICATION",
+        projectId: input.projectId,
+      });
+      return { ok: true };
+    }
+
     const text = input.body.trim();
     if (!text) return { ok: false, skipped: "empty-body" };
 

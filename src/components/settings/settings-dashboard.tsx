@@ -529,13 +529,15 @@ export function SettingsDashboard({
       {modal === "whatsapp" ? (
         <DialogShell title="WhatsApp Integration" onClose={close}>
           <Phase2Notice
-            title="WhatsApp Business API is not fully connected in MVP."
-            body="The CRM currently supports staff deep-link messaging from the header. Full Business API (provider account, webhooks, send/receive) is reserved for Phase 2. Access tokens are never exposed in the browser."
+            title="WhatsApp is connected through SUNBUILD's messaging provider."
+            body="Automated notifications use a single WhatsApp provider (Twilio when configured). Incoming messages are stored for staff triage and are never turned into warranty tickets automatically. Access tokens stay server-only."
             bullets={[
               `Status: ${
-                settings.whatsapp.status === "setup_required"
-                  ? "Setup required / Phase 2"
-                  : settings.whatsapp.status
+                settings.whatsapp.status === "connected"
+                  ? settings.twilio.whatsappMode === "trial_sandbox"
+                    ? "Twilio Trial Sandbox"
+                    : "Configured"
+                  : "Setup required"
               }`,
               `Provider: ${settings.whatsapp.provider ?? "Not configured"}`,
               `Phone: ${settings.whatsapp.phoneDisplay ?? "Not configured"}`,
@@ -647,6 +649,14 @@ export function SettingsDashboard({
                 label="Inbound SMS"
                 url={settings.twilio.inboundWebhookUrl}
               />
+              <WebhookUrlRow
+                label="WhatsApp status"
+                url={settings.twilio.whatsappStatusCallbackUrl || ""}
+              />
+              <WebhookUrlRow
+                label="WhatsApp incoming"
+                url={settings.twilio.whatsappIncomingWebhookUrl || ""}
+              />
               {canEditSecurity && smsTestRecipients.length > 0 ? (
                 <TrialSmsTestPanel recipients={smsTestRecipients} />
               ) : canEditSecurity ? (
@@ -727,6 +737,14 @@ export function SettingsDashboard({
                 label="Inbound SMS"
                 url={settings.twilio.inboundWebhookUrl}
               />
+              <WebhookUrlRow
+                label="WhatsApp status"
+                url={settings.twilio.whatsappStatusCallbackUrl || ""}
+              />
+              <WebhookUrlRow
+                label="WhatsApp incoming"
+                url={settings.twilio.whatsappIncomingWebhookUrl || ""}
+              />
             </div>
           ) : (
             <div className="space-y-3 text-sm text-sb-body">
@@ -796,6 +814,14 @@ export function SettingsDashboard({
               <WebhookUrlRow
                 label="Inbound SMS"
                 url={settings.twilio.inboundWebhookUrl}
+              />
+              <WebhookUrlRow
+                label="WhatsApp status"
+                url={settings.twilio.whatsappStatusCallbackUrl || ""}
+              />
+              <WebhookUrlRow
+                label="WhatsApp incoming"
+                url={settings.twilio.whatsappIncomingWebhookUrl || ""}
               />
             </div>
           )}

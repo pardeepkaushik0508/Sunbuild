@@ -32,7 +32,10 @@ import {
   sessionTimeoutSchema,
 } from "@/lib/settings/validation";
 import { AppError } from "@/lib/errors";
-import { getPublicTwilioSettings } from "@/lib/twilio/config";
+import { getPublicTwilioSettings, getTwilioWhatsAppConfig } from "@/lib/twilio/config";
+import { resolveWhatsAppProviderName } from "@/lib/messaging/provider-select";
+import { isWhatsAppConfigured as isMetaWhatsAppConfigured } from "@/lib/whatsapp/config";
+import { maskPhone } from "@/lib/twilio/phone";
 import { readdir, stat } from "fs/promises";
 import path from "path";
 
@@ -124,6 +127,34 @@ async function estimateLocalStorageUsage(): Promise<number | null> {
   }
 }
 
+function overlayWhatsAppSettings(
+  stored: WhatsAppIntegrationSettings
+): WhatsAppIntegrationSettings {
+  const provider = resolveWhatsAppProviderName();
+  if (provider === "twilio") {
+    const wa = getTwilioWhatsAppConfig();
+    return {
+      status: wa ? "connected" : "setup_required",
+      provider: "twilio",
+      phoneDisplay: wa ? maskPhone(wa.from) : null,
+      webhookConfigured: true,
+    };
+  }
+  if (provider === "meta" || isMetaWhatsAppConfigured()) {
+    return {
+      ...stored,
+      status: isMetaWhatsAppConfigured() ? "connected" : stored.status,
+      provider: "meta",
+      webhookConfigured: Boolean(stored.webhookConfigured),
+    };
+  }
+  return {
+    ...stored,
+    status: "setup_required",
+    provider: null,
+  };
+}
+
 export async function getCompanySettings(
   companyId: string
 ): Promise<CompanySettingsSnapshot> {
@@ -195,7 +226,7 @@ export async function getCompanySettings(
       sessionTimeoutMinutes
     ) as SessionTimeoutMinutes,
     fileStorage,
-    whatsapp: whatsapp as WhatsAppIntegrationSettings,
+    whatsapp: overlayWhatsAppSettings(whatsapp as WhatsAppIntegrationSettings),
     twilio: await getPublicTwilioSettings(),
     quickbooks: quickbooks as QuickBooksIntegrationSettings,
     emailNotifications: email,

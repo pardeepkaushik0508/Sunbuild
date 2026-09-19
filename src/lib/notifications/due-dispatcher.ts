@@ -10,33 +10,31 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createNotificationOnce } from "@/lib/notifications";
-import { formatIsoDateUtc } from "@/lib/deposits/due";
 import { computeDepositDue, isDepositSettled } from "@/lib/deposits/due";
-
-function startOfUtcDay(d: Date) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function addUtcDays(d: Date, days: number) {
-  const next = new Date(d.getTime());
-  next.setUTCDate(next.getUTCDate() + days);
-  return next;
-}
+import {
+  addCalendarDays,
+  calendarDateKey,
+  getBusinessTimeZone,
+  isCalendarDateBeforeToday,
+  isCalendarDateInExactlyDays,
+  isCalendarDateToday,
+  zonedYmd,
+} from "@/lib/messaging/timezone";
 
 /**
  * Due-date dispatcher for the approved channel matrix.
- * Idempotent via notification eventKey. Safe to run twice.
+ * Idempotent via notification eventKey + CommunicationDelivery idempotencyKey.
  */
 export async function dispatchDueNotifications(now = new Date()) {
-  const today = startOfUtcDay(now);
-  const in3 = addUtcDays(today, 3);
-  const tomorrow = addUtcDays(today, 1);
+  const timeZone = getBusinessTimeZone();
+  const today = zonedYmd(now, timeZone);
+  const in3 = addCalendarDays(today, 3);
   let created = 0;
 
-  const selectionDue3 = await prisma.selectionSection.findMany({
+  const selectionWindow = await prisma.selectionSection.findMany({
     where: {
       clientVisible: true,
-      dueDate: { gte: in3, lt: addUtcDays(in3, 1) },
+      dueDate: { not: null },
       status: {
         in: [SelectionSectionStatus.DRAFT, SelectionSectionStatus.CHANGES_REQUESTED],
       },
@@ -49,6 +47,7 @@ export async function dispatchDueNotifications(now = new Date()) {
               id: true,
               companyId: true,
               name: true,
+              deletedAt: true,
               buyer: { select: { userId: true } },
               access: { where: { role: Role.CLIENT }, select: { userId: true } },
             },
@@ -56,72 +55,38 @@ export async function dispatchDueNotifications(now = new Date()) {
         },
       },
     },
-    take: 200,
+    take: 400,
   });
-  for (const section of selectionDue3) {
-    const project = section.package.project;
-    const clients = new Set<string>();
-    if (project.buyer?.userId) clients.add(project.buyer.userId);
-    for (const a of project.access) clients.add(a.userId);
-    const dayKey = formatIsoDateUtc(section.dueDate) ?? "unknown";
-    for (const userId of clients) {
-      const row = await createNotificationOnce({
-        userId,
-        companyId: project.companyId,
-        type: "SELECTION_DUE_IN_3_DAYS",
-        title: `Selection due in 3 days: ${section.name}`,
-        body: project.name,
-        href: `/client/selections/${section.id}`,
-        entityType: "SelectionSection",
-        entityId: section.id,
-        eventKey: `SELECTION_DUE_IN_3_DAYS:${section.id}:${dayKey}:${userId}`,
-      });
-      if (row) created += 1;
-    }
-  }
 
-  const selectionDueToday = await prisma.selectionSection.findMany({
-    where: {
-      clientVisible: true,
-      dueDate: { gte: today, lt: tomorrow },
-      status: {
-        in: [SelectionSectionStatus.DRAFT, SelectionSectionStatus.CHANGES_REQUESTED],
-      },
-    },
-    include: {
-      package: {
-        include: {
-          project: {
-            select: {
-              id: true,
-              companyId: true,
-              name: true,
-              buyer: { select: { userId: true } },
-              access: { where: { role: Role.CLIENT }, select: { userId: true } },
-            },
-          },
-        },
-      },
-    },
-    take: 200,
-  });
-  for (const section of selectionDueToday) {
+  for (const section of selectionWindow) {
     const project = section.package.project;
+    if (project.deletedAt) continue;
+    const dueKey = calendarDateKey(section.dueDate);
+    if (!dueKey) continue;
+    const isDue3 = isCalendarDateInExactlyDays(section.dueDate, 3, now, timeZone);
+    const isDueToday = isCalendarDateToday(section.dueDate, now, timeZone);
+    if (!isDue3 && !isDueToday) continue;
+
     const clients = new Set<string>();
     if (project.buyer?.userId) clients.add(project.buyer.userId);
     for (const a of project.access) clients.add(a.userId);
-    const dayKey = formatIsoDateUtc(section.dueDate) ?? "unknown";
+
+    const type = isDueToday ? "SELECTION_DUE_TODAY" : "SELECTION_DUE_3_DAYS";
+    const title = isDueToday
+      ? `Selection due today: ${section.name}`
+      : `Selection due in 3 days: ${section.name}`;
     for (const userId of clients) {
       const row = await createNotificationOnce({
         userId,
         companyId: project.companyId,
-        type: "SELECTION_DUE_TODAY",
-        title: `Selection due today: ${section.name}`,
+        type,
+        title,
         body: project.name,
         href: `/client/selections/${section.id}`,
         entityType: "SelectionSection",
         entityId: section.id,
-        eventKey: `SELECTION_DUE_TODAY:${section.id}:${dayKey}:${userId}`,
+        projectId: project.id,
+        eventKey: `${type}:${section.id}:${dueKey}:${userId}`,
       });
       if (row) created += 1;
     }
@@ -129,15 +94,17 @@ export async function dispatchDueNotifications(now = new Date()) {
 
   const overdueRfis = await prisma.rFI.findMany({
     where: {
-      dueDate: { lt: today },
+      dueDate: { not: null },
       status: { in: [RfiStatus.OPEN, RfiStatus.IN_PROGRESS] },
     },
     include: {
-      project: { select: { id: true, companyId: true, name: true, pmId: true } },
+      project: { select: { id: true, companyId: true, name: true, pmId: true, deletedAt: true } },
     },
-    take: 200,
+    take: 400,
   });
   for (const rfi of overdueRfis) {
+    if (rfi.project.deletedAt) continue;
+    if (!isCalendarDateBeforeToday(rfi.dueDate, now, timeZone)) continue;
     if (!rfi.project.pmId) continue;
     const row = await createNotificationOnce({
       userId: rfi.project.pmId,
@@ -148,30 +115,35 @@ export async function dispatchDueNotifications(now = new Date()) {
       href: "/pm/rfis",
       entityType: "RFI",
       entityId: rfi.id,
-      eventKey: `RFI_OVERDUE:${rfi.id}:${formatIsoDateUtc(today)}`,
+      projectId: rfi.project.id,
+      eventKey: `RFI_OVERDUE:${rfi.id}:${today}`,
     });
     if (row) created += 1;
   }
 
   const overdueInvoices = await prisma.invoice.findMany({
     where: {
-      dueDate: { lt: today },
+      dueDate: { not: null },
       status: { in: [InvoiceStatus.SENT, InvoiceStatus.VIEWED, InvoiceStatus.OVERDUE] },
       payeeUserId: null,
     },
     include: {
       project: {
         select: {
+          id: true,
           companyId: true,
           name: true,
+          deletedAt: true,
           buyer: { select: { userId: true } },
           access: { where: { role: Role.CLIENT }, select: { userId: true } },
         },
       },
     },
-    take: 200,
+    take: 400,
   });
   for (const inv of overdueInvoices) {
+    if (inv.project.deletedAt) continue;
+    if (!isCalendarDateBeforeToday(inv.dueDate, now, timeZone)) continue;
     const clients = new Set<string>();
     if (inv.project.buyer?.userId) clients.add(inv.project.buyer.userId);
     for (const a of inv.project.access) clients.add(a.userId);
@@ -185,6 +157,7 @@ export async function dispatchDueNotifications(now = new Date()) {
         href: "/client/payments",
         entityType: "Invoice",
         entityId: inv.id,
+        projectId: inv.project.id,
         eventKey: `INVOICE_OVERDUE:${inv.id}:${userId}`,
       });
       if (row) created += 1;
@@ -194,16 +167,17 @@ export async function dispatchDueNotifications(now = new Date()) {
   const deposits = await prisma.deposit.findMany({
     where: {
       status: { in: [DepositStatus.PENDING, DepositStatus.DUE, DepositStatus.OVERDUE] },
-      dueDate: { gte: today, lt: tomorrow },
     },
     include: {
       linkedScheduleItem: true,
-      project: { select: { companyId: true, name: true } },
+      project: { select: { id: true, companyId: true, name: true, deletedAt: true } },
     },
-    take: 200,
+    take: 400,
   });
   for (const deposit of deposits) {
+    if (!deposit.project || deposit.project.deletedAt) continue;
     if (isDepositSettled(deposit.status)) continue;
+    if (!isCalendarDateToday(deposit.dueDate, now, timeZone)) continue;
     const computed = computeDepositDue(
       {
         triggerType: deposit.triggerType,
@@ -225,36 +199,40 @@ export async function dispatchDueNotifications(now = new Date()) {
     if (!computed.triggerArmed) continue;
     const bookkeepers = await prisma.membership.findMany({
       where: {
-        companyId: deposit.project?.companyId,
-        role: Role.BOOKKEEPER,
+        companyId: deposit.project.companyId,
         isActive: true,
+        OR: [
+          { role: Role.BOOKKEEPER },
+          { role: Role.OPERATIONS_ADMIN, financeAccess: true },
+        ],
       },
       select: { userId: true },
     });
     for (const bk of bookkeepers) {
       const row = await createNotificationOnce({
         userId: bk.userId,
-        companyId: deposit.project?.companyId ?? "",
+        companyId: deposit.project.companyId,
         type: "DEPOSIT_DUE",
         title: `Deposit due: ${deposit.label}`,
-        body: deposit.project?.name ?? "Deposit",
+        body: deposit.project.name,
         href: "/bookkeeper/invoices",
         entityType: "Deposit",
         entityId: deposit.id,
-        eventKey: `DEPOSIT_DUE:${deposit.id}:${formatIsoDateUtc(today)}:${bk.userId}`,
+        projectId: deposit.project.id,
+        eventKey: `DEPOSIT_DUE:${deposit.id}:${today}:${bk.userId}`,
       });
       if (row) created += 1;
     }
   }
 
-  const tasksDueToday = await prisma.task.findMany({
+  const tasksDue = await prisma.task.findMany({
     where: {
-      dueDate: { gte: today, lt: tomorrow },
+      dueDate: { not: null },
       status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] },
       assigneeId: { not: null },
     },
     include: {
-      project: { select: { companyId: true, name: true } },
+      project: { select: { id: true, companyId: true, name: true, deletedAt: true } },
       assignee: {
         select: {
           id: true,
@@ -266,9 +244,11 @@ export async function dispatchDueNotifications(now = new Date()) {
         },
       },
     },
-    take: 300,
+    take: 500,
   });
-  for (const task of tasksDueToday) {
+  for (const task of tasksDue) {
+    if (task.project.deletedAt) continue;
+    if (!isCalendarDateToday(task.dueDate, now, timeZone)) continue;
     if (!task.assigneeId) continue;
     const role = task.assignee?.memberships.find(
       (m) => m.companyId === task.project.companyId
@@ -286,10 +266,11 @@ export async function dispatchDueNotifications(now = new Date()) {
       href,
       entityType: "Task",
       entityId: task.id,
-      eventKey: `TASK_DUE_TODAY:${task.id}:${formatIsoDateUtc(today)}`,
+      projectId: task.project.id,
+      eventKey: `TASK_DUE_TODAY:${task.id}:${today}`,
     });
     if (row) created += 1;
   }
 
-  return { created };
+  return { created, today, in3, timeZone };
 }

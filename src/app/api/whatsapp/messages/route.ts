@@ -7,6 +7,7 @@ import {
   getOrCreateProjectConversation,
   sendWhatsAppMessage,
 } from "@/lib/whatsapp/service";
+import { getWhatsAppInboxStatus } from "@/lib/messaging/provider-select";
 import { toSafeErrorMessage } from "@/lib/errors";
 import {
   ACTION_RATE,
@@ -42,17 +43,22 @@ export async function GET(request: NextRequest) {
 
     let conversationId = searchParams.get("conversationId");
     const projectId = searchParams.get("projectId");
+    const phone = searchParams.get("phone");
 
     if (!conversationId && projectId) {
       conversationId = await getOrCreateProjectConversation(
         projectId,
-        accessibleProjectIds
+        accessibleProjectIds,
+        phone
       );
     }
 
     if (!conversationId) {
       return NextResponse.json(
-        { error: "conversationId or projectId is required" },
+        {
+          error: "conversationId or projectId is required",
+          ...getWhatsAppInboxStatus(),
+        },
         { status: 400 }
       );
     }
@@ -65,7 +71,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(
-      { error: toSafeErrorMessage(error), messages: [] },
+      {
+        error: toSafeErrorMessage(error),
+        messages: [],
+        ...getWhatsAppInboxStatus(),
+      },
       { status: 400 }
     );
   }

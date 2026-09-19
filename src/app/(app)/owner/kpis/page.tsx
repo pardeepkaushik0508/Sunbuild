@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 import { OwnerTabs } from "@/components/owner/owner-tabs";
 import { PageHeader, MetricCard, Card } from "@/components/ui/card";
-import { MetricBarChart, StatusDonutChart } from "@/components/dashboard/charts-lazy";
+import { ComparisonBarChart, MetricBarChart } from "@/components/dashboard/charts-lazy";
 import {
   formatGrowthPercent,
   loadCompanyOverviewStats,
@@ -86,9 +86,8 @@ export default async function OwnerKpisPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <StatusDonutChart
+          <ComparisonBarChart
             title="Active vs Completed"
-            centerLabel="Total Projects"
             data={[
               { name: "Active", value: totals.activeProjects },
               { name: "Completed", value: totals.completed },

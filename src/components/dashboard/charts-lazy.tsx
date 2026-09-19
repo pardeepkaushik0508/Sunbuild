@@ -24,5 +24,11 @@ export const MetricBarChart = dynamic(
   { ssr: false, loading: () => chartLoading }
 );
 
+export const ComparisonBarChart = dynamic(
+  () => import("@/components/dashboard/comparison-bar-chart"),
+  { ssr: false, loading: () => chartLoading }
+);
+
 export type StatusDonutChartProps = ComponentProps<typeof StatusDonutChart>;
 export type MetricBarChartProps = ComponentProps<typeof MetricBarChart>;
+export type ComparisonBarChartProps = ComponentProps<typeof ComparisonBarChart>;

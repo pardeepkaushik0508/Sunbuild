@@ -24,12 +24,14 @@
   --sb-surface: #ffffff;
   --sb-canvas: #f9fafb;
   --sb-sidebar: #ffffff;
-  --sb-gantt-planned: #9ca3af;
+  /* Gantt palette aligned to dual-bar schedule design */
+  --sb-gantt-planned: #2dd4bf;
   --sb-gantt-progress: #3b82f6;
-  --sb-gantt-done: #22c55e;
-  --sb-gantt-risk: #f97316;
+  --sb-gantt-done: #2ec4b6;
+  --sb-gantt-risk: #fb923c;
   --sb-gantt-phase: #8b5cf6;
-  --sb-gantt-critical: #ef4444;
+  --sb-gantt-critical: #f07167;
+  --sb-gantt-baseline: #0d2b5b;
   --sb-today: #ef4444;
   --sb-radius: 12px;
   --sb-radius-sm: 8px;
@@ -103,6 +105,7 @@ html[data-theme="dark"] {
   --color-sb-gantt-risk: var(--sb-gantt-risk);
   --color-sb-gantt-phase: var(--sb-gantt-phase);
   --color-sb-gantt-critical: var(--sb-gantt-critical);
+  --color-sb-gantt-baseline: var(--sb-gantt-baseline);
   --color-sb-today: var(--sb-today);
   --color-sb-black: var(--sb-black);
   --color-sb-danger: var(--sb-danger);

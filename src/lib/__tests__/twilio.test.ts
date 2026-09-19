@@ -46,7 +46,7 @@ import {
 import {
   parseTwilioSendError,
   isUnverifiedRecipientError,
-  UNVERIFIED_RECIPIENT_DIAGNOSTIC,
+  TRIAL_RECIPIENT_NOT_PERMITTED_DIAGNOSTIC,
   AUTH_FAILED_DIAGNOSTIC,
   TRIAL_RESTRICTION_DIAGNOSTIC,
   TRIAL_FROM_MISMATCH_DIAGNOSTIC,
@@ -135,7 +135,7 @@ function productionConfig(overrides?: Partial<TwilioConfig>): TwilioConfig {
 describe("Twilio same-origin paths", () => {
   it("uses relative App Router paths (no host)", () => {
     assert.equal(TWILIO_SEND_PATH, "/api/twilio/send");
-    assert.equal(TWILIO_STATUS_PATH, "/api/twilio/status");
+    assert.equal(TWILIO_STATUS_PATH, "/api/twilio/sms/status");
     assert.equal(TWILIO_INBOUND_PATH, "/api/twilio/inbound");
     assert.equal(TWILIO_TRIAL_TEST_PATH, "/api/twilio/trial-test");
     assert.doesNotMatch(TWILIO_SEND_PATH, /onrender|aivoxalabs|https?:/i);
@@ -153,8 +153,13 @@ describe("Twilio webhook URLs follow APP_URL", () => {
     process.env.PORT = "10000";
     const request = new Request("http://localhost:10000/api/twilio/status");
     const urls = getTwilioWebhookUrls(request);
-    assert.equal(urls.status, "https://sunbuild.onrender.com/api/twilio/status");
+    assert.equal(urls.status, "https://sunbuild.onrender.com/api/twilio/sms/status");
+    assert.equal(urls.smsStatus, "https://sunbuild.onrender.com/api/twilio/sms/status");
     assert.equal(urls.inbound, "https://sunbuild.onrender.com/api/twilio/inbound");
+    assert.equal(
+      urls.whatsappStatus,
+      "https://sunbuild.onrender.com/api/twilio/whatsapp/status"
+    );
     assert.equal(
       getTwilioRequestUrl(request),
       "https://sunbuild.onrender.com/api/twilio/status"
@@ -165,7 +170,7 @@ describe("Twilio webhook URLs follow APP_URL", () => {
     clearAppUrlEnv();
     process.env.APP_URL = "https://sunbuild.aivoxalabs.com";
     const urls = getTwilioWebhookUrls();
-    assert.equal(urls.status, "https://sunbuild.aivoxalabs.com/api/twilio/status");
+    assert.equal(urls.status, "https://sunbuild.aivoxalabs.com/api/twilio/sms/status");
     assert.equal(
       urls.inbound,
       "https://sunbuild.aivoxalabs.com/api/twilio/inbound"
@@ -186,11 +191,13 @@ describe("Twilio webhook URLs follow APP_URL", () => {
 });
 
 describe("phone helpers", () => {
-  it("normalizes NANP numbers to E.164", () => {
-    assert.equal(toE164("(403) 555-0100"), "+14035550100");
+  it("normalizes NANP numbers to E.164 only with country context", () => {
+    assert.equal(toE164("(403) 555-0100"), null);
+    assert.equal(toE164("(403) 555-0100", { defaultRegion: "CA" }), "+14035550100");
     assert.equal(toE164("14035550100"), "+14035550100");
     assert.equal(toE164("+1 403 555 0100"), "+14035550100");
     assert.equal(toE164("+919671830977"), "+919671830977");
+    assert.equal(toE164("9671830977", { defaultRegion: "IN" }), "+919671830977");
     assert.equal(toE164(""), null);
     assert.equal(toE164("abc"), null);
     assert.equal(digitsOnly("+1 (403) 555-0100"), "14035550100");
@@ -396,7 +403,7 @@ describe("Twilio trial send errors", () => {
     });
     assert.equal(parsed.errorCode, "21608");
     assert.equal(parsed.unverifiedRecipient, true);
-    assert.equal(parsed.errorMessage, UNVERIFIED_RECIPIENT_DIAGNOSTIC);
+    assert.equal(parsed.errorMessage, TRIAL_RECIPIENT_NOT_PERMITTED_DIAGNOSTIC);
     assert.equal(isUnverifiedRecipientError("21608", "unverified trial"), true);
     assert.doesNotMatch(parsed.errorMessage, /\+1\d{10}/);
   });

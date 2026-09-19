@@ -87,6 +87,31 @@ describe("Gantt adaptive scale", () => {
     );
     assert.equal(short.primary, "day");
   });
+
+  it("honours Day / Week / Month even when the span would auto-scale elsewhere", () => {
+    const longRangeStart = new Date("2026-01-01T00:00:00Z");
+    const longRangeEnd = new Date("2026-07-01T00:00:00Z");
+    assert.equal(
+      resolveGanttScale(longRangeStart, longRangeEnd, "day").primary,
+      "day"
+    );
+    assert.equal(
+      resolveGanttScale(longRangeStart, longRangeEnd, "week").primary,
+      "week"
+    );
+    assert.equal(
+      resolveGanttScale(longRangeStart, longRangeEnd, "month").primary,
+      "month"
+    );
+
+    const shortStart = new Date("2026-10-01T00:00:00Z");
+    const shortEnd = new Date("2026-10-10T00:00:00Z");
+    assert.equal(resolveGanttScale(shortStart, shortEnd, "week").primary, "week");
+    assert.equal(
+      resolveGanttScale(shortStart, shortEnd, "month").primary,
+      "month"
+    );
+  });
 });
 
 describe("Gantt tree — one row per task, parallel overlap preserved", () => {
