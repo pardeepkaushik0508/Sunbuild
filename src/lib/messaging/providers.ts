@@ -65,6 +65,8 @@ export class TwilioSmsProvider implements SmsProvider {
       await sendTwilioSms(config, {
         to: input.to,
         body: input.body,
+        contentSid: input.contentSid,
+        contentVariables: input.contentVariables,
         statusCallback: input.statusCallback,
       })
     );

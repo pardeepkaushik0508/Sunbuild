@@ -10,6 +10,7 @@ import {
   buildTwilioMessagePayload,
   type TwilioMessagePayload,
 } from "@/lib/twilio/payload";
+import { selectTwilioFromFields } from "@/lib/twilio/sender";
 import { buildTwilioWhatsAppPayload } from "@/lib/twilio/whatsapp-payload";
 import { toWhatsAppAddress } from "@/lib/twilio/phone";
 
@@ -126,18 +127,37 @@ export async function sendTwilioSms(
   config: TwilioConfig,
   input: {
     to: string;
-    body: string;
+    body?: string;
+    contentSid?: string;
+    contentVariables?: Record<string, string>;
     statusCallback?: string;
   },
   messagesCreate?: TwilioMessagesCreate
 ): Promise<TwilioSendResult> {
-  const payload = buildTwilioMessagePayload(config, {
-    to: input.to,
-    body: input.body,
-    statusCallback: input.statusCallback || "",
-  });
-  const createPayload: Record<string, unknown> = { ...payload };
-  if (!input.statusCallback) delete createPayload.statusCallback;
+  const createPayload: Record<string, unknown> = input.contentSid
+    ? {
+        to: input.to,
+        contentSid: input.contentSid,
+        ...(input.contentVariables
+          ? { contentVariables: JSON.stringify(input.contentVariables) }
+          : {}),
+        ...(input.statusCallback ? { statusCallback: input.statusCallback } : {}),
+        ...selectTwilioFromFields({
+          mode: config.mode,
+          messagingServiceSid: config.messagingServiceSid,
+          phoneNumber: config.phoneNumber,
+        }),
+      }
+    : (() => {
+        const payload = buildTwilioMessagePayload(config, {
+          to: input.to,
+          body: input.body || "",
+          statusCallback: input.statusCallback || "",
+        });
+        const out: Record<string, unknown> = { ...payload };
+        if (!input.statusCallback) delete out.statusCallback;
+        return out;
+      })();
 
   try {
     const create =

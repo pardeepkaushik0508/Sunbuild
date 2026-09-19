@@ -16,6 +16,7 @@ import {
   resolveTwilioTrialTemplate,
   type TwilioMode,
 } from "@/lib/twilio/mode";
+import { smsModeDiagnostics } from "@/lib/sms/resolve-outbound";
 
 export type TwilioAuthConfig = {
   accountSid: string;
@@ -183,6 +184,11 @@ function diagnosticsFor(
   const lines: string[] = [];
 
   lines.push(`Twilio mode: ${mode.toUpperCase()}`);
+  const smsDiag = smsModeDiagnostics();
+  lines.push(`SMS operating mode: ${smsDiag.label}`);
+  if (smsDiag.mode === "TRIAL" && smsDiag.trialTemplate) {
+    lines.push(`SMS Trial body identifier: ${smsDiag.trialTemplate}`);
+  }
 
   if (senderMode === "not_configured") {
     if (mode === "trial") {

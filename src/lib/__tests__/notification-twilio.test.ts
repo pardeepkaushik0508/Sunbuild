@@ -211,9 +211,15 @@ describe("WhatsApp trial vs production architecture", () => {
       eventType: "SELECTION_DUE_TODAY",
       projectName: "Lot 12",
       href: "/client/selections/abc",
+      recipientName: "Alex Rivera",
+      selectionName: "Flooring",
     });
-    assert.match(copy, /SUNBUILD: Your selection for Lot 12 is due today/);
+    assert.match(copy, /Dear Alex,/);
+    assert.match(copy, /Lot 12/);
+    assert.match(copy, /Flooring/);
+    assert.match(copy, /due today/i);
     assert.doesNotMatch(copy, /sms_internal_alerts/);
+    assert.doesNotMatch(copy, /undefined|null/i);
   });
 });
 

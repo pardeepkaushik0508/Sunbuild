@@ -14,7 +14,9 @@ import {
 } from "@/lib/messaging/delivery";
 import { channelIdempotencyKey } from "@/lib/messaging/idempotency";
 import { productionSmsBody } from "@/lib/messaging/content";
-import { resolveOutboundTwilioBody } from "@/lib/twilio/payload";
+import { resolveSmsTemplateContext } from "@/lib/sms/context";
+import { renderSmsTemplate } from "@/lib/sms/templates";
+import { resolveSmsProviderOutbound } from "@/lib/sms/resolve-outbound";
 import { getTwilioWebhookUrls } from "@/lib/twilio/webhooks";
 import {
   inferPhoneRegion,
@@ -67,14 +69,51 @@ export async function sendTwilioSms(input: SendEventSmsInput): Promise<void> {
       channel: "SMS",
     });
 
-  const intended =
-    input.body?.trim() ||
-    productionSmsBody({
+  const context = await resolveSmsTemplateContext({
+    recipientUserId: input.recipientUserId,
+    companyId: input.companyId,
+    projectId: input.projectId,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    href: input.href,
+    fallbackProjectName: input.projectName,
+    fallbackEntityTitle: input.entityTitle,
+  });
+
+  const rendered = renderSmsTemplate(input.eventType, context);
+  let intended: string;
+  if (rendered.ok) {
+    intended = rendered.body;
+  } else if (rendered.code === "TEMPLATE_DATA_INVALID") {
+    await markDeliverySkipped({
+      companyId: input.companyId,
+      recipientUserId: input.recipientUserId,
+      projectId: input.projectId,
+      notificationId: input.notificationId,
+      entityType: input.entityType,
+      entityId: input.entityId,
       eventType: input.eventType,
-      projectName: input.projectName,
-      entityTitle: input.entityTitle,
-      href: input.href,
+      channel: "SMS",
+      provider: "TWILIO",
+      toNumber: "unknown",
+      messagePreview: (input.body || "").slice(0, 500),
+      idempotencyKey,
+      status: "FAILED",
+      errorCode: "TEMPLATE_DATA_INVALID",
+      errorMessage: rendered.message,
     });
+    return;
+  } else {
+    intended =
+      input.body?.trim() ||
+      productionSmsBody({
+        eventType: input.eventType,
+        projectName: context.projectName || input.projectName,
+        entityTitle: input.entityTitle,
+        href: input.href,
+        recipientName: context.recipientName,
+      });
+  }
 
   try {
     if (!isTwilioSmsConfigured()) {
@@ -127,9 +166,13 @@ export async function sendTwilioSms(input: SendEventSmsInput): Promise<void> {
     }
 
     const config = getTwilioConfig();
-    const outbound = config
-      ? resolveOutboundTwilioBody(config, intended)
-      : { ok: true as const, twilioBody: intended, intendedBody: intended, trialTemplate: null };
+    const outbound = resolveSmsProviderOutbound({
+      intendedBody: intended,
+      eventType: input.eventType,
+      context,
+      twilioMode: config?.mode ?? "trial",
+    });
+
     if (!outbound.ok) {
       await markDeliverySkipped({
         companyId: input.companyId,
@@ -163,6 +206,7 @@ export async function sendTwilioSms(input: SendEventSmsInput): Promise<void> {
       provider: "TWILIO",
       toNumber: normalized.e164,
       fromNumber: config?.phoneNumber ?? null,
+      contentSid: outbound.contentSid,
       messagePreview: outbound.intendedBody.slice(0, 500),
       idempotencyKey,
     });
@@ -187,11 +231,19 @@ export async function sendTwilioSms(input: SendEventSmsInput): Promise<void> {
     }
 
     const webhooks = getTwilioWebhookUrls();
-    const sent = await provider.send({
-      to: normalized.e164,
-      body: outbound.twilioBody,
-      statusCallback: webhooks.public ? webhooks.smsStatus : undefined,
-    });
+    const statusCallback = webhooks.public ? webhooks.smsStatus : undefined;
+    const sent = outbound.contentSid
+      ? await provider.send({
+          to: normalized.e164,
+          contentSid: outbound.contentSid,
+          contentVariables: outbound.contentVariables || undefined,
+          statusCallback,
+        })
+      : await provider.send({
+          to: normalized.e164,
+          body: outbound.twilioBody || "",
+          statusCallback,
+        });
 
     await recordProviderResult({
       deliveryId: claimed.row.id,

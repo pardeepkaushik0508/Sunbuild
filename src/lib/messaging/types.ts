@@ -4,7 +4,11 @@ export type MessagingChannel = "SMS" | "WHATSAPP";
 
 export type SmsSendInput = {
   to: string;
-  body: string;
+  /** Body-based send (Trial template id or production custom text). */
+  body?: string;
+  /** Optional Twilio Content Template (production CONTENT_TEMPLATE mode). */
+  contentSid?: string;
+  contentVariables?: Record<string, string>;
   statusCallback?: string;
 };
 
