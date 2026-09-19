@@ -46,14 +46,18 @@ export function formatVarianceProse(
   days: number | null,
   opts?: { forecast?: boolean }
 ): string {
-  if (days == null) return "Variance unknown";
+  if (days == null) return "Not enough dates to compare";
   if (days === 0) return "On time";
   const abs = Math.abs(days);
   const unit = abs === 1 ? "day" : "days";
   if (days > 0) {
-    return opts?.forecast ? `${abs} ${unit} late (forecast)` : `${abs} ${unit} late`;
+    return opts?.forecast
+      ? `Looking ${abs} ${unit} late`
+      : `${abs} ${unit} late`;
   }
-  return opts?.forecast ? `${abs} ${unit} early (forecast)` : `${abs} ${unit} early`;
+  return opts?.forecast
+    ? `Looking ${abs} ${unit} early`
+    : `${abs} ${unit} early`;
 }
 
 /**
@@ -109,7 +113,7 @@ export function calculateScheduleVariance(input: {
       days: null,
       kind: "unknown",
       signedLabel: "—",
-      proseLabel: "Variance unknown",
+      proseLabel: "Not enough dates to compare",
       isForecast,
     };
   }

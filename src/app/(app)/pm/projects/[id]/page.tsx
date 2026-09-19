@@ -218,7 +218,7 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             </Link>
             <Link href={`/pm/schedule?projectId=${project.id}`}>
               <Button variant="outline" size="sm">
-                Gantt
+                Timeline
               </Button>
             </Link>
             {wa ? (

@@ -50,10 +50,10 @@ const STATUS_DOT: Record<GanttTaskStatus, string> = {
 };
 
 const STATUS_LABEL: Record<GanttTaskStatus, string> = {
-  COMPLETED: "Completed",
-  IN_PROGRESS: "In Progress",
-  AT_RISK: "At Risk",
-  NOT_STARTED: "Not Started",
+  COMPLETED: "Done",
+  IN_PROGRESS: "In progress",
+  AT_RISK: "Needs attention",
+  NOT_STARTED: "Not started",
   PHASE: "Phase",
 };
 
@@ -88,32 +88,11 @@ function barLayout(
   };
 }
 
-/** Orthogonal finish-to-start connector (x in 0–100%, y in px). */
-function elbowDependencyPath(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): string {
-  const stub = 1.4;
-  if (Math.abs(y1 - y2) < 1) {
-    return `M ${x1} ${y1} L ${x2} ${y2}`;
-  }
-  const exitX = x1 + stub;
-  if (x2 >= exitX + 0.4) {
-    const midX = Math.max(exitX, (x1 + x2) / 2);
-    return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
-  }
-  const bypassX = Math.max(x1, x2) + stub * 2.2;
-  const midY = y1 + (y2 - y1) / 2;
-  return `M ${x1} ${y1} L ${bypassX} ${y1} L ${bypassX} ${midY} L ${x2 - stub} ${midY} L ${x2 - stub} ${y2} L ${x2} ${y2}`;
-}
-
 function varianceBarLabel(days: number | null | undefined): string | null {
   if (days == null || days === 0) return null;
   const abs = Math.abs(days);
   const unit = abs === 1 ? "day" : "days";
-  return days > 0 ? `(+${days} ${unit})` : `(−${abs} ${unit})`;
+  return days > 0 ? `${abs} ${unit} late` : `${abs} ${unit} early`;
 }
 
 /** Baseline sits on top; current/actual is flush underneath (no gap). */
@@ -337,35 +316,6 @@ export function GanttChart({
   const rowH = GANTT_ROW_HEIGHT_DUAL;
   const headerH = scale.primary === "day" || scale.secondary !== "none" ? 56 : 44;
   const bodyMaxHeight = GANTT_BODY_MAX_VISIBLE_ROWS * rowH;
-  const idToIndex = useMemo(() => {
-    const map = new Map<string, number>();
-    visible.forEach((t, i) => map.set(t.id, i));
-    return map;
-  }, [visible]);
-
-  const deps = useMemo(() => {
-    const workingMidY = WORKING_BAR_TOP + WORKING_BAR_H / 2;
-    return visible
-      .filter((t) => t.dependsOnId && idToIndex.has(t.dependsOnId))
-      .map((t) => {
-        const fromIdx = idToIndex.get(t.dependsOnId!)!;
-        const toIdx = idToIndex.get(t.id)!;
-        const from = visible[fromIdx];
-        const to = visible[toIdx];
-        const fromStart = from.actualStart ?? from.start;
-        const fromEnd = from.actualEnd ?? from.end;
-        const toStart = to.actualStart ?? to.start;
-        const toEnd = to.actualEnd ?? to.end;
-        const fromBar = barLayout(fromStart, fromEnd, range.start, range.end);
-        const toBar = barLayout(toStart, toEnd, range.start, range.end);
-        return {
-          x1: fromBar.left + fromBar.width,
-          y1: fromIdx * rowH + workingMidY,
-          x2: toBar.left,
-          y2: toIdx * rowH + workingMidY,
-        };
-      });
-  }, [visible, idToIndex, range, rowH]);
 
   const timelineLabel = `${format(range.start, "MMM d")} – ${format(range.end, "MMM d, yyyy")}`;
   // Min width from column count; grid track grows with `1fr` so week/day/month fill the card.
@@ -403,7 +353,7 @@ export function GanttChart({
     >
       <div className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-sb-border bg-sb-surface px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="sb-pill-toggle" role="tablist" aria-label="Timeline scale">
+          <div className="sb-pill-toggle" role="tablist" aria-label="How to view time">
             {(["day", "week", "month"] as ViewMode[]).map((mode) => (
               <button
                 key={mode}
@@ -441,7 +391,7 @@ export function GanttChart({
               onClick={applyDataRange}
               className="h-8 rounded-[8px] border border-sb-border bg-white px-2.5 text-[12px] font-medium text-sb-ink hover:bg-sb-canvas"
             >
-              Fit tasks
+              Show all work
             </button>
             {rangeFrom || rangeTo ? (
               <button
@@ -449,12 +399,12 @@ export function GanttChart({
                 onClick={clearCustomRange}
                 className="h-8 rounded-[8px] px-2 text-[12px] font-medium text-sb-muted hover:text-sb-ink"
               >
-                Reset
+                Clear dates
               </button>
             ) : null}
           </div>
         </div>
-        <p className="text-xs text-sb-muted">
+        <p className="max-w-md text-right text-xs text-sb-muted">
           {projectLabel ? (
             <>
               <span className="font-medium text-sb-ink">{projectLabel}</span>
@@ -462,6 +412,9 @@ export function GanttChart({
             </>
           ) : null}
           {timelineLabel}
+          <span className="mt-0.5 block text-[11px] text-sb-muted">
+            Top bar = original plan · Bottom bar = current schedule
+          </span>
         </p>
       </div>
 
@@ -478,7 +431,7 @@ export function GanttChart({
                 className="sticky top-0 z-40 flex items-center justify-between border-b border-sb-border bg-sb-surface px-4 text-sm font-semibold text-sb-ink"
                 style={{ height: headerH }}
               >
-                <span>Tasks</span>
+                <span>Work</span>
                 {addHref ? (
                   <Link
                     href={addHref}
@@ -530,7 +483,7 @@ export function GanttChart({
                           ? task.meta
                           : [
                               !isPhase ? STATUS_LABEL[task.status] : null,
-                              !isPhase ? task.variance.signedLabel : null,
+                              !isPhase ? task.variance.proseLabel : null,
                               task.assigneeName,
                             ]
                               .filter(Boolean)
@@ -571,8 +524,8 @@ export function GanttChart({
               })}
               {visible.length === 0 ? (
                 <div className="px-4 py-10 text-sm text-sb-muted">
-                  No tasks or schedule items yet. Add a task with start/due dates
-                  to see it here.
+                  Nothing to show yet. Add work with start and end dates and it
+                  will appear on this timeline.
                 </div>
               ) : null}
             </div>
@@ -650,35 +603,6 @@ export function GanttChart({
                   />
                 ) : null}
 
-                <svg
-                  className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"
-                  viewBox={`0 0 100 ${Math.max(visible.length, 1) * rowH}`}
-                  preserveAspectRatio="none"
-                >
-                  {deps.map((d, i) => (
-                    <path
-                      key={i}
-                      d={elbowDependencyPath(d.x1, d.y1, d.x2, d.y2)}
-                      fill="none"
-                      stroke="#9ca3af"
-                      strokeWidth="1.25"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  ))}
-                </svg>
-                {deps.map((d, i) => (
-                  <span
-                    key={`dep-arrow-${i}`}
-                    className="pointer-events-none absolute z-10 h-0 w-0 border-y-[4px] border-y-transparent border-l-[6px] border-l-[#9ca3af]"
-                    style={{
-                      left: `${d.x2}%`,
-                      top: d.y2,
-                      transform: "translate(-100%, -50%)",
-                    }}
-                    aria-hidden
-                  />
-                ))}
-
                 {visible.map((task, idx) => {
                   const workingStart = task.actualStart ?? task.start;
                   const workingEnd = task.actualEnd ?? task.end;
@@ -718,7 +642,7 @@ export function GanttChart({
                       status: STATUS_LABEL[task.status],
                       assignee: task.assigneeName ?? null,
                       project: task.projectName ?? null,
-                      dates: `${format(workingStart, "MMM d, yyyy")} – ${format(workingEnd, "MMM d, yyyy")} (${days} day${days === 1 ? "" : "s"})`,
+                      dates: `${format(workingStart, "MMM d, yyyy")} – ${format(workingEnd, "MMM d, yyyy")} (${days} ${days === 1 ? "day" : "days"})`,
                       baseline: `${format(task.baselineStart, "MMM d, yyyy")} – ${format(task.baselineEnd, "MMM d, yyyy")}`,
                       variance: task.variance.proseLabel,
                       progress: Math.round(progress),
@@ -726,23 +650,6 @@ export function GanttChart({
                       y: rect.top - (parent?.top ?? 0) - 8,
                     });
                   };
-
-                  if (isPhase) {
-                    return (
-                      <div
-                        key={task.id}
-                        className="absolute z-[15]"
-                        style={{
-                          top: idx * rowH + BASELINE_BAR_TOP,
-                          left: `${workingBar.left}%`,
-                          width: `${workingBar.width}%`,
-                          height: BASELINE_BAR_H + WORKING_BAR_H,
-                        }}
-                      >
-                        <div className="h-full rounded-sm bg-sb-gantt-phase opacity-90" />
-                      </div>
-                    );
-                  }
 
                   const workingBarEl = (
                     <div
@@ -786,7 +693,7 @@ export function GanttChart({
                       >
                         <div className="h-full rounded-t-sm bg-sb-gantt-baseline" />
                       </div>
-                      {task.href ? (
+                      {task.href && !isPhase ? (
                         <Link
                           href={task.href}
                           className="absolute cursor-pointer"
@@ -829,7 +736,7 @@ export function GanttChart({
 
       <div className="flex flex-wrap items-center gap-4 border-t border-sb-border px-4 py-3 text-xs text-sb-muted">
         <div className="flex min-w-[180px] flex-1 items-center gap-2">
-          <span className="font-medium text-sb-ink">Project Progress:</span>
+          <span className="font-medium text-sb-ink">Overall progress</span>
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
             <div
               className="h-full rounded-full bg-sb-blue"
@@ -840,24 +747,21 @@ export function GanttChart({
             {Math.round(clampPct(progressPercent))}%
           </span>
         </div>
-        <p>
-          Timeline: <span className="text-sb-ink">{timelineLabel}</span>
+        <p className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-5 rounded-sm bg-sb-gantt-baseline" />
+          Original plan
         </p>
         <p className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-5 bg-sb-gantt-baseline" />
-          Baseline
-        </p>
-        <p className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-5 bg-sb-gantt-progress" />
-          Current / Actual
+          <span className="h-2 w-5 rounded-sm bg-sb-gantt-progress" />
+          Current schedule
         </p>
         <div className="ml-auto flex flex-wrap gap-3">
           {(
             [
-              ["Completed", counts.COMPLETED, "bg-sb-gantt-done"],
-              ["In Progress", counts.IN_PROGRESS, "bg-sb-gantt-progress"],
-              ["At Risk", counts.AT_RISK, "bg-sb-gantt-risk"],
-              ["Not Started", counts.NOT_STARTED, "bg-sb-gantt-planned"],
+              ["Done", counts.COMPLETED, "bg-sb-gantt-done"],
+              ["In progress", counts.IN_PROGRESS, "bg-sb-gantt-progress"],
+              ["Needs attention", counts.AT_RISK, "bg-sb-gantt-risk"],
+              ["Not started", counts.NOT_STARTED, "bg-sb-gantt-planned"],
             ] as const
           ).map(([label, count, color]) => (
             <span key={label} className="inline-flex items-center gap-1.5">
@@ -875,21 +779,25 @@ export function GanttChart({
           role="tooltip"
         >
           <p className="text-sm font-semibold text-sb-ink">{hover.title}</p>
-          <p className="mt-1 text-[12px] text-sb-muted">{hover.dates}</p>
+          <p className="mt-2 text-[12px] text-sb-muted">
+            Current schedule:{" "}
+            <span className="font-medium text-sb-ink">{hover.dates}</span>
+          </p>
           <p className="mt-0.5 text-[12px] text-sb-muted">
-            Baseline:{" "}
+            Original plan:{" "}
             <span className="font-medium text-sb-ink">{hover.baseline}</span>
           </p>
           <p className="mt-0.5 text-[12px] text-sb-muted">
-            Variance:{" "}
+            Compared to plan:{" "}
             <span className="font-medium text-sb-ink">{hover.variance}</span>
           </p>
-          <p className="mt-1 text-[12px] text-sb-muted">
-            Status: <span className="font-medium text-sb-ink">{hover.status}</span>
+          <p className="mt-2 text-[12px] text-sb-muted">
+            Status:{" "}
+            <span className="font-medium text-sb-ink">{hover.status}</span>
           </p>
           {hover.assignee ? (
             <p className="mt-0.5 text-[12px] text-sb-muted">
-              Assignee:{" "}
+              Who&apos;s doing it:{" "}
               <span className="font-medium text-sb-ink">{hover.assignee}</span>
             </p>
           ) : null}
@@ -900,7 +808,7 @@ export function GanttChart({
             </p>
           ) : null}
           <p className="mt-0.5 text-[12px] text-sb-muted">
-            Progress:{" "}
+            Done:{" "}
             <span className="font-medium text-sb-ink">{hover.progress}%</span>
           </p>
         </div>

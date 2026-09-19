@@ -283,7 +283,7 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
     <div className="space-y-6">
       <PageHeader
         title="Schedule"
-        description="Gantt timeline, client info, and schedule insights"
+        description="See what's planned vs what's happening now — simple timeline for every trade"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <PmProjectPicker
@@ -309,8 +309,8 @@ export default async function PMSchedulePage({ searchParams }: PageProps) {
 
       {scheduleItems.length === 0 && milestones.length === 0 ? (
         <EmptyState
-          title="No schedule items"
-          description="Add schedule items below to populate the Gantt chart."
+          title="No schedule yet"
+          description="Add work with dates below and the timeline will fill in."
         />
       ) : (
         <GanttChart
