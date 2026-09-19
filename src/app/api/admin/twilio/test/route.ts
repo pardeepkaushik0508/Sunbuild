@@ -10,6 +10,9 @@ import {
 import { sendTrialSmsToCompanyUser } from "@/lib/twilio/service";
 import { sendTwilioWhatsApp } from "@/lib/twilio/whatsapp";
 import { isTwilioTrialMode } from "@/lib/twilio/config";
+import { prisma } from "@/lib/db";
+import { writeAudit } from "@/lib/audit";
+import { maskPhone } from "@/lib/twilio/phone";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +79,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const membership = await prisma.membership.findFirst({
+      where: {
+        companyId: session.membership.companyId,
+        userId: targetUserId,
+        isActive: true,
+      },
+      select: { user: { select: { id: true, phone: true } } },
+    });
+    if (!membership?.user) {
+      return NextResponse.json(
+        { error: "User not found in this company" },
+        { status: 404 }
+      );
+    }
+
+    const occurrence = new Date().toISOString().slice(0, 16);
     await sendTwilioWhatsApp({
       recipientUserId: targetUserId,
       companyId: session.membership.companyId,
@@ -83,14 +102,60 @@ export async function POST(request: NextRequest) {
       entityType: "User",
       entityId: targetUserId,
       body: "SUNBUILD diagnostic WhatsApp (trial uses the pre-approved ContentSid).",
-      occurrence: new Date().toISOString().slice(0, 16),
+      occurrence,
     });
 
+    const delivery = await prisma.communicationDelivery.findFirst({
+      where: {
+        companyId: session.membership.companyId,
+        recipientUserId: targetUserId,
+        eventType: "ADMIN_TEST",
+        channel: "WHATSAPP",
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        twilioMessageSid: true,
+        status: true,
+        errorCode: true,
+        errorMessage: true,
+        toNumber: true,
+        contentSid: true,
+      },
+    });
+
+    await writeAudit({
+      userId: session.user.id,
+      companyId: session.membership.companyId,
+      action: "whatsapp.admin_test",
+      entityType: "User",
+      entityId: targetUserId,
+      metadata: {
+        to: maskPhone(delivery?.toNumber || membership.user.phone),
+        twilioSid: delivery?.twilioMessageSid ?? null,
+        status: delivery?.status ?? null,
+        errorCode: delivery?.errorCode ?? null,
+      },
+    });
+
+    const success =
+      Boolean(delivery?.twilioMessageSid) &&
+      delivery?.status !== "FAILED" &&
+      delivery?.status !== "UNDELIVERED" &&
+      delivery?.status !== "NOT_CONFIGURED" &&
+      delivery?.status !== "INVALID_PHONE" &&
+      delivery?.status !== "SKIPPED";
+
     return NextResponse.json({
-      success: true,
+      success,
       channel: "WHATSAPP",
+      twilioSid: delivery?.twilioMessageSid ?? null,
+      status: delivery?.status ?? null,
+      toDisplay: maskPhone(delivery?.toNumber || membership.user.phone),
+      contentSidUsed: Boolean(delivery?.contentSid),
+      errorCode: delivery?.errorCode ?? null,
+      errorMessage: delivery?.errorMessage ?? null,
       trial: isTwilioTrialMode(),
-      note: "Delivery is recorded in CommunicationDelivery. Trial uses TWILIO_WHATSAPP_TEST_CONTENT_SID, not production copy.",
+      note: "Trial uses TWILIO_WHATSAPP_TEST_CONTENT_SID, not production SUNBUILD copy.",
     });
   } catch (error) {
     const status = error instanceof AppError ? error.status : 400;

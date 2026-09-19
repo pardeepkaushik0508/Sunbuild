@@ -32,6 +32,7 @@ import { parseTwilioSendError } from "../twilio/errors";
 import { getTwilioWebhookUrls, isPublicHttpOrigin } from "../twilio/webhooks";
 import { resolveWhatsAppProviderName } from "../messaging/provider-select";
 import { getTwilioMode } from "../twilio/mode";
+import { smsDestinationMatchesEntity } from "../twilio/destination-guard";
 
 function matrix(type: string) {
   return channelsForNotificationType(type).channels;
@@ -245,6 +246,40 @@ describe("client / finance isolation helpers", () => {
     const allowed = ["clientA"];
     assert.equal(allowed.includes("clientB"), false);
     assert.equal(allowed.includes("clientA"), true);
+  });
+});
+
+describe("SMS destination binding (no open relay)", () => {
+  it("allows empty override (use entity phone)", () => {
+    assert.equal(
+      smsDestinationMatchesEntity({
+        requestedTo: "",
+        entityPhone: "+14035550113",
+        defaultRegion: "CA",
+      }).ok,
+      true
+    );
+  });
+
+  it("allows matching E.164 / last-10 override", () => {
+    assert.equal(
+      smsDestinationMatchesEntity({
+        requestedTo: "4035550113",
+        entityPhone: "+1 (403) 555-0113",
+        defaultRegion: "CA",
+      }).ok,
+      true
+    );
+  });
+
+  it("rejects arbitrary public destination injection", () => {
+    const result = smsDestinationMatchesEntity({
+      requestedTo: "+15551234567",
+      entityPhone: "+14035550113",
+      defaultRegion: "CA",
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.code, "SMS_DESTINATION_MISMATCH");
   });
 });
 

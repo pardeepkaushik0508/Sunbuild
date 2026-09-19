@@ -20,6 +20,7 @@ import {
   parseTwilioSendError,
 } from "@/lib/twilio/errors";
 import { resolveOutboundTwilioBody, assertTrialFromConfigured } from "@/lib/twilio/payload";
+import { smsDestinationMatchesEntity } from "@/lib/twilio/destination-guard";
 import type { TwilioFormParams } from "@/lib/twilio/webhook";
 
 export type PublicSmsMessage = {
@@ -102,7 +103,7 @@ export async function sendSmsMessage(input: {
     throw new AppError("Message is too long (max 1600 characters)", 400);
   }
 
-  let toRaw = input.to?.trim() || "";
+  const requestedTo = input.to?.trim() || "";
   const requestedLeadId = input.leadId?.trim() || null;
   const requestedProjectId = input.projectId?.trim() || null;
   if (!requestedLeadId && !requestedProjectId) {
@@ -115,6 +116,7 @@ export async function sendSmsMessage(input: {
   const leadId = requestedLeadId;
   let projectId = requestedProjectId;
   let buyerId: string | null = null;
+  let entityPhone = "";
   const companyId = input.session.membership.companyId;
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -129,7 +131,7 @@ export async function sendSmsMessage(input: {
       select: { phone: true, projectId: true },
     });
     if (!lead) throw new ForbiddenError();
-    if (!toRaw && lead.phone) toRaw = lead.phone;
+    if (lead.phone) entityPhone = lead.phone;
     if (!projectId && lead.projectId) projectId = lead.projectId;
   }
 
@@ -141,9 +143,24 @@ export async function sendSmsMessage(input: {
     });
     if (!project) throw new ForbiddenError();
     buyerId = project.buyerId;
-    if (!toRaw && project.buyer?.phone) toRaw = project.buyer.phone;
+    if (project.buyer?.phone) entityPhone = project.buyer.phone;
   }
 
+  // Never allow an arbitrary browser `to` that does not match the bound entity.
+  const destinationOk = smsDestinationMatchesEntity({
+    requestedTo,
+    entityPhone,
+    defaultRegion: region,
+  });
+  if (!destinationOk.ok) {
+    throw new AppError(
+      "SMS destination must match the lead or project phone on file.",
+      400,
+      destinationOk.code
+    );
+  }
+
+  const toRaw = entityPhone || requestedTo;
   const toNumber = toE164(toRaw, { defaultRegion: region });
   if (!toNumber) {
     throw new AppError(INVALID_RECIPIENT_DIAGNOSTIC, 400, "INVALID_RECIPIENT_NUMBER");
