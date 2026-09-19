@@ -231,6 +231,10 @@ export default async function AdminOverviewPage() {
       assigneeName: item.assigneeName,
       projectName: item.project.name,
       href: `/pm/projects/${item.projectId}`,
+      baselineStartDate: item.baselineStartDate,
+      baselineEndDate: item.baselineEndDate,
+      actualStartDate: item.actualStartDate,
+      actualEndDate: item.actualEndDate,
     })),
     ...tasksToScheduleRows(
       tasksForGantt.map((t) => ({

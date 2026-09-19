@@ -271,6 +271,12 @@ export default async function PMProjectDetailPage({ params }: PageProps) {
             assigneeName: item.assigneeName,
             trade: item.trade,
             dependsOnId: item.dependsOnId,
+            baselineStartDate: item.baselineStartDate,
+            baselineEndDate: item.baselineEndDate,
+            currentStartDate: item.startDate,
+            currentEndDate: item.endDate,
+            actualStartDate: item.actualStartDate,
+            actualEndDate: item.actualEndDate,
           }))}
           progressPercent={liveProgress}
           addHref={`/pm/schedule?projectId=${project.id}#add-schedule`}

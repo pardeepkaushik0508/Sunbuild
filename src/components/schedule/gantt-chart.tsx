@@ -95,13 +95,14 @@ function varianceBarLabel(days: number | null | undefined): string | null {
   return days > 0 ? `${abs} ${unit} late` : `${abs} ${unit} early`;
 }
 
-/** Baseline sits on top; current/actual is flush underneath (no gap). */
-const BASELINE_BAR_H = 12;
-const WORKING_BAR_H = 18;
+/** Original plan on top; current schedule below with a small gap so both stay obvious. */
+const BASELINE_BAR_H = 10;
+const BAR_GAP = 3;
+const WORKING_BAR_H = 16;
 const BASELINE_BAR_TOP = Math.round(
-  (GANTT_ROW_HEIGHT_DUAL - BASELINE_BAR_H - WORKING_BAR_H) / 2
+  (GANTT_ROW_HEIGHT_DUAL - BASELINE_BAR_H - BAR_GAP - WORKING_BAR_H) / 2
 );
-const WORKING_BAR_TOP = BASELINE_BAR_TOP + BASELINE_BAR_H;
+const WORKING_BAR_TOP = BASELINE_BAR_TOP + BASELINE_BAR_H + BAR_GAP;
 
 export type GanttChartProps = {
   tasks: GanttTask[];
@@ -654,7 +655,7 @@ export function GanttChart({
                   const workingBarEl = (
                     <div
                       className={cn(
-                        "relative flex h-full items-center justify-center overflow-hidden rounded-b-sm",
+                        "relative flex h-full items-center justify-center overflow-hidden rounded-sm shadow-sm",
                         barColor
                       )}
                     >
@@ -682,6 +683,7 @@ export function GanttChart({
                       <div
                         className="absolute cursor-pointer"
                         data-gantt-bar="baseline"
+                        title="Original plan"
                         style={{
                           top: BASELINE_BAR_TOP,
                           left: `${baselineBar.left}%`,
@@ -691,13 +693,14 @@ export function GanttChart({
                         onMouseEnter={showHover}
                         onMouseLeave={() => setHover(null)}
                       >
-                        <div className="h-full rounded-t-sm bg-sb-gantt-baseline" />
+                        <div className="h-full rounded-sm border border-[#0d2b5b]/80 bg-[#0d2b5b]/35" />
                       </div>
                       {task.href && !isPhase ? (
                         <Link
                           href={task.href}
                           className="absolute cursor-pointer"
                           data-gantt-bar="actual"
+                          title="Current schedule"
                           style={{
                             top: WORKING_BAR_TOP,
                             left: `${workingBar.left}%`,
@@ -713,6 +716,7 @@ export function GanttChart({
                         <div
                           className="absolute cursor-pointer"
                           data-gantt-bar="actual"
+                          title="Current schedule"
                           style={{
                             top: WORKING_BAR_TOP,
                             left: `${workingBar.left}%`,
@@ -748,11 +752,11 @@ export function GanttChart({
           </span>
         </div>
         <p className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-5 rounded-sm bg-sb-gantt-baseline" />
+          <span className="h-2.5 w-5 rounded-sm border border-[#0d2b5b]/80 bg-[#0d2b5b]/35" />
           Original plan
         </p>
         <p className="inline-flex items-center gap-1.5">
-          <span className="h-2 w-5 rounded-sm bg-sb-gantt-progress" />
+          <span className="h-2.5 w-5 rounded-sm bg-sb-gantt-progress" />
           Current schedule
         </p>
         <div className="ml-auto flex flex-wrap gap-3">

@@ -23,6 +23,7 @@ const LazyGantt = dynamic(
   }
 );
 
+/** Client-only Gantt wrapper — forces a fresh chunk after timeline UX changes. */
 export function GanttChartLazy(props: GanttChartProps) {
-  return <LazyGantt {...props} />;
+  return <LazyGantt key="gantt-v2-simple" {...props} />;
 }

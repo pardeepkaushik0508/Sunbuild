@@ -106,6 +106,18 @@ export function buildGanttTree(items: ScheduleRow[]): GanttTask[] {
     );
     const start = minDate(sorted.map((r) => r.startDate));
     const end = maxDate(sorted.map((r) => r.endDate));
+    const baselineStart = minDate(
+      sorted.map((r) => r.baselineStartDate ?? r.startDate)
+    );
+    const baselineEnd = maxDate(
+      sorted.map((r) => r.baselineEndDate ?? r.endDate)
+    );
+    const actualStarts = sorted
+      .map((r) => r.actualStartDate)
+      .filter((d): d is Date => d != null);
+    const actualEnds = sorted
+      .map((r) => r.actualEndDate)
+      .filter((d): d is Date => d != null);
     const weeks = Math.max(
       1,
       Math.ceil((differenceInCalendarDays(end, start) + 1) / 7)
@@ -116,6 +128,12 @@ export function buildGanttTree(items: ScheduleRow[]): GanttTask[] {
       sorted.length > 0
         ? Math.round((completed / sorted.length) * 100)
         : 0;
+    const phaseVariance = calculateScheduleVariance({
+      baselineEnd,
+      currentEnd: end,
+      actualEnd: actualEnds.length ? maxDate(actualEnds) : null,
+      status: completed === sorted.length ? "COMPLETED" : "IN_PROGRESS",
+    });
 
     result.push({
       id: phaseId,
@@ -128,6 +146,14 @@ export function buildGanttTree(items: ScheduleRow[]): GanttTask[] {
       meta: `${sorted.length} task${sorted.length === 1 ? "" : "s"} • ${weeks} week${weeks === 1 ? "" : "s"}`,
       progress,
       childrenCount: sorted.length,
+      baselineStartDate: baselineStart,
+      baselineEndDate: baselineEnd,
+      currentStartDate: start,
+      currentEndDate: end,
+      actualStartDate: actualStarts.length ? minDate(actualStarts) : null,
+      actualEndDate: actualEnds.length ? maxDate(actualEnds) : null,
+      varianceDays: phaseVariance.days,
+      varianceLabel: phaseVariance.proseLabel,
     });
 
     for (const row of sorted) {
